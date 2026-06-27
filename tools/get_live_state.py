@@ -9,7 +9,7 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 
 import os
 from azure.identity import DefaultAzureCredential
-from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.resource.resources import ResourceManagementClient
 
 
 def get_live_state(resource_group: str, subscription_id: str | None = None) -> list[dict]:
