@@ -30906,6 +30906,26 @@
   ],
   "live_resources": [
     {
+      "type": "Microsoft.Network/networkWatchers",
+      "name": "NetworkWatcher_australiaeast",
+      "location": "australiaeast",
+      "tags": {},
+      "sku": null,
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/NetworkWatcher_australiaeast"
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-dev",
+      "location": "australiaeast",
+      "tags": {},
+      "sku": null,
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-dev/providers/Microsoft.Network/virtualNetworks/vnet-dev"
+    },
+    {
       "type": "Microsoft.Network/virtualNetworks",
       "name": "vnet-prod",
       "location": "australiaeast",
@@ -30938,6 +30958,26 @@
       "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-prod/providers/Microsoft.Network/networkInterfaces/vm-prod-002-nic"
     },
     {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "vm-dev-002-nic",
+      "location": "australiaeast",
+      "tags": {},
+      "sku": null,
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-dev/providers/Microsoft.Network/networkInterfaces/vm-dev-002-nic"
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "vm-dev-001-nic",
+      "location": "australiaeast",
+      "tags": {},
+      "sku": null,
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-dev/providers/Microsoft.Network/networkInterfaces/vm-dev-001-nic"
+    },
+    {
       "type": "Microsoft.Compute/virtualMachines",
       "name": "vm-prod-001",
       "location": "australiaeast",
@@ -30952,6 +30992,19 @@
     },
     {
       "type": "Microsoft.Compute/virtualMachines",
+      "name": "vm-dev-002",
+      "location": "australiaeast",
+      "tags": {
+        "environment": "dev",
+        "managed": "true"
+      },
+      "sku": null,
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-dev/providers/Microsoft.Compute/virtualMachines/vm-dev-002"
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
       "name": "vm-prod-002",
       "location": "australiaeast",
       "tags": {
@@ -30962,6 +31015,19 @@
       "kind": null,
       "properties": {},
       "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-prod/providers/Microsoft.Compute/virtualMachines/vm-prod-002"
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "vm-dev-001",
+      "location": "australiaeast",
+      "tags": {
+        "environment": "dev",
+        "managed": "true"
+      },
+      "sku": null,
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-dev/providers/Microsoft.Compute/virtualMachines/vm-dev-001"
     },
     {
       "type": "Microsoft.RecoveryServices/vaults",
@@ -31003,6 +31069,44 @@
     },
     {
       "type": "Microsoft.Compute/disks",
+      "name": "vm-dev-002_OsDisk_1_5cd0265b5b7049b6bda9898152275c6c",
+      "location": "australiaeast",
+      "tags": {
+        "environment": "dev",
+        "managed": "true"
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard",
+        "size": null,
+        "family": null,
+        "capacity": null
+      },
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/RG-DEV/providers/Microsoft.Compute/disks/vm-dev-002_OsDisk_1_5cd0265b5b7049b6bda9898152275c6c"
+    },
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-dev-001_OsDisk_1_157a4ae25e7044838d8a72e1132d2151",
+      "location": "australiaeast",
+      "tags": {
+        "environment": "dev",
+        "managed": "true"
+      },
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard",
+        "size": null,
+        "family": null,
+        "capacity": null
+      },
+      "kind": null,
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/RG-DEV/providers/Microsoft.Compute/disks/vm-dev-001_OsDisk_1_157a4ae25e7044838d8a72e1132d2151"
+    },
+    {
+      "type": "Microsoft.Compute/disks",
       "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
       "location": "australiaeast",
       "tags": {
@@ -31037,12 +31141,24 @@
       "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-prod/providers/Microsoft.Storage/storageAccounts/drifttest1782602179"
     }
   ],
-  "drift_count": 10,
+  "drift_count": 18,
   "drifts": [
     {
       "type": "Microsoft.Resources/resourceGroups",
       "name": "rg-app-prod",
       "drift_type": "missing_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-dev",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "vm-dev-001-nic",
+      "drift_type": "extra_in_azure",
       "details": {}
     },
     {
@@ -31053,37 +31169,13 @@
     },
     {
       "type": "Microsoft.Compute/virtualMachines",
-      "name": "vm-prod-001",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Compute/virtualMachines",
-      "name": "vm-prod-002",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/virtualNetworks",
-      "name": "vnet-prod",
+      "name": "vm-dev-001",
       "drift_type": "extra_in_azure",
       "details": {}
     },
     {
       "type": "Microsoft.Compute/disks",
-      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts",
-      "name": "drifttest1782602179",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Compute/disks",
-      "name": "vm-prod-002_OsDisk_1_dfa31b8b10634ebcac9caa987769b311",
+      "name": "vm-dev-001_OsDisk_1_157a4ae25e7044838d8a72e1132d2151",
       "drift_type": "extra_in_azure",
       "details": {}
     },
@@ -31094,8 +31186,68 @@
       "details": {}
     },
     {
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "vm-prod-002",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "drifttest1782602179",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
       "type": "Microsoft.Network/networkInterfaces",
       "name": "vm-prod-002-nic",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "vm-dev-002",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "vm-prod-001",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-dev-002_OsDisk_1_5cd0265b5b7049b6bda9898152275c6c",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "vm-dev-002-nic",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-prod",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/networkWatchers",
+      "name": "NetworkWatcher_australiaeast",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-prod-002_OsDisk_1_dfa31b8b10634ebcac9caa987769b311",
       "drift_type": "extra_in_azure",
       "details": {}
     }
