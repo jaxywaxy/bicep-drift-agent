@@ -62,24 +62,24 @@ def compile_bicep(bicep_file_path: str) -> dict:
 
 def extract_resources_from_arm(arm_template: dict) -> list[dict]:
     """
-    Pull out the resources array from an ARM template and normalise minimally.
+    Extract and normalize resources from an ARM template.
 
-    ARM resources look like:
-    {
-        "type": "Microsoft.Compute/virtualMachines",
-        "apiVersion": "2023-03-01",
-        "name": "[parameters('vmName')]",
-        "location": "[parameters('location')]",
-        "properties": { ... }
-    }
+    Handles:
+    - Parameter resolution (e.g., [parameters('vmName')] → actual value)
+    - Nested deployment flattening
+    - Shape normalization for comparison against live state
 
-    This is the shape we'll compare against live state.
+    Args:
+        arm_template: Parsed ARM template dict
+
+    Returns:
+        List of normalized resource dicts
     """
-    resources = arm_template.get("resources", [])
+    from .normalizer import flatten_resources, extract_parameters
 
-    # Flatten any nested resource collections (some templates use copy loops)
-    # For now, return as-is. Normalisation is phase 2.
-    return resources
+    parameters = extract_parameters(arm_template)
+    normalized = flatten_resources(arm_template, parameters)
+    return normalized
 
 
 if __name__ == "__main__":
