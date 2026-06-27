@@ -18282,7 +18282,7 @@
     },
     {
       "type": "Microsoft.KeyVault/vaults/keys",
-      "name": "last(split(tryGet(parameters('customerManagedKey') 'keyVaultResourceId') '/'))/tryGet(parameters('customerManagedKey') 'keyName')",
+      "name": "last(split(tryGet(parameters('customerManagedKey'), 'keyVaultResourceId'), '/'))/tryGet(parameters('customerManagedKey'), 'keyName')",
       "location": "unknown",
       "apiVersion": "2024-11-01",
       "tags": {},
@@ -18300,7 +18300,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-storageaccount.replace('0.32.0' '.' '-').substring(uniqueString(deployment().name parameters('location')) 0 4)",
+      "name": "46d3xbcp.res.storage-storageaccount.replace('0.32.0', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -18365,7 +18365,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "australiaeast",
       "apiVersion": "2025-06-01",
       "tags": "[parameters('tags')]",
@@ -18489,7 +18489,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-sa-PrivateEndpoint-copyIndex()",
+      "name": "unique-string-sa-PrivateEndpoint-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -19158,7 +19158,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.network-privateendpoint.replace('0.11.1' '.' '-').substring(uniqueString(deployment().name parameters('location')) 0 4)",
+      "name": "46d3xbcp.res.network-privateendpoint.replace('0.11.1', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -19276,7 +19276,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name)-PrivateEndpoint-PrivateDnsZoneGroup",
+      "name": "unique-string-PrivateEndpoint-PrivateDnsZoneGroup",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -19468,7 +19468,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-ManagementPolicies",
+      "name": "unique-string-Storage-ManagementPolicies",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -19597,7 +19597,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-mgmtpolicy.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.storage-mgmtpolicy.replace('-..--..-', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -19645,7 +19645,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-LocalUsers-copyIndex()",
+      "name": "unique-string-Storage-LocalUsers-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -19895,7 +19895,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-localuser.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.storage-localuser.replace('-..--..-', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -19924,7 +19924,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-06-01",
       "tags": {},
@@ -19961,7 +19961,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-BlobServices",
+      "name": "unique-string-Storage-BlobServices",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -21229,7 +21229,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-01-01",
       "tags": {},
@@ -21330,7 +21330,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-Container-copyIndex()",
+      "name": "deployment().name-Container-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -21901,7 +21901,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-blobcontainer.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.storage-blobcontainer.replace('-..--..-', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -21930,7 +21930,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-01-01",
       "tags": {},
@@ -22154,7 +22154,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-containerimmutpolicy.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.storage-containerimmutpolicy.replace('-..--..-', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -22202,7 +22202,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-FileServices",
+      "name": "unique-string-Storage-FileServices",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -23236,7 +23236,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-06-01",
       "tags": {},
@@ -23320,7 +23320,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-FileShare-copyIndex()",
+      "name": "deployment().name-FileShare-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -23823,7 +23823,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-fileshare.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.storage-fileshare.replace('-..--..-', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -23852,7 +23852,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-01-01",
       "tags": {},
@@ -23892,7 +23892,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name)-Share-Rbac-copyIndex()",
+      "name": "unique-string-Share-Rbac-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -24063,7 +24063,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-QueueServices",
+      "name": "unique-string-Storage-QueueServices",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -24808,7 +24808,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-06-01",
       "tags": {},
@@ -24890,7 +24890,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-Queue-copyIndex()",
+      "name": "deployment().name-Queue-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -25190,7 +25190,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-queue.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.storage-queue.replace('-..--..-', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -25219,7 +25219,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-06-01",
       "tags": {},
@@ -25282,7 +25282,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-TableServices",
+      "name": "unique-string-Storage-TableServices",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -25999,7 +25999,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-06-01",
       "tags": {},
@@ -26081,7 +26081,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-Table-copyIndex()",
+      "name": "deployment().name-Table-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -26363,7 +26363,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-table.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.storage-table.replace('-..--..-', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -26392,7 +26392,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-06-01",
       "tags": {},
@@ -26452,7 +26452,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-secrets-kv",
+      "name": "unique-string-secrets-kv",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -26644,7 +26644,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-ObjRepPolicy-copyIndex()",
+      "name": "unique-string-Storage-ObjRepPolicy-copy-index",
       "location": "unknown",
       "apiVersion": "2025-04-01",
       "tags": {},
@@ -27267,7 +27267,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-01-01",
       "tags": {},
@@ -27781,7 +27781,7 @@
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
+      "name": "stparameters('environment')unique-string",
       "location": "unknown",
       "apiVersion": "2025-01-01",
       "tags": {},
@@ -29404,7 +29404,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.network-virtualnetwork.replace('0.5.1' '.' '-').substring(uniqueString(deployment().name parameters('location')) 0 4)",
+      "name": "46d3xbcp.res.network-virtualnetwork.replace('0.5.1', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -29565,7 +29565,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-subnet-copyIndex()",
+      "name": "unique-string-subnet-copy-index",
       "location": "unknown",
       "apiVersion": "2022-09-01",
       "tags": {},
@@ -30072,7 +30072,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-virtualNetworkPeering-local-copyIndex()",
+      "name": "unique-string-virtualNetworkPeering-local-copy-index",
       "location": "unknown",
       "apiVersion": "2022-09-01",
       "tags": {},
@@ -30260,7 +30260,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-virtualNetworkPeering-remote-copyIndex()",
+      "name": "unique-string-virtualNetworkPeering-remote-copy-index",
       "location": "unknown",
       "apiVersion": "2022-09-01",
       "tags": {},
@@ -30625,7 +30625,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.network-virtualnetwork-peering.replace('0.1.0' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.network-virtualnetwork-peering.replace('0.1.0', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -30852,7 +30852,7 @@
     },
     {
       "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.network-virtualnetwork-peering.replace('0.1.0' '.' '-').substring(uniqueString(deployment().name) 0 4)",
+      "name": "46d3xbcp.res.network-virtualnetwork-peering.replace('0.1.0', '.', '-').unique-string",
       "location": "unknown",
       "apiVersion": "2024-03-01",
       "tags": {},
@@ -31019,467 +31019,11 @@
       "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/RG-PROD/providers/Microsoft.Compute/disks/vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea"
     }
   ],
-  "drift_count": 85,
+  "drift_count": 9,
   "drifts": [
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-blobcontainer.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-      "name": "last(split(tryGet(parameters('customerManagedKey'), 'userAssignedIdentityResourceId'), '/'))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-fileshare.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
     {
       "type": "Microsoft.Resources/resourceGroups",
       "name": "rg-app-prod",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-ObjRepPolicy-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
-      "name": "parameters('storageAccountName')/parameters('blobServiceName')/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-ManagementPolicies",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-secrets-kv",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices",
-      "name": "parameters('storageAccountName')/parameters('blobServiceName')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Network/virtualNetworks', parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Storage/storageAccounts/queueServices/queues', parameters('storageAccountName'), 'default', parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name)-PrivateEndpoint-PrivateDnsZoneGroup",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-subnet-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
-      "name": "parameters('storageAccountName')/parameters('fileServicesName')/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/queueServices",
-      "name": "parameters('storageAccountName')/variables('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices",
-      "name": "parameters('storageAccountName')/variables('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "take(format('{0}-ObjRep-Policy-dest-{1}', deployment().name, variables('destAccountName')), 64)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/virtualNetworks/subnets",
-      "name": "parameters('virtualNetworkName')/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/virtualNetworks",
-      "name": "vnet-parameters('environment')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-queue.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-storageaccount.replace('0.32.0' '.' '-').substring(uniqueString(deployment().name parameters('location')) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/fileServices",
-      "name": "parameters('storageAccountName')/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
-      "name": "parameters('storageAccountName')/'default'/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-virtualNetworkPeering-remote-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-localuser.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-BlobServices",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts",
-      "name": "stparameters('environment')uniqueString(parameters('rgName'))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/privateEndpoints",
-      "name": "coalesce(tryGet(coalesce(parameters('privateEndpoints'), createArray())[copyIndex()], 'name'), format('pep-{0}-{1}-{2}', last(split(resourceId('Microsoft.Storage/storageAccounts', parameters('name')), '/')), coalesce(parameters('privateEndpoints'), createArray())[copyIndex()].service, copyIndex()))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/locks",
-      "name": "coalesce(tryGet(parameters('lock'), 'name'), format('lock-{0}', parameters('name')))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "take(format('{0}-ObjRep-Policy-source-{1}', deployment().name, parameters('storageAccountName')), 64)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "st-parameters('environment')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Storage/storageAccounts/blobServices/containers', parameters('storageAccountName'), parameters('blobServiceName'), parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/localUsers",
-      "name": "parameters('storageAccountName')/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "take(format('{0}-ImmutPol', deployment().name), 64)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/fileServices",
-      "name": "parameters('storageAccountName')/parameters('fileServicesName')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-Table-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-virtualNetworkPeering-local-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "vnet-parameters('environment')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/tableServices/tables",
-      "name": "parameters('storageAccountName')/'default'/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/secrets",
-      "name": "parameters('keyVaultName')/parameters('secretsToSet')[copyIndex()].name",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-FileShare-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.network-virtualnetwork.replace('0.5.1' '.' '-').substring(uniqueString(deployment().name parameters('location')) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.network-privateendpoint.replace('0.11.1' '.' '-').substring(uniqueString(deployment().name parameters('location')) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/tableServices",
-      "name": "parameters('storageAccountName')/'default'",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-LocalUsers-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('virtualNetworkName'), parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "prod-env",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
-      "name": "parameters('privateEndpointName')/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Storage/storageAccounts/tableServices/tables', parameters('storageAccountName'), 'default', parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name)-Share-Rbac-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "peer-hub-to-parameters('environment')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "peer-parameters('environment')-to-hub",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-TableServices",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-mgmtpolicy.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-sa-PrivateEndpoint-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-QueueServices",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies",
-      "name": "parameters('storageAccountName')/'default'/parameters('containerName')/'default'",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-Container-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Storage/storageAccounts', parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Insights/diagnosticSettings",
-      "name": "coalesce(tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'name'), format('{0}-diagnosticSettings', variables('name')))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "deployment().name-Queue-copyIndex()",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Network/privateEndpoints', parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults/keys",
-      "name": "last(split(tryGet(parameters('customerManagedKey') 'keyVaultResourceId') '/'))/tryGet(parameters('customerManagedKey') 'keyName')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts",
-      "name": "[if(not(empty(variables('destAccountResourceIdParts'))), last(variables('destAccountResourceIdParts')), parameters('destinationAccountResourceId'))]",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Insights/diagnosticSettings",
-      "name": "coalesce(tryGet(coalesce(parameters('diagnosticSettings'), createArray())[copyIndex()], 'name'), format('{0}-diagnosticSettings', parameters('name')))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-containerimmutpolicy.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.storage-table.replace('-..--..-' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/managementPolicies",
-      "name": "parameters('storageAccountName')/'default'",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults",
-      "name": "last(split(tryGet(parameters('secretsExportConfiguration'), 'keyVaultResourceId'), '/'))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "46d3xbcp.res.network-virtualnetwork-peering.replace('0.1.0' '.' '-').substring(uniqueString(deployment().name) 0 4)",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/tableServices",
-      "name": "parameters('storageAccountName')/variables('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/queueServices",
-      "name": "parameters('storageAccountName')/'default'",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
-      "name": "parameters('localVnetName')/parameters('name')",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "name": "uniqueString(deployment().name parameters('location'))-Storage-FileServices",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Authorization/roleAssignments",
-      "name": "coalesce(tryGet(coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()], 'name'), guid(resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', parameters('storageAccountName'), parameters('fileServicesName'), parameters('name')), coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].principalId, coalesce(variables('formattedRoleAssignments'), createArray())[copyIndex()].roleDefinitionId))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.KeyVault/vaults",
-      "name": "last(split(tryGet(parameters('customerManagedKey'), 'keyVaultResourceId'), '/'))",
-      "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Storage/storageAccounts/objectReplicationPolicies",
-      "name": "parameters('storageAccountName')/parameters('name')",
       "drift_type": "missing_in_azure",
       "details": {}
     },
@@ -31491,13 +31035,7 @@
     },
     {
       "type": "Microsoft.Compute/disks",
-      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Compute/virtualMachines",
-      "name": "vm-prod-001",
+      "name": "vm-prod-002_OsDisk_1_dfa31b8b10634ebcac9caa987769b311",
       "drift_type": "extra_in_azure",
       "details": {}
     },
@@ -31508,14 +31046,20 @@
       "details": {}
     },
     {
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
       "type": "Microsoft.RecoveryServices/vaults",
       "name": "rsv-prod-aue-001",
       "drift_type": "extra_in_azure",
       "details": {}
     },
     {
-      "type": "Microsoft.Compute/disks",
-      "name": "vm-prod-002_OsDisk_1_dfa31b8b10634ebcac9caa987769b311",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "vm-prod-001",
       "drift_type": "extra_in_azure",
       "details": {}
     },

@@ -60,7 +60,7 @@ def compile_bicep(bicep_file_path: str) -> dict:
     return arm_template
 
 
-def extract_resources_from_arm(arm_template: dict) -> list[dict]:
+def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> list[dict]:
     """
     Extract and normalize resources from an ARM template.
 
@@ -71,6 +71,7 @@ def extract_resources_from_arm(arm_template: dict) -> list[dict]:
 
     Args:
         arm_template: Parsed ARM template dict
+        parameter_overrides: Optional dict of parameter values to override defaults
 
     Returns:
         List of normalized resource dicts
@@ -78,6 +79,10 @@ def extract_resources_from_arm(arm_template: dict) -> list[dict]:
     from .normalizer import flatten_resources, extract_parameters
 
     parameters = extract_parameters(arm_template)
+    # Override with provided values (e.g., from environment or CLI)
+    if parameter_overrides:
+        parameters.update(parameter_overrides)
+
     normalized = flatten_resources(arm_template, parameters)
     return normalized
 

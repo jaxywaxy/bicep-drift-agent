@@ -34,6 +34,173 @@ def extract_parameters(arm_template: dict) -> dict:
     return params
 
 
+def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tuple:
+    """
+    Parse a format() function call and extract template + resolved arguments.
+
+    Handles: format('template', arg1, arg2, ...)
+    where arguments can be nested function calls.
+
+    Args:
+        call_str: The function call string without outer brackets
+        parameters: Available parameters dict
+        variables: Available variables dict
+
+    Returns:
+        Tuple (template_string, [resolved_args]) or (None, []) if parse fails
+    """
+    # Extract everything after 'format('
+    if not call_str.startswith("format"):
+        return None, []
+
+    # Find the opening paren and extract content
+    match = re.match(r"format\s*\(\s*'([^']*)'(.*)", call_str)
+    if not match:
+        return None, []
+
+    template = match.group(1)
+    args_part = match.group(2).strip()
+
+    # Remove trailing closing paren
+    if args_part.endswith(")"):
+        args_part = args_part[:-1]
+
+    # Parse arguments (separated by comma at the top level)
+    args = []
+    if args_part:
+        args = _split_function_arguments(args_part)
+
+        # Resolve each argument
+        resolved_args = []
+        for arg in args:
+            arg = arg.strip()
+            if not arg:
+                continue
+
+            # Try to resolve if it's an expression
+            if arg.startswith("[") and arg.endswith("]"):
+                arg = resolve_expression(arg, parameters, variables)
+            elif "(" in arg and ")" in arg:
+                # It's a function call - try to resolve it
+                arg = _resolve_function_call(arg, parameters, variables)
+
+            resolved_args.append(arg)
+
+        args = resolved_args
+
+    return template, args
+
+
+def _split_function_arguments(args_str: str) -> list:
+    """
+    Split function arguments by comma, respecting nested parentheses and quotes.
+
+    Args:
+        args_str: String like ", arg1, arg2, arg3"
+
+    Returns:
+        List of argument strings
+    """
+    args = []
+    current = ""
+    depth = 0
+    in_quote = False
+    escape = False
+
+    for char in args_str:
+        if escape:
+            current += char
+            escape = False
+            continue
+
+        if char == "\\":
+            escape = True
+            current += char
+            continue
+
+        if char == "'" and not in_quote:
+            in_quote = True
+            current += char
+        elif char == "'" and in_quote:
+            in_quote = False
+            current += char
+        elif char == "(" and not in_quote:
+            depth += 1
+            current += char
+        elif char == ")" and not in_quote:
+            depth -= 1
+            current += char
+        elif char == "," and depth == 0 and not in_quote:
+            # End of this argument
+            arg = current.strip()
+            if arg and arg != ",":
+                args.append(arg)
+            current = ""
+        else:
+            current += char
+
+    # Don't forget the last argument
+    if current.strip():
+        args.append(current.strip())
+
+    return args
+
+
+def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
+    """
+    Resolve simple function calls like uniqueString(), copyIndex(), etc.
+
+    Most of these can't be resolved without runtime context, but we can
+    at least extract the essence.
+
+    Args:
+        call: Function call string like "uniqueString(something)"
+        parameters: Available parameters
+        variables: Available variables
+
+    Returns:
+        Best-effort resolved string or the call as-is
+    """
+    call = call.strip()
+
+    # uniqueString() — can't resolve, use a placeholder
+    if call.startswith("uniqueString"):
+        return "unique-string"
+
+    # copyIndex() — can't resolve, use a placeholder
+    if call.startswith("copyIndex"):
+        return "copy-index"
+
+    # substring() — try to extract at least the string part
+    if call.startswith("substring"):
+        match = re.match(r"substring\s*\(\s*([^,]+),", call)
+        if match:
+            str_arg = match.group(1).strip()
+            return _resolve_function_call(str_arg, parameters, variables)
+
+    # take() — extract the first argument
+    if call.startswith("take"):
+        match = re.match(r"take\s*\(\s*([^,]+),", call)
+        if match:
+            str_arg = match.group(1).strip()
+            return _resolve_function_call(str_arg, parameters, variables)
+
+    # last() — try to extract a meaningful value
+    if call.startswith("last"):
+        match = re.match(r"last\s*\(\s*([^)]+)\)", call)
+        if match:
+            arg = match.group(1).strip()
+            # If it's a split() call, extract the string being split
+            if "split" in arg:
+                split_match = re.match(r"split\s*\(\s*([^,]+),", arg)
+                if split_match:
+                    str_arg = split_match.group(1).strip()
+                    return _resolve_function_call(str_arg, parameters, variables)
+
+    # Default: return the call as-is (can't resolve)
+    return call
+
+
 def extract_variables(arm_template: dict) -> dict:
     """
     Extract variables and their values from an ARM template.
@@ -111,38 +278,15 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
                 return str(val)
         return var_name
 
-    # Handle [format('template', arg1, arg2, ...)] — simple case
-    format_match = re.match(r"format\s*\(\s*'([^']+)'(.*)\)", inner)
-    if format_match:
-        template = format_match.group(1)
-        args_str = format_match.group(2).strip()
-
-        # Extract arguments
-        args = []
-        if args_str:
-            # Split by comma, but respect nested structures
-            depth = 0
-            current_arg = ""
-            for char in args_str.lstrip(",").split(","):
-                current_arg += char
-                if current_arg.count("(") == current_arg.count(")"):
-                    # Complete argument
-                    arg_val = current_arg.strip()
-                    if arg_val:
-                        # Try to resolve if it's a simple expression
-                        if arg_val.startswith("[") and arg_val.endswith("]"):
-                            arg_val = resolve_expression(arg_val, parameters, variables)
-                        args.append(arg_val)
-                    current_arg = ""
-
-            # Simple format substitution for {0}, {1}, etc.
-            try:
-                result = template
-                for i, arg in enumerate(args):
-                    result = result.replace(f"{{{i}}}", str(arg))
-                return result
-            except Exception:
-                pass
+    # Handle [format('template', arg1, arg2, ...)]
+    if inner.startswith("format"):
+        # Extract template string and arguments
+        template, args = _parse_format_call(inner, parameters, variables)
+        if template is not None:
+            result = template
+            for i, arg in enumerate(args):
+                result = result.replace(f"{{{i}}}", str(arg))
+            return result
 
     # Handle [deployment().location] — we can't resolve this without runtime context
     if "deployment()" in inner and "location" in inner:

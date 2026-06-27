@@ -31,10 +31,21 @@ def run(bicep_file: str, resource_group: str):
     print(f"  Resource group: {resource_group}")
     print()
 
+    # Load parameter overrides from environment
+    import os
+    param_overrides = {}
+    arm_params_env = os.environ.get("ARM_PARAMETERS")
+    if arm_params_env:
+        try:
+            param_overrides = json.loads(arm_params_env)
+            print(f"  Parameters:     {param_overrides}")
+        except json.JSONDecodeError:
+            print(f"  ⚠ Invalid JSON in ARM_PARAMETERS")
+
     # Step 1: Compile Bicep → ARM JSON
     print("Step 1: Compiling Bicep...")
     arm_template = compile_bicep(bicep_file)
-    arm_resources = extract_resources_from_arm(arm_template)
+    arm_resources = extract_resources_from_arm(arm_template, param_overrides)
     print(f"  → {len(arm_resources)} resource(s) defined in Bicep")
     for r in arm_resources:
         print(f"    {r.get('type')} — {r.get('name')}")

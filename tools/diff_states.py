@@ -39,6 +39,9 @@ def diff_states(
     Both inputs should be normalized (from normalizer module).
     Matching is by (type, name) after normalization.
 
+    Filters out module references and internal resources that don't
+    correspond to actual Azure resources.
+
     Args:
         arm_resources: Normalized resources from extract_resources_from_arm()
         live_resources: Raw resources from get_live_state() (normalized here)
@@ -48,11 +51,14 @@ def diff_states(
     """
     drifts = []
 
+    # Filter ARM resources — skip module references and unresolvable ones
+    filtered_arm = [r for r in arm_resources if _should_compare_resource(r)]
+
     # Normalize live resources to match ARM shape
     normalized_live = normalize_live_resources(live_resources)
 
     # Build lookup maps keyed by (normalised_type, normalised_name)
-    arm_map = {resource_key(r): r for r in arm_resources}
+    arm_map = {resource_key(r): r for r in filtered_arm}
     live_map = {resource_key(r): r for r in normalized_live}
 
     arm_keys = set(arm_map.keys())
@@ -118,6 +124,55 @@ def _diff_properties(arm_resource: dict, live_resource: dict) -> dict:
             diffs[field] = {"desired": arm_val, "actual": live_val}
 
     return diffs
+
+
+def _should_compare_resource(resource: dict) -> bool:
+    """
+    Determine if a resource should be included in drift comparison.
+
+    Skips:
+    - Module references (Microsoft.Resources/deployments)
+    - Resources with unresolved complex expressions
+    - Internal Azure-managed resources
+
+    Args:
+        resource: Normalized resource dict
+
+    Returns:
+        True if resource should be compared, False otherwise
+    """
+    res_type = resource.get("type", "").lower()
+    res_name = resource.get("name", "")
+
+    # Skip module deployments — these are Bicep syntax, not real resources
+    if res_type == "microsoft.resources/deployments":
+        return False
+
+    # Skip resources with obvious unresolved expressions
+    # (These indicate parameter-driven resources we can't match)
+    unresolved_indicators = [
+        "parameters(",
+        "variables(",
+        "format(",
+        "coalesce(",
+        "tryget(",
+        "guid(",
+        "resourceid(",
+        "copyindex(",
+        "unique-string",
+        "copy-index",
+        "deployment()",
+    ]
+
+    name_lower = res_name.lower()
+    if any(indicator in name_lower for indicator in unresolved_indicators):
+        return False
+
+    # Skip empty or malformed names
+    if not res_name or res_name == "unknown":
+        return False
+
+    return True
 
 
 def format_drift_report(drifts: list[ResourceDrift], resource_group: str) -> str:
