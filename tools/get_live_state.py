@@ -12,20 +12,27 @@ from azure.identity import DefaultAzureCredential
 from azure.mgmt.resource.resources import ResourceManagementClient
 
 
-def get_live_state(resource_group: str, subscription_id: str | None = None) -> list[dict]:
+def get_live_state(
+    resource_group: str = None,
+    subscription_id: str | None = None,
+    scope: str = "resource_group"
+) -> list[dict]:
     """
-    Query all resources in a resource group and return their live state.
+    Query resources and return their live state.
+
+    Supports both resource group and subscription scopes.
 
     Uses DefaultAzureCredential, which tries (in order):
       - Environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)
       - Managed Identity
       - Azure CLI (`az login`)
-    
+
     So if you're logged in via az login, this just works.
 
     Args:
-        resource_group: Name of the Azure resource group.
+        resource_group: Name of the Azure resource group (required for RG scope).
         subscription_id: Azure subscription ID. Falls back to AZURE_SUBSCRIPTION_ID env var.
+        scope: "resource_group" (default) or "subscription"
 
     Returns:
         List of resource dicts with type, name, location, and properties.
@@ -41,20 +48,37 @@ def get_live_state(resource_group: str, subscription_id: str | None = None) -> l
 
     resources = []
 
-    # List all resources in the resource group
-    for resource in client.resources.list_by_resource_group(resource_group, expand="properties"):
-        resource_dict = {
-            "type": resource.type,
-            "name": resource.name,
-            "location": resource.location,
-            "tags": resource.tags or {},
-            "sku": _extract_sku(resource),
-            "kind": resource.kind,
-            "properties": _safe_properties(resource),
-            # Keep the raw id for reference
-            "id": resource.id,
-        }
-        resources.append(resource_dict)
+    if scope == "subscription":
+        # List all resources in the subscription
+        for resource in client.resources.list(expand="properties"):
+            resource_dict = {
+                "type": resource.type,
+                "name": resource.name,
+                "location": resource.location,
+                "tags": resource.tags or {},
+                "sku": _extract_sku(resource),
+                "kind": resource.kind,
+                "properties": _safe_properties(resource),
+                "id": resource.id,
+            }
+            resources.append(resource_dict)
+    else:
+        # List all resources in the resource group
+        if not resource_group:
+            raise ValueError("resource_group required for resource_group scope")
+
+        for resource in client.resources.list_by_resource_group(resource_group, expand="properties"):
+            resource_dict = {
+                "type": resource.type,
+                "name": resource.name,
+                "location": resource.location,
+                "tags": resource.tags or {},
+                "sku": _extract_sku(resource),
+                "kind": resource.kind,
+                "properties": _safe_properties(resource),
+                "id": resource.id,
+            }
+            resources.append(resource_dict)
 
     return resources
 

@@ -31064,14 +31064,14 @@
       "details": {}
     },
     {
-      "type": "Microsoft.Network/networkInterfaces",
-      "name": "vm-prod-001-nic",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-prod",
       "drift_type": "extra_in_azure",
       "details": {}
     },
     {
-      "type": "Microsoft.Network/networkInterfaces",
-      "name": "vm-prod-002-nic",
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
       "drift_type": "extra_in_azure",
       "details": {}
     },
@@ -31082,20 +31082,20 @@
       "details": {}
     },
     {
-      "type": "Microsoft.Network/virtualNetworks",
-      "name": "vnet-prod",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
       "type": "Microsoft.Compute/disks",
       "name": "vm-prod-002_OsDisk_1_dfa31b8b10634ebcac9caa987769b311",
       "drift_type": "extra_in_azure",
       "details": {}
     },
     {
-      "type": "Microsoft.Compute/disks",
-      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "vm-prod-001-nic",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "vm-prod-002-nic",
       "drift_type": "extra_in_azure",
       "details": {}
     }

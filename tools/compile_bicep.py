@@ -60,6 +60,31 @@ def compile_bicep(bicep_file_path: str) -> dict:
     return arm_template
 
 
+def detect_deployment_scope(arm_template: dict) -> str:
+    """
+    Detect the deployment scope from an ARM template.
+
+    Args:
+        arm_template: Parsed ARM template dict
+
+    Returns:
+        "subscription" or "resource_group" (default)
+    """
+    schema = arm_template.get("$schema", "")
+
+    # Subscription-scoped templates have specific schema patterns
+    if "subscriptionDeploymentTemplate" in schema:
+        return "subscription"
+
+    # Check metadata for scope hint
+    metadata = arm_template.get("metadata", {})
+    if metadata.get("targetScope") == "subscription":
+        return "subscription"
+
+    # Default to resource group
+    return "resource_group"
+
+
 def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> list[dict]:
     """
     Extract and normalize resources from an ARM template.

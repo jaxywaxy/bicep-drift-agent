@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from tools.compile_bicep import compile_bicep, extract_resources_from_arm
+from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detect_deployment_scope
 from tools.get_live_state import get_live_state
 from tools.diff_states import diff_states, format_drift_report
 
@@ -50,13 +50,18 @@ def run(bicep_file: str, resource_group: str):
         print(f"  ✗ Failed to compile Bicep: {e}")
         raise
 
+    # Detect deployment scope (subscription vs. resource group)
+    deployment_scope = detect_deployment_scope(arm_template)
+    if deployment_scope == "subscription":
+        print(f"  ℹ Detected subscription-scoped template (Landing Zone)")
+
     try:
         arm_resources = extract_resources_from_arm(arm_template, param_overrides)
     except Exception as e:
         print(f"  ✗ Failed to extract resources: {e}")
         raise
 
-    print(f"  ✓ {len(arm_resources)} resource(s) defined in Bicep")
+    print(f"  ✓ {len(arm_resources)} resource(s) defined in Bicep (scope: {deployment_scope})")
     for r in arm_resources[:10]:  # Show first 10
         print(f"    {r.get('type')} — {r.get('name')}")
     if len(arm_resources) > 10:
@@ -65,7 +70,11 @@ def run(bicep_file: str, resource_group: str):
     # Step 2: Query live Azure state
     print("\nStep 2: Querying live Azure state...")
     try:
-        live_resources = get_live_state(resource_group)
+        if deployment_scope == "subscription":
+            print(f"  ℹ Querying at subscription scope...")
+            live_resources = get_live_state(scope="subscription")
+        else:
+            live_resources = get_live_state(resource_group=resource_group, scope="resource_group")
     except ValueError as e:
         print(f"  ✗ Missing subscription ID: {e}")
         raise
@@ -74,7 +83,7 @@ def run(bicep_file: str, resource_group: str):
         print("  💡 Ensure you're logged in: az login")
         raise
 
-    print(f"  ✓ {len(live_resources)} resource(s) deployed in Azure")
+    print(f"  ✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
     for r in live_resources[:10]:  # Show first 10
         print(f"    {r.get('type')} — {r.get('name')}")
     if len(live_resources) > 10:
