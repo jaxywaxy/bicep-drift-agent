@@ -30909,7 +30909,9 @@
       "type": "Microsoft.Network/virtualNetworks",
       "name": "vnet-prod",
       "location": "australiaeast",
-      "tags": {},
+      "tags": {
+        "driftTest": "true"
+      },
       "sku": null,
       "kind": null,
       "properties": {},
@@ -31017,38 +31019,30 @@
       "kind": null,
       "properties": {},
       "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/RG-PROD/providers/Microsoft.Compute/disks/vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea"
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "drifttest1782602179",
+      "location": "australiaeast",
+      "tags": {},
+      "sku": {
+        "name": "Standard_LRS",
+        "tier": "Standard",
+        "size": null,
+        "family": null,
+        "capacity": null
+      },
+      "kind": "StorageV2",
+      "properties": {},
+      "id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-prod/providers/Microsoft.Storage/storageAccounts/drifttest1782602179"
     }
   ],
-  "drift_count": 9,
+  "drift_count": 10,
   "drifts": [
     {
       "type": "Microsoft.Resources/resourceGroups",
       "name": "rg-app-prod",
       "drift_type": "missing_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/virtualNetworks",
-      "name": "vnet-prod",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Compute/disks",
-      "name": "vm-prod-002_OsDisk_1_dfa31b8b10634ebcac9caa987769b311",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Network/networkInterfaces",
-      "name": "vm-prod-002-nic",
-      "drift_type": "extra_in_azure",
-      "details": {}
-    },
-    {
-      "type": "Microsoft.Compute/disks",
-      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
-      "drift_type": "extra_in_azure",
       "details": {}
     },
     {
@@ -31072,6 +31066,36 @@
     {
       "type": "Microsoft.Network/networkInterfaces",
       "name": "vm-prod-001-nic",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "vm-prod-002-nic",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "drifttest1782602179",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-prod",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-prod-002_OsDisk_1_dfa31b8b10634ebcac9caa987769b311",
+      "drift_type": "extra_in_azure",
+      "details": {}
+    },
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "vm-prod-001_OsDisk_1_65e7f8afac0e40179637d3d3dd8218ea",
       "drift_type": "extra_in_azure",
       "details": {}
     }

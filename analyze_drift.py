@@ -86,9 +86,9 @@ def main():
             bicep_file=report_data["bicep_file"],
             resource_group=report_data["resource_group"],
             drifts=drifts,
-            total_missing=len([d for d in drifts if d.drift_type == "missing"]),
-            total_extra=len([d for d in drifts if d.drift_type == "extra"]),
-            total_modified=len([d for d in drifts if d.drift_type == "modified"]),
+            total_missing=len([d for d in drifts if "missing" in d.drift_type]),
+            total_extra=len([d for d in drifts if "extra" in d.drift_type]),
+            total_modified=len([d for d in drifts if "modified" in d.drift_type]),
         )
 
         # Get analysis from Claude

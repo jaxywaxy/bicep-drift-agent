@@ -16,7 +16,7 @@ class DriftAgent:
     def __init__(self, api_key: str = None):
         """Initialize drift agent with Anthropic client."""
         self.client = Anthropic(api_key=api_key)
-        self.model = "claude-3-5-sonnet-20241022"
+        self.model = "claude-opus-4-8"
         self.conversation_history = []
 
     def analyze_drift(self, drift_report: DriftReport) -> str:
@@ -112,9 +112,9 @@ Be concise but thorough. Focus on actionable insights."""
     @staticmethod
     def _format_drift_context(drift_report: DriftReport) -> str:
         """Format drift report for Claude analysis."""
-        missing = [d for d in (drift_report.drifts or []) if d.drift_type == "missing"]
-        extra = [d for d in (drift_report.drifts or []) if d.drift_type == "extra"]
-        modified = [d for d in (drift_report.drifts or []) if d.drift_type == "modified"]
+        missing = [d for d in (drift_report.drifts or []) if "missing" in d.drift_type]
+        extra = [d for d in (drift_report.drifts or []) if "extra" in d.drift_type]
+        modified = [d for d in (drift_report.drifts or []) if "modified" in d.drift_type]
 
         context = f"""# Bicep Drift Analysis Request
 
