@@ -97,12 +97,36 @@ class IgnorePatternList:
             drift_type = drift.get("drift_type", "")
 
             is_ignored = False
-            for pattern in self.patterns:
-                if pattern.matches(resource_type, resource_name, drift_type):
-                    drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
-                    ignored.append(drift)
-                    is_ignored = True
-                    break
+
+            # For property-level drifts, also check against property names
+            if drift_type == "property_drift":
+                # Get property names that changed
+                details = drift.get("details", {})
+                changed_props = details.get("changed_properties", {})
+                prop_names = list(changed_props.keys())
+
+                # Check if any pattern matches resource + property combination
+                for pattern in self.patterns:
+                    # If pattern has drift_type, check if it matches property names
+                    if pattern.drift_type:
+                        for prop_name in prop_names:
+                            if pattern.resource_type_regex.match(resource_type) if pattern.resource_type_regex else True:
+                                if pattern.drift_type_regex.match(prop_name):
+                                    drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
+                                    ignored.append(drift)
+                                    is_ignored = True
+                                    break
+                    if is_ignored:
+                        break
+
+            # Standard pattern matching for non-property drifts or if not already ignored
+            if not is_ignored:
+                for pattern in self.patterns:
+                    if pattern.matches(resource_type, resource_name, drift_type):
+                        drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
+                        ignored.append(drift)
+                        is_ignored = True
+                        break
 
             if not is_ignored:
                 filtered.append(drift)
