@@ -277,13 +277,27 @@ class PropertyComparator:
     """Compare properties between desired and actual resources."""
 
     CRITICAL_PROPERTIES = {
+        # Location and kind are fundamental
         "location",
+        "kind",
+        # SKU properties (pricing tier, size, capacity)
         "sku.name",
         "sku.tier",
-        "kind",
+        "sku.family",
+        "sku.size",
+        "sku.capacity",
+        # VM-specific
+        "properties.hardwareProfile.vmSize",
+        # Storage-specific
         "properties.accountType",
         "properties.replicationType",
         "properties.accessTier",
+        # Database-specific
+        "properties.edition",
+        "properties.serviceLevelObjective",
+        # App Service-specific
+        "properties.reserved",
+        "properties.workerSize",
     }
 
     @staticmethod
@@ -332,20 +346,12 @@ class PropertyComparator:
                     )
                 )
 
-        # Check for added properties (deployed but not in Bicep)
-        for key, deployed_value in deployed_flat.items():
-            if key not in bicep_flat:
-                # Skip system-generated properties
-                if not PropertyComparator._is_system_property(key):
-                    diffs.append(
-                        PropertyDiff(
-                            property_path=key,
-                            desired_value=None,
-                            actual_value=deployed_value,
-                            change_type="added",
-                            severity="info",
-                        )
-                    )
+        # NOTE: Skip added properties (deployed but not in Bicep)
+        # These are optional properties that Azure manages automatically.
+        # If not explicitly defined in the Bicep template, they should not
+        # be reported as drift. Examples: sku fields, tags added by policies,
+        # Azure-managed system properties, etc.
+        # Only report properties that are explicitly defined in Bicep template.
 
         return diffs
 
@@ -386,6 +392,135 @@ class PropertyComparator:
         return any(key.startswith(prefix) for prefix in system_prefixes)
 
 
+class ConfigurationValidator:
+    """Validate resource configurations for critical issues."""
+
+    @staticmethod
+    def check_orphaned_disks(deployed_resources: List[Dict]) -> List[ResourceDrift]:
+        """
+        Detect orphaned disks (OS and data disks not attached to any VM).
+
+        This is a critical issue because:
+        - Orphaned disks consume storage costs
+        - They indicate VMs were deleted without proper cleanup
+        - They prevent resource group deletion
+        """
+        drifts = []
+
+        # Get all VMs and disks
+        vms = {r.get("name", ""): r for r in deployed_resources
+               if r.get("type") == "Microsoft.Compute/virtualMachines"}
+        disks = [r for r in deployed_resources
+                if r.get("type") == "Microsoft.Compute/disks"]
+
+        for disk in disks:
+            disk_name = disk.get("name", "")
+            disk_id = disk.get("id", "")
+
+            # Check if disk is attached to any VM
+            is_attached = False
+            for vm_name, vm in vms.items():
+                # Check OS disk
+                vm_props = vm.get("properties", {})
+                if vm_props.get("storageProfile", {}).get("osDisk", {}).get("managedDisk", {}).get("id") == disk_id:
+                    is_attached = True
+                    break
+
+                # Check data disks
+                for data_disk in vm_props.get("storageProfile", {}).get("dataDisks", []):
+                    if data_disk.get("managedDisk", {}).get("id") == disk_id:
+                        is_attached = True
+                        break
+
+                if is_attached:
+                    break
+
+            # If disk is not attached, it's orphaned
+            if not is_attached:
+                # Determine if it's an OS disk or data disk
+                disk_type = "OS disk"
+                if "_DataDisk_" in disk_name or "_datadisk_" in disk_name.lower():
+                    disk_type = "Data disk"
+
+                drifts.append(
+                    ResourceDrift(
+                        resource_type="Microsoft.Compute/disks",
+                        resource_name=disk_name,
+                        bicep_name="",
+                        deployed_name=disk_name,
+                        drift_type="critical_config_error",
+                        property_diffs=[
+                            PropertyDiff(
+                                property_path="attachment_status",
+                                desired_value="attached to VM",
+                                actual_value="orphaned",
+                                change_type="modified",
+                                severity="critical",
+                            )
+                        ],
+                        match_confidence=1.0,
+                    )
+                )
+
+        return drifts
+
+    @staticmethod
+    def check_vms_without_nics(deployed_resources: List[Dict]) -> List[ResourceDrift]:
+        """
+        Detect VMs without network interfaces (critical configuration error).
+
+        A VM cannot function without at least one NIC. If a VM exists but has
+        no NICs attached, it's a critical issue indicating:
+        - Manual NIC deletion
+        - Network interface failure
+        - Incomplete deployment
+        """
+        drifts = []
+
+        # Get all VMs and NICs
+        vms = [r for r in deployed_resources
+               if r.get("type") == "Microsoft.Compute/virtualMachines"]
+        nic_ids = {r.get("id", ""): r.get("name", "") for r in deployed_resources
+                   if r.get("type") == "Microsoft.Network/networkInterfaces"}
+
+        for vm in vms:
+            vm_name = vm.get("name", "")
+            vm_props = vm.get("properties", {})
+            nic_refs = vm_props.get("networkProfile", {}).get("networkInterfaces", [])
+
+            # Check if VM has any NICs
+            has_nics = False
+            for nic_ref in nic_refs:
+                nic_id = nic_ref.get("id", "")
+                if nic_id in nic_ids:
+                    has_nics = True
+                    break
+
+            # If VM has no NICs, it's a critical issue
+            if not has_nics:
+                drifts.append(
+                    ResourceDrift(
+                        resource_type="Microsoft.Compute/virtualMachines",
+                        resource_name=vm_name,
+                        bicep_name="",
+                        deployed_name=vm_name,
+                        drift_type="critical_config_error",
+                        property_diffs=[
+                            PropertyDiff(
+                                property_path="networkInterfaces",
+                                desired_value="at least 1 NIC",
+                                actual_value="0 NICs",
+                                change_type="modified",
+                                severity="critical",
+                            )
+                        ],
+                        match_confidence=1.0,
+                    )
+                )
+
+        return drifts
+
+
 class DriftDetector:
     """Detect all types of drift."""
 
@@ -407,6 +542,13 @@ class DriftDetector:
         """
         Detect all drift between Bicep and deployed resources.
 
+        Includes:
+        - Resource matching (missing, extra)
+        - Property comparison (modified configs)
+        - Critical configuration validation:
+          * Orphaned disks (OS and data)
+          * VMs without network interfaces
+
         Returns:
             List of ResourceDrift objects
         """
@@ -416,6 +558,11 @@ class DriftDetector:
         # Filter out internal resources (deployments, etc.)
         bicep_resources = [r for r in bicep_resources if not DriftDetector._is_internal_resource(r)]
         deployed_resources = [r for r in deployed_resources if not DriftDetector._is_internal_resource(r)]
+
+        # Run critical configuration validation checks
+        validator = ConfigurationValidator()
+        drifts.extend(validator.check_orphaned_disks(deployed_resources))
+        drifts.extend(validator.check_vms_without_nics(deployed_resources))
 
         matches = ResourceMatcher.match_resources(bicep_resources, deployed_resources)
         comparator = PropertyComparator()
