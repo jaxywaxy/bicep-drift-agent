@@ -21,7 +21,8 @@ def generate_html_report(
 
     drifts = data.get("drifts", [])
     recs_found = sum(1 for d in drifts if d.get("recommendation"))
-    print(f"  [HTML] Found {recs_found}/{len(drifts)} recommendations in JSON")
+    matched_found = len(data.get("smart_matched", []))
+    print(f"  [HTML] Found {recs_found}/{len(drifts)} recommendations and {matched_found} smart-matched resources")
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])
@@ -336,6 +337,62 @@ def generate_html_report(
                 font-size: 14px;
             }}
 
+            .matched-item {{
+                background: #f0f9ff;
+                border: 1px solid #bfe7f5;
+                border-left: 4px solid #0284c7;
+                border-radius: 6px;
+                padding: 16px;
+                margin-bottom: 16px;
+            }}
+
+            .matched-header {{
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                margin-bottom: 12px;
+                font-weight: 600;
+                color: #333;
+            }}
+
+            .matched-badge {{
+                display: inline-block;
+                padding: 4px 8px;
+                background: #0284c7;
+                color: white;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+            }}
+
+            .matched-details {{
+                background: white;
+                padding: 12px;
+                border-radius: 4px;
+                font-size: 13px;
+                line-height: 1.8;
+            }}
+
+            .matched-details div {{
+                margin-bottom: 8px;
+            }}
+
+            .matched-details .label {{
+                font-weight: 600;
+                color: #555;
+                display: inline-block;
+                min-width: 120px;
+            }}
+
+            .matched-details code {{
+                background: #f5f5f5;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: monospace;
+                color: #d73a49;
+            }}
+
             footer {{
                 text-align: center;
                 padding: 20px;
@@ -416,6 +473,8 @@ def generate_html_report(
                 {_render_drift_section(total, drift_rows)}
             </div>
 
+            {_render_smart_matched_section(data)}
+
             {_render_recommendations_section(total, recommendations_html)}
 
             <footer>
@@ -471,6 +530,44 @@ def _render_drift_section(total: int, drift_rows: str) -> str:
             </tbody>
         </table>
         """
+
+
+def _render_smart_matched_section(data: dict) -> str:
+    """Render smart-matched resources section."""
+    matched = data.get("smart_matched", [])
+    if not matched:
+        return ""
+
+    matched_html = ""
+    for resource in matched:
+        bicep_name = resource.get("name", "unknown")
+        azure_name = resource.get("matched_to", "unknown")
+        confidence = resource.get("match_confidence", "unknown").title()
+        resource_type = resource.get("type", "unknown")
+
+        matched_html += f"""
+        <div class="matched-item">
+            <div class="matched-header">
+                <span class="matched-badge">{confidence}</span>
+                <strong>{resource_type}</strong>
+            </div>
+            <div class="matched-details">
+                <div><span class="label">Bicep Name:</span> <code>{bicep_name}</code></div>
+                <div><span class="label">Deployed As:</span> <code>{azure_name}</code></div>
+                <div><span class="label">Reason:</span> {resource.get("match_reason", "Smart matched by type")}</div>
+            </div>
+        </div>
+        """
+
+    return f"""
+            <div class="section">
+                <h2>🔗 Smart-Matched Resources</h2>
+                <p>These resources are defined in Bicep but use runtime-generated names (like uniqueString()). They have been matched to deployed resources:</p>
+                <div style="margin-top: 16px;">
+                    {matched_html}
+                </div>
+            </div>
+            """
 
 
 def _render_recommendations_section(total: int, recommendations_html: str) -> str:

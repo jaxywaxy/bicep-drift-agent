@@ -24,6 +24,12 @@ from agent.drift_agent import DriftAgent
 from tools.models import DriftReport, Drift
 from tools.ignore_patterns import IgnorePatternList
 from tools.html_report import generate_html_report
+from tools.smart_matching import (
+    detect_unresolvable_expressions,
+    smart_match_resources,
+    annotate_drifts_with_matches,
+    generate_match_report,
+)
 from run_drift_check import run as run_phase1
 
 
@@ -73,6 +79,32 @@ def main():
         with open(report_file) as f:
             report_data = json.load(f)
 
+        # Detect unresolvable expressions in Bicep
+        print("\n🔍 Detecting unresolvable expressions in Bicep template...")
+        arm_template = report_data.get("arm_template", {})
+        unresolvable = detect_unresolvable_expressions(arm_template)
+        if unresolvable:
+            print(f"Found {sum(len(v) for v in unresolvable.values())} resource(s) with unresolvable names:")
+            for resource_type, names in unresolvable.items():
+                for name in names:
+                    print(f"  - {resource_type}: {name}")
+
+            # Attempt smart matching
+            print("\n🔗 Attempting smart resource matching...")
+            bicep_resources = report_data.get("arm_resources", [])
+            azure_resources = report_data.get("live_resources", [])
+            matched, unmatched_bicep, unmatched_azure = smart_match_resources(
+                bicep_resources, azure_resources, unresolvable
+            )
+
+            if matched:
+                print(f"✓ Matched {len(matched)} resource(s):")
+                for m in matched:
+                    print(f"  - {m.get('type')}: {m.get('name')} → {m.get('matched_to')}")
+                report_data["smart_matched"] = matched
+            else:
+                print("⊘ No successful smart matches")
+
         # Load and apply ignore patterns
         ignore_list = IgnorePatternList.from_file(Path(".drift-ignore"))
         if ignore_list.patterns:
@@ -88,6 +120,13 @@ def main():
 
             report_data["drifts"] = filtered_drifts
             report_data["ignored_drifts"] = ignored_drifts
+
+        # Annotate drifts with smart matching information
+        if "smart_matched" in report_data:
+            report_data["drifts"] = annotate_drifts_with_matches(
+                report_data.get("drifts", []),
+                report_data.get("smart_matched", [])
+            )
 
         # Build DriftReport object
         drifts = [

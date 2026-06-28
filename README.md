@@ -197,6 +197,13 @@ Beautiful, interactive HTML report with:
 - Mobile-responsive design
 - Easy to share with stakeholders
 
+**Smart-Matched Resources Section:**
+Detects resources with runtime-generated names (using `uniqueString()`, `format()`, etc.) and intelligently matches them to deployed resources. Shows:
+
+- Bicep name expression vs. actual deployed name
+- Match confidence level (high/medium)
+- Why the match was made
+
 **Drift Details Table:**
 Shows each drift with resource type, name, drift type, and detailed change information.
 
