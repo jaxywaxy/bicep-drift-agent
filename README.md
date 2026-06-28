@@ -178,10 +178,18 @@ The drift check generates multiple report formats:
 Beautiful, interactive HTML report with:
 
 - Status summary with color-coded metrics
+- Detailed drift table with full information
+- **AI-powered remediation recommendations** for each drift item
 - Resource type and drift type filters
-- Detailed drift information
 - Mobile-responsive design
 - Easy to share with stakeholders
+
+Each drift item includes:
+
+- Resource type and name
+- Drift type badge (missing/extra/modified)
+- Detailed change information
+- Claude's remediation recommendation
 
 Available in the `drift-reports` artifact after workflow completes.
 

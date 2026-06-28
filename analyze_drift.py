@@ -118,6 +118,19 @@ def main():
         print(analysis)
         print("\n" + "=" * 60 + "\n")
 
+        # Generate per-drift recommendations
+        if drifts:
+            print("\n💡 Generating remediation recommendations...")
+            for drift in report_data.get("drifts", []):
+                recommendation = agent.get_drift_recommendation(
+                    resource_type=drift["type"],
+                    resource_name=drift["name"],
+                    drift_type=drift["drift_type"],
+                    details=drift.get("details"),
+                )
+                drift["recommendation"] = recommendation
+            print(f"✓ Generated recommendations for {len(drifts)} drift(s)")
+
         # Save analysis
         analysis_file = Path(f"reports/{resource_group}-analysis.md")
         with open(analysis_file, "w") as f:
