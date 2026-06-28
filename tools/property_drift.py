@@ -41,13 +41,11 @@ class PropertyExtractor:
         """Extract properties from a Bicep-compiled ARM resource."""
         properties = {}
 
-        # Top-level properties
+        # Top-level properties (skip apiVersion — it's ARM template metadata, not a deployment property)
         if "name" in resource:
             properties["name"] = resource["name"]
         if "type" in resource:
             properties["type"] = resource["type"]
-        if "apiVersion" in resource:
-            properties["apiVersion"] = resource["apiVersion"]
         if "location" in resource:
             properties["location"] = resource["location"]
         if "tags" in resource:
@@ -60,10 +58,6 @@ class PropertyExtractor:
         # Resource-specific properties
         if "properties" in resource:
             properties["properties"] = resource["properties"]
-
-        # Dependencies
-        if "dependsOn" in resource:
-            properties["dependsOn"] = resource["dependsOn"]
 
         return properties
 
