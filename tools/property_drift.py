@@ -126,7 +126,7 @@ class ResourceMatcher:
             if not candidates:
                 continue
 
-            # Try to match by name first
+            # Try exact match first
             exact_match = None
             for deployed in candidates:
                 deployed_name = deployed.get("name", "")
@@ -136,6 +136,35 @@ class ResourceMatcher:
 
             if exact_match:
                 matches.append((bicep_resource, exact_match, 0.95))
+                continue
+
+            # Try fuzzy name matching for parameter-based names
+            best_match = None
+            best_score = 0.4
+
+            for deployed in candidates:
+                deployed_name = deployed.get("name", "")
+                # Token-based matching: split names by - and compare overlapping parts
+                bicep_tokens = set(bicep_name.replace('[', '').replace(']', '').replace("'", '').split('-'))
+                deployed_tokens = set(deployed_name.replace('[', '').replace(']', '').replace("'", '').split('-'))
+
+                # Remove parameter noise
+                bicep_tokens.discard('parameters')
+                bicep_tokens.discard('vmName')
+                bicep_tokens.discard('vaultName')
+                deployed_tokens.discard('nic')
+
+                if bicep_tokens and deployed_tokens:
+                    # Jaccard similarity: intersection / union
+                    intersection = bicep_tokens & deployed_tokens
+                    union = bicep_tokens | deployed_tokens
+                    score = len(intersection) / len(union) if union else 0.0
+                    if score > best_score:
+                        best_score = score
+                        best_match = deployed
+
+            if best_match:
+                matches.append((bicep_resource, best_match, best_score))
             elif len(candidates) == 1:
                 # Only one resource of this type, likely a match
                 matches.append((bicep_resource, candidates[0], 0.70))
@@ -260,6 +289,16 @@ class DriftDetector:
     """Detect all types of drift."""
 
     @staticmethod
+    def _is_internal_resource(resource: Dict) -> bool:
+        """Check if resource is internal/management (not actual infrastructure)."""
+        resource_type = resource.get("type", "")
+        # Filter out deployment modules and other management resources
+        internal_types = {
+            "Microsoft.Resources/deployments",
+        }
+        return resource_type in internal_types
+
+    @staticmethod
     def detect_drift(
         bicep_resources: List[Dict],
         deployed_resources: List[Dict],
@@ -272,6 +311,11 @@ class DriftDetector:
         """
         drifts = []
         extractor = PropertyExtractor()
+
+        # Filter out internal resources (deployments, etc.)
+        bicep_resources = [r for r in bicep_resources if not DriftDetector._is_internal_resource(r)]
+        deployed_resources = [r for r in deployed_resources if not DriftDetector._is_internal_resource(r)]
+
         matches = ResourceMatcher.match_resources(bicep_resources, deployed_resources)
         comparator = PropertyComparator()
 
