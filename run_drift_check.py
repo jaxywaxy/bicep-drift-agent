@@ -21,6 +21,7 @@ load_dotenv()
 from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detect_deployment_scope
 from tools.get_live_state import get_live_state
 from tools.diff_states import diff_states, format_drift_report
+from tools.ignore_patterns import IgnorePatternList
 
 
 def run(bicep_file: str, resource_group: str):
@@ -43,7 +44,7 @@ def run(bicep_file: str, resource_group: str):
             print(f"  ⚠ Invalid JSON in ARM_PARAMETERS")
 
     # Step 1: Compile Bicep → ARM JSON
-    print("Step 1: Compiling Bicep...")
+    print("Step 1: Compiling Bicep template...")
     try:
         arm_template = compile_bicep(bicep_file)
     except RuntimeError as e:
@@ -89,15 +90,23 @@ def run(bicep_file: str, resource_group: str):
     if len(live_resources) > 10:
         print(f"    ... and {len(live_resources) - 10} more")
 
-    # Step 3: Diff
-    print("\nStep 3: Diffing desired vs actual...")
+    # Step 3: Load ignore patterns
+    print("\nStep 3: Loading ignore patterns...")
+    ignore_patterns = IgnorePatternList.from_file(Path(".drift-ignore"))
+    if ignore_patterns.patterns:
+        ignore_patterns.print_summary()
+    else:
+        print("  ℹ No ignore patterns found")
+
+    # Step 4: Diff
+    print("\nStep 4: Diffing desired vs actual...")
     try:
-        drifts = diff_states(arm_resources, live_resources)
+        drifts = diff_states(arm_resources, live_resources, ignore_patterns=ignore_patterns)
     except Exception as e:
         print(f"  ✗ Failed to diff states: {e}")
         raise
 
-    # Step 4: Report
+    # Step 5: Report
     print()
     print(format_drift_report(drifts, resource_group))
 

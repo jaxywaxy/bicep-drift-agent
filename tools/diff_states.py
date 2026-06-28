@@ -33,6 +33,7 @@ class ResourceDrift:
 def diff_states(
     arm_resources: list[dict],
     live_resources: list[dict],
+    ignore_patterns=None,
 ) -> list[ResourceDrift]:
     """
     Compare ARM template resources against live Azure resources.
@@ -69,8 +70,29 @@ def diff_states(
     # Use DriftDetector's intelligent matching (handles fuzzy matching for parameter-based names)
     detector_drifts = DriftDetector.detect_drift(filtered_arm, normalized_live)
 
+    # Apply ignore patterns if provided
+    drifts_to_convert = detector_drifts
+    if ignore_patterns:
+        # Convert detector drifts to dict format for filtering
+        drifts_as_dicts = [
+            {
+                "type": d.resource_type,
+                "name": d.resource_name,
+                "drift_type": d.drift_type,
+            }
+            for d in detector_drifts
+        ]
+        filtered_dict_drifts, _ = ignore_patterns.filter_drifts(drifts_as_dicts)
+
+        # Rebuild detector drifts from filtered list
+        filtered_names = {(d["type"], d["name"]) for d in filtered_dict_drifts}
+        drifts_to_convert = [
+            d for d in detector_drifts
+            if (d.resource_type, d.resource_name) in filtered_names
+        ]
+
     # Convert detector drifts to our ResourceDrift format
-    for d in detector_drifts:
+    for d in drifts_to_convert:
         if d.drift_type == "missing":
             drifts.append(ResourceDrift(
                 resource_type=d.resource_type,
