@@ -133,6 +133,17 @@ Configure these in your repository settings:
 | `AZURE_TENANT_ID` | Azure tenant ID |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
 
+### Optional: Slack and Teams notifications
+
+To receive drift reports in Slack or Teams, add these secrets:
+
+| Secret | Setup |
+| --- | --- |
+| `SLACK_WEBHOOK_URL` | [Create incoming webhook](https://api.slack.com/messaging/webhooks) in Slack workspace |
+| `TEAMS_WEBHOOK_URL` | [Create connector webhook](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/connectors-using) in Teams channel |
+
+Both are optional—the workflow will automatically post to whichever services are configured.
+
 ### Viewing results
 
 1. **Workflow summary** — Shows status, metrics, and issues directly in the GitHub Actions run
