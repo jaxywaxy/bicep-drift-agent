@@ -169,6 +169,61 @@ To receive drift reports in Slack or Teams, add these secrets:
 
 Both are optional—the workflow will automatically post to whichever services are configured.
 
+## Report Formats
+
+The drift check generates multiple report formats:
+
+### HTML Report
+
+Beautiful, interactive HTML report with:
+
+- Status summary with color-coded metrics
+- Resource type and drift type filters
+- Detailed drift information
+- Mobile-responsive design
+- Easy to share with stakeholders
+
+Available in the `drift-reports` artifact after workflow completes.
+
+### JSON Report
+
+Machine-readable report containing:
+
+- Raw drift data
+- ARM and live resource states
+- All metadata for processing
+- Used by Phase 2 analysis
+
+### Ignoring Expected Drift
+
+Some drift is expected or acceptable. Use `.drift-ignore` to suppress known differences:
+
+```yaml
+# .drift-ignore
+ignore:
+  # Ignore auto-created managed identities
+  - resource_type: "Microsoft.ManagedIdentity/*"
+    reason: "Auto-created by Azure services"
+  
+  # Ignore scaling changes
+  - resource_type: "Microsoft.Compute/virtualMachineScaleSets"
+    drift_type: "*capacity*"
+    reason: "Auto-scaling expected"
+  
+  # Ignore specific resources
+  - resource_name: "temporary-*"
+    reason: "Temporary resources"
+```
+
+**Features:**
+
+- Wildcard pattern matching (`*` and `?`)
+- Filter by resource type, name, or drift type
+- Document why each pattern is ignored
+- Filtered drifts are excluded from metrics
+
+Copy [`.drift-ignore.example`](.drift-ignore.example) to `.drift-ignore` in your repo root to customize.
+
 ### Viewing results
 
 1. **Workflow summary** — Shows status, metrics, and issues directly in the GitHub Actions run
