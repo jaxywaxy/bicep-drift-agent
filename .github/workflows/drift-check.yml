@@ -201,6 +201,137 @@ jobs:
           echo "❌ Critical drift detected (>5 issues). Please review and fix before merging."
           exit 1
 
+      - name: Post to Slack
+        if: github.event_name != 'pull_request' && always()
+        env:
+          WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TOTAL: ${{ steps.drift.outputs.total_drifts }}
+          MISSING: ${{ steps.drift.outputs.missing }}
+          EXTRA: ${{ steps.drift.outputs.extra }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then exit 0; fi
+
+          if [ "$TOTAL" = "0" ] || [ -z "$TOTAL" ]; then
+            STATUS="✅ No drift detected"
+            COLOR="36a64f"
+          else
+            STATUS="⚠️ Drift detected"
+            COLOR="ff9900"
+          fi
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "attachments": [
+              {
+                "color": "$COLOR",
+                "title": "Bicep Drift Check Report",
+                "title_link": "$RUN_URL",
+                "fields": [
+                  {
+                    "title": "Status",
+                    "value": "$STATUS",
+                    "short": false
+                  },
+                  {
+                    "title": "Total Issues",
+                    "value": "${TOTAL:-0}",
+                    "short": true
+                  },
+                  {
+                    "title": "Missing Resources",
+                    "value": "${MISSING:-0}",
+                    "short": true
+                  },
+                  {
+                    "title": "Extra Resources",
+                    "value": "${EXTRA:-0}",
+                    "short": true
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          )
+
+          curl -X POST -H 'Content-type: application/json' \
+            --data "$PAYLOAD" \
+            "$WEBHOOK_URL" || echo "⚠️ Failed to post to Slack"
+
+      - name: Post to Teams
+        if: github.event_name != 'pull_request' && always()
+        env:
+          WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          TOTAL: ${{ steps.drift.outputs.total_drifts }}
+          MISSING: ${{ steps.drift.outputs.missing }}
+          EXTRA: ${{ steps.drift.outputs.extra }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$WEBHOOK_URL" ]; then exit 0; fi
+
+          if [ "$TOTAL" = "0" ] || [ -z "$TOTAL" ]; then
+            STATUS="✅ No drift detected"
+            THEME_COLOR="28a745"
+          else
+            STATUS="⚠️ Drift detected"
+            THEME_COLOR="ffc107"
+          fi
+
+          PAYLOAD=$(cat <<EOF
+          {
+            "@type": "MessageCard",
+            "@context": "https://schema.org/extensions",
+            "summary": "Bicep Drift Check: $STATUS",
+            "themeColor": "$THEME_COLOR",
+            "sections": [
+              {
+                "activityTitle": "Bicep Drift Check Report",
+                "activitySubtitle": "$STATUS",
+                "facts": [
+                  {
+                    "name": "Total Issues",
+                    "value": "${TOTAL:-0}"
+                  },
+                  {
+                    "name": "Missing Resources",
+                    "value": "${MISSING:-0}"
+                  },
+                  {
+                    "name": "Extra Resources",
+                    "value": "${EXTRA:-0}"
+                  },
+                  {
+                    "name": "Repository",
+                    "value": "${{ github.repository }}"
+                  },
+                  {
+                    "name": "Branch",
+                    "value": "${{ github.ref_name }}"
+                  }
+                ],
+                "potentialAction": [
+                  {
+                    "@type": "OpenUri",
+                    "name": "View Report",
+                    "targets": [
+                      {
+                        "os": "default",
+                        "uri": "$RUN_URL"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+          )
+
+          curl -X POST -H 'Content-Type: application/json' \
+            --data "$PAYLOAD" \
+            "$WEBHOOK_URL" || echo "⚠️ Failed to post to Teams"
+
       - name: Upload drift report
         if: always()
         uses: actions/upload-artifact@v7
