@@ -28,7 +28,6 @@ from tools.smart_matching import (
     detect_unresolvable_expressions,
     smart_match_resources,
     annotate_drifts_with_matches,
-    generate_match_report,
 )
 from tools.property_drift import DriftDetector, PropertyExtractor
 from run_drift_check import run as run_phase1
@@ -94,7 +93,7 @@ def main():
             print("\n🔗 Attempting smart resource matching...")
             bicep_resources = report_data.get("arm_resources", [])
             azure_resources = report_data.get("live_resources", [])
-            matched, unmatched_bicep, unmatched_azure = smart_match_resources(
+            matched, _, _ = smart_match_resources(
                 bicep_resources, azure_resources, unresolvable
             )
 

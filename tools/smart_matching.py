@@ -5,7 +5,6 @@ Detects runtime-generated names in Bicep templates and attempts to match
 them to deployed resources by type.
 """
 
-import re
 from typing import List, Dict, Tuple
 from collections import defaultdict
 

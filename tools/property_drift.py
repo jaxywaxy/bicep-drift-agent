@@ -7,7 +7,7 @@ to detect configuration changes outside of IaC.
 
 import json
 from typing import Dict, List, Tuple, Any
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from collections import defaultdict
 
 
