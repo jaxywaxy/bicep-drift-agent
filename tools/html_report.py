@@ -39,16 +39,27 @@ def generate_html_report(
         drift_type = drift["drift_type"]
         type_badge = _get_type_badge(drift_type)
 
-        details = drift.get("details", "N/A")
+        # Format details
+        details = drift.get("details", "")
         if isinstance(details, dict):
             details = json.dumps(details, indent=2)
+        elif not details:
+            details = "No additional details"
+
+        # Get recommendation if available
+        recommendation = drift.get("recommendation", "")
+        if recommendation:
+            recommendation_html = f'<div class="recommendation">{recommendation}</div>'
+        else:
+            recommendation_html = '<em style="color: #999;">No recommendation available</em>'
 
         drift_rows += f"""
         <tr>
-            <td>{drift['type']}</td>
-            <td>{drift['name']}</td>
+            <td><strong>{drift['type']}</strong></td>
+            <td><code>{drift['name']}</code></td>
             <td>{type_badge}</td>
             <td><pre>{details}</pre></td>
+            <td>{recommendation_html}</td>
         </tr>
         """
 
@@ -266,6 +277,15 @@ def generate_html_report(
                 line-height: 1.4;
             }}
 
+            .recommendation {{
+                background: #e8f5e9;
+                padding: 10px;
+                border-radius: 4px;
+                border-left: 3px solid #4caf50;
+                font-size: 13px;
+                line-height: 1.5;
+            }}
+
             footer {{
                 text-align: center;
                 padding: 20px;
@@ -390,8 +410,9 @@ def _render_drift_section(total: int, drift_rows: str) -> str:
                 <tr>
                     <th>Resource Type</th>
                     <th>Resource Name</th>
-                    <th>Type</th>
+                    <th>Drift Type</th>
                     <th>Details</th>
+                    <th>Recommendation</th>
                 </tr>
             </thead>
             <tbody>

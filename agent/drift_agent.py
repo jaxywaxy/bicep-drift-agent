@@ -88,6 +88,42 @@ class DriftAgent:
 
         return answer
 
+    def get_drift_recommendation(
+        self,
+        resource_type: str,
+        resource_name: str,
+        drift_type: str,
+        details: dict = None,
+    ) -> str:
+        """
+        Get a specific remediation recommendation for a single drift item.
+
+        Args:
+            resource_type: Azure resource type (e.g., Microsoft.Storage/storageAccounts)
+            resource_name: Resource name
+            drift_type: Type of drift (missing, extra, modified)
+            details: Drift details dict
+
+        Returns:
+            Remediation recommendation
+        """
+        prompt = f"""Given this specific infrastructure drift, provide a concise remediation recommendation (1-2 sentences):
+
+**Resource:** {resource_type} / {resource_name}
+**Drift Type:** {drift_type}
+{f"**Details:** {json.dumps(details)}" if details else ""}
+
+Respond with only the actionable recommendation."""
+
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=300,
+            system="You are an Azure infrastructure expert. Provide brief, actionable remediation recommendations.",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        return response.content[0].text.strip()
+
     @staticmethod
     def _get_system_prompt() -> str:
         """System prompt for drift analysis."""
