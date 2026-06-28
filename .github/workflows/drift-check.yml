@@ -61,21 +61,29 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ARM_PARAMETERS: '{"environment":"prod","location":"australiaeast"}'
+          PYTHONUNBUFFERED: '1'
         run: |
           BICEP_FILE="${{ github.event.inputs.bicep_file || './infra/main.bicep' }}"
           RESOURCE_GROUP="${{ github.event.inputs.resource_group || 'rg-prod' }}"
 
           echo "Running drift check..."
-          python analyze_drift.py "$BICEP_FILE" "$RESOURCE_GROUP" > drift_output.txt 2>&1
-          EXIT_CODE=$?
+          echo "Bicep file: $BICEP_FILE"
+          echo "Resource group: $RESOURCE_GROUP"
+          echo "Python version:"
+          python --version
+          echo ""
 
-          # Always show the output
-          cat drift_output.txt
+          python -u analyze_drift.py "$BICEP_FILE" "$RESOURCE_GROUP" 2>&1 | tee drift_output.txt
+          EXIT_CODE=${PIPESTATUS[0]}
 
-          # Exit if the script failed
           if [ $EXIT_CODE -ne 0 ]; then
+            echo ""
+            echo "❌ Drift check failed with exit code $EXIT_CODE"
             exit $EXIT_CODE
           fi
+
+          echo ""
+          echo "✓ Drift check completed successfully"
 
           # Extract key metrics
           TOTAL_DRIFTS=$(grep -o "Found [0-9]*" drift_output.txt | head -1 | grep -o "[0-9]*" || echo "0")
@@ -129,7 +137,7 @@ jobs:
 
       - name: Upload drift report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: drift-reports
           path: reports/
