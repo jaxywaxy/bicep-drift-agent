@@ -277,13 +277,27 @@ class PropertyComparator:
     """Compare properties between desired and actual resources."""
 
     CRITICAL_PROPERTIES = {
+        # Location and kind are fundamental
         "location",
+        "kind",
+        # SKU properties (pricing tier, size, capacity)
         "sku.name",
         "sku.tier",
-        "kind",
+        "sku.family",
+        "sku.size",
+        "sku.capacity",
+        # VM-specific
+        "properties.hardwareProfile.vmSize",
+        # Storage-specific
         "properties.accountType",
         "properties.replicationType",
         "properties.accessTier",
+        # Database-specific
+        "properties.edition",
+        "properties.serviceLevelObjective",
+        # App Service-specific
+        "properties.reserved",
+        "properties.workerSize",
     }
 
     @staticmethod
