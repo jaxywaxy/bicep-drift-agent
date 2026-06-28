@@ -58,6 +58,14 @@ def diff_states(
     # Normalize live resources to match ARM shape
     normalized_live = normalize_live_resources(live_resources)
 
+    # Filter out auto-managed resources from live state that can't be in Bicep
+    # (These are created and managed by other resources, not separately defined)
+    auto_managed_types = {
+        "Microsoft.Compute/disks",  # Created by VMs
+        "Microsoft.Compute/virtualMachines/extensions",  # Created by VMs
+    }
+    normalized_live = [r for r in normalized_live if r.get("type") not in auto_managed_types]
+
     # Use DriftDetector's intelligent matching (handles fuzzy matching for parameter-based names)
     detector_drifts = DriftDetector.detect_drift(filtered_arm, normalized_live)
 

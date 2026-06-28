@@ -114,6 +114,24 @@ class ResourceMatcher:
         return None
 
     @staticmethod
+    def _find_parent_vm(disk_name: str, bicep_resources: List[Dict]) -> Dict:
+        """Find parent VM for a managed disk by extracting VM name from disk name.
+
+        Example: vm-prod-002_OsDisk_1_<hash> → extract 'vm-prod-002'
+        """
+        # Extract VM name from disk (before first underscore)
+        vm_name = disk_name.split('_')[0] if '_' in disk_name else None
+        if not vm_name:
+            return None
+
+        # Find matching VM
+        for r in bicep_resources:
+            if r.get("type") == "Microsoft.Compute/virtualMachines":
+                if r.get("name", "").lower() == vm_name.lower():
+                    return r
+        return None
+
+    @staticmethod
     def match_resources(
         bicep_resources: List[Dict],
         deployed_resources: List[Dict],
@@ -184,6 +202,23 @@ class ResourceMatcher:
                 best_match_idx = -1
 
                 # For identical-named resources, try contextual matching via related resources
+                if resource_type == "Microsoft.Compute/disks":
+                    # For disks, try to match via parent VM
+                    # Extract VM name from disk name (e.g., vm-prod-002_OsDisk_1_<hash> → vm-prod-002)
+                    disk_name = bicep_resource.get("name", "")
+                    parent_vm = ResourceMatcher._find_parent_vm(disk_name, bicep_resources)
+                    if parent_vm:
+                        # Find which deployed disk matches this parent VM
+                        for cand_idx, candidate in enumerate(candidates):
+                            cand_name = candidate.get("name", "")
+                            # Check if candidate disk belongs to parent VM
+                            vm_name_from_disk = cand_name.split('_')[0] if '_' in cand_name else None
+                            if vm_name_from_disk and vm_name_from_disk.lower() == parent_vm.get("name", "").lower():
+                                best_match = candidate
+                                best_match_idx = cand_idx
+                                best_score = 0.95  # High confidence: matched via parent VM
+                                break
+
                 if all_identical and resource_type == "Microsoft.Network/networkInterfaces":
                     # Try to match NIC via its associated VM
                     associated_vm = ResourceMatcher._find_associated_resource(bicep_resource, bicep_resources, "Microsoft.Compute/virtualMachines")

@@ -48,9 +48,29 @@ def get_live_state(
 
     resources = []
 
-    if scope == "subscription":
-        # List all resources in the subscription
+    if scope == "subscription" and resource_group:
+        # Query subscription scope but filter to specific resource group
+        # This handles subscription-scoped templates while only reporting on target RG
         for resource in client.resources.list(expand="properties"):
+            # Extract resource group from resource ID: /subscriptions/.../resourceGroups/RG_NAME/...
+            rg_from_id = _extract_resource_group_from_id(resource.id)
+            if rg_from_id and rg_from_id.lower() == resource_group.lower():
+                resource_dict = {
+                    "type": resource.type,
+                    "name": resource.name,
+                    "location": resource.location,
+                    "tags": resource.tags or {},
+                    "sku": _extract_sku(resource),
+                    "kind": resource.kind,
+                    "properties": _safe_properties(resource),
+                    "id": resource.id,
+                    "resource_group": rg_from_id,
+                }
+                resources.append(resource_dict)
+    elif scope == "subscription":
+        # List all resources in subscription (no RG filtering)
+        for resource in client.resources.list(expand="properties"):
+            rg_from_id = _extract_resource_group_from_id(resource.id)
             resource_dict = {
                 "type": resource.type,
                 "name": resource.name,
@@ -60,10 +80,11 @@ def get_live_state(
                 "kind": resource.kind,
                 "properties": _safe_properties(resource),
                 "id": resource.id,
+                "resource_group": rg_from_id,
             }
             resources.append(resource_dict)
     else:
-        # List all resources in the resource group
+        # List all resources in the specific resource group
         if not resource_group:
             raise ValueError("resource_group required for resource_group scope")
 
@@ -77,10 +98,26 @@ def get_live_state(
                 "kind": resource.kind,
                 "properties": _safe_properties(resource),
                 "id": resource.id,
+                "resource_group": resource_group,
             }
             resources.append(resource_dict)
 
     return resources
+
+
+def _extract_resource_group_from_id(resource_id: str) -> str | None:
+    """Extract resource group name from Azure resource ID.
+
+    Example: /subscriptions/SUB_ID/resourceGroups/MY_RG/providers/... → MY_RG
+    """
+    parts = resource_id.lower().split('/')
+    try:
+        rg_index = parts.index('resourcegroups')
+        if rg_index + 1 < len(parts):
+            return parts[rg_index + 1]
+    except (ValueError, IndexError):
+        pass
+    return None
 
 
 def _extract_sku(resource) -> dict | None:
