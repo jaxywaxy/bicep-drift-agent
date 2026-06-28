@@ -65,6 +65,15 @@ jobs:
 
           echo "Running drift check..."
           python analyze_drift.py "$BICEP_FILE" "$RESOURCE_GROUP" > drift_output.txt 2>&1
+          EXIT_CODE=$?
+
+          # Always show the output
+          cat drift_output.txt
+
+          # Exit if the script failed
+          if [ $EXIT_CODE -ne 0 ]; then
+            exit $EXIT_CODE
+          fi
 
           # Extract key metrics
           TOTAL_DRIFTS=$(grep -o "Found [0-9]*" drift_output.txt | head -1 | grep -o "[0-9]*" || echo "0")
@@ -74,8 +83,6 @@ jobs:
           echo "total_drifts=$TOTAL_DRIFTS" >> $GITHUB_OUTPUT
           echo "missing=$MISSING" >> $GITHUB_OUTPUT
           echo "extra=$EXTRA" >> $GITHUB_OUTPUT
-
-          cat drift_output.txt
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
