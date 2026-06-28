@@ -60,6 +60,7 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_PARAMETERS: '{"environment":"prod","location":"australiaeast"}'
           PYTHONUNBUFFERED: '1'
         run: |
