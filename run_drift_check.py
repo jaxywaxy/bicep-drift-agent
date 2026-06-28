@@ -54,12 +54,15 @@ def run(bicep_file: str, resource_group: str):
                 for line in bicepparam_content.split('\n'):
                     line = line.strip()
                     if line.startswith('param ') and '=' in line:
+                        # Remove comments first
+                        line = line.split('//')[0].strip()
                         # Parse: param vaultName = 'rsv-prod-aue-001'
                         parts = line.replace('param ', '').split('=', 1)
                         if len(parts) == 2:
                             key = parts[0].strip()
                             value = parts[1].strip().strip("'\"")
-                            param_overrides[key] = value
+                            if value:  # Only add non-empty values
+                                param_overrides[key] = value
                 if param_overrides:
                     print(f"  Parameters loaded from: {bicepparam_file.name}")
                     for k, v in param_overrides.items():
