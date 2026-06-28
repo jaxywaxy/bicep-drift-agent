@@ -109,17 +109,18 @@ def main():
 
         print(f"✓ Analysis saved to: {analysis_file}")
 
-        # Interactive follow-up
-        print("\n💬 Ask Claude follow-up questions (or 'quit' to exit):\n")
-        while True:
-            question = input("You: ").strip()
-            if question.lower() in ("quit", "exit", "q"):
-                break
-            if not question:
-                continue
+        # Interactive follow-up (only in interactive mode)
+        if os.isatty(0):
+            print("\n💬 Ask Claude follow-up questions (or 'quit' to exit):\n")
+            while True:
+                question = input("You: ").strip()
+                if question.lower() in ("quit", "exit", "q"):
+                    break
+                if not question:
+                    continue
 
-            response = agent.ask_followup(question)
-            print(f"\nClaude: {response}\n")
+                response = agent.ask_followup(question)
+                print(f"\nClaude: {response}\n")
 
     except KeyboardInterrupt:
         print("\n\nAnalysis interrupted by user.")
