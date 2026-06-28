@@ -1,0 +1,90 @@
+name: Bicep Drift Check - Multi-Environment
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'infra/**/*.bicep'
+      - '.github/workflows/drift-check-multi-env.yml'
+  workflow_dispatch:
+    inputs:
+      environments:
+        description: 'JSON array of {bicep_file, resource_group} objects'
+        required: true
+        default: '[{"bicep_file": "./infra/main.bicep", "resource_group": "rg-prod"}]'
+
+jobs:
+  parse-environments:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      environments-json: ${{ steps.set-matrix.outputs.environments-json }}
+    steps:
+      - name: Parse environment inputs
+        id: set-matrix
+        run: |
+          # Use provided input or default
+          ENVS='${{ github.event.inputs.environments }}'
+
+          if [ -z "$ENVS" ] || [ "$ENVS" == "null" ]; then
+            # Default: check both dev and prod
+            ENVS='[
+              {"bicep_file": "./infra/main.bicep", "resource_group": "rg-dev"},
+              {"bicep_file": "./infra/main.bicep", "resource_group": "rg-prod"}
+            ]'
+          fi
+
+          echo "environments-json=$ENVS" >> $GITHUB_OUTPUT
+
+          # Convert to matrix format
+          MATRIX=$(echo "$ENVS" | jq -c '{include: .}')
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+          echo "Parsed environments:"
+          echo "$ENVS" | jq '.'
+
+  drift-check:
+    needs: parse-environments
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      matrix: ${{ fromJson(needs.parse-environments.outputs.matrix) }}
+      max-parallel: 3
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run drift check for ${{ matrix.resource_group }}
+        uses: jaxywaxy/bicep-drift-agent/.github/workflows/drift-check-reusable.yml@main
+        with:
+          bicep_file: ${{ matrix.bicep_file }}
+          resource_group: ${{ matrix.resource_group }}
+          fail_on_drift: false
+        secrets:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+
+  summary:
+    needs: [parse-environments, drift-check]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## 🔍 Multi-Environment Drift Check Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          ENVS='${{ needs.parse-environments.outputs.environments-json }}'
+          echo "### Environments Checked" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "$ENVS" | jq -r '.[] | "- **\(.resource_group)**: \(.bicep_file)"' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Results" >> $GITHUB_STEP_SUMMARY
+          echo "Check individual workflow run artifacts for detailed reports per environment." >> $GITHUB_STEP_SUMMARY

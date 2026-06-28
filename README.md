@@ -106,11 +106,24 @@ Remaining limitations:
 - Complex nested functions still partially unresolved
 - This is why Phase 2 needs an agent — to reason about unresolvable expressions
 
-## CI/CD: GitHub Actions Workflow
+## CI/CD: GitHub Actions Workflows
 
 ### For this repo: Built-in drift checks
 
-This repository has built-in drift checks that run automatically on push to `main` or `develop`.
+This repository has two built-in workflows:
+
+**Single Environment** — `drift-check.yml`
+
+- Checks one resource group per run
+- Automatically triggered on push
+- Manual trigger for on-demand checks
+
+**Multi-Environment** — `drift-check-multi-env.yml`
+
+- Checks multiple resource groups in parallel
+- Default: checks rg-dev and rg-prod
+- Customizable via workflow input
+- See [MULTI_ENVIRONMENT.md](MULTI_ENVIRONMENT.md) for details
 
 ### For other repos: Reusable workflow
 
