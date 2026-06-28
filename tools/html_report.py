@@ -236,6 +236,7 @@ def generate_html_report(
             table {{
                 width: 100%;
                 border-collapse: collapse;
+                table-layout: fixed;
             }}
 
             th {{
@@ -245,11 +246,20 @@ def generate_html_report(
                 font-weight: 600;
                 color: #333;
                 border-bottom: 2px solid #e9ecef;
+                word-break: break-word;
             }}
 
             td {{
                 padding: 12px;
                 border-bottom: 1px solid #e9ecef;
+                word-break: break-word;
+                white-space: normal;
+                overflow-wrap: break-word;
+            }}
+
+            td code {{
+                word-break: break-all;
+                display: block;
             }}
 
             tr:hover {{
