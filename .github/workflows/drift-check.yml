@@ -48,7 +48,8 @@ jobs:
           curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
       - name: Azure Login
-        uses: azure/login@v1
+        if: github.event_name != 'pull_request'
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -56,6 +57,7 @@ jobs:
 
       - name: Run drift check
         id: drift
+        if: github.event_name != 'pull_request'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ARM_PARAMETERS: '{"environment":"prod","location":"australiaeast"}'
@@ -65,6 +67,15 @@ jobs:
 
           echo "Running drift check..."
           python analyze_drift.py "$BICEP_FILE" "$RESOURCE_GROUP" > drift_output.txt 2>&1
+          EXIT_CODE=$?
+
+          # Always show the output
+          cat drift_output.txt
+
+          # Exit if the script failed
+          if [ $EXIT_CODE -ne 0 ]; then
+            exit $EXIT_CODE
+          fi
 
           # Extract key metrics
           TOTAL_DRIFTS=$(grep -o "Found [0-9]*" drift_output.txt | head -1 | grep -o "[0-9]*" || echo "0")
@@ -75,10 +86,12 @@ jobs:
           echo "missing=$MISSING" >> $GITHUB_OUTPUT
           echo "extra=$EXTRA" >> $GITHUB_OUTPUT
 
-          cat drift_output.txt
+      - name: Skip drift check for PRs
+        if: github.event_name == 'pull_request'
+        run: echo "ℹ Drift checks only run on push to main/develop. Use workflow_dispatch to test manually."
 
       - name: Comment on PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.drift.outcome == 'success'
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
