@@ -103,3 +103,28 @@ ignore:
 
   - resource_type: "Microsoft.ContainerService/managedClusters"
     reason: "AKS cluster properties may have runtime-resolved values"
+
+  # API Management auto-managed resources
+  - resource_type: "Microsoft.ApiManagement/service/groups"
+    reason: "Built-in groups (administrators, developers, guests) auto-created by API Management"
+
+  - resource_type: "Microsoft.ApiManagement/service/products"
+    reason: "Built-in products (Starter, Unlimited) auto-created by API Management"
+
+  - resource_type: "Microsoft.ApiManagement/service/loggers"
+    reason: "Default logger auto-created by API Management"
+
+  - resource_type: "Microsoft.ApiManagement/service/diagnostics"
+    reason: "Diagnostic settings auto-created by API Management"
+
+  - resource_type: "Microsoft.ApiManagement/service/apis/policies"
+    reason: "API policies often managed via portal or Azure Policy, not Bicep"
+
+  - resource_type: "Microsoft.ApiManagement/service/policies"
+    reason: "Service-level policies often managed via portal, not Bicep"
+
+  - resource_type: "Microsoft.ApiManagement/service/tags"
+    reason: "Tags auto-created and managed by API Management"
+
+  - resource_type: "Microsoft.ApiManagement/service/operationTags"
+    reason: "Operation tags auto-managed by API Management"
