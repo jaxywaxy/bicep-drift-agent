@@ -119,17 +119,50 @@ def main():
         print("\n" + "=" * 60 + "\n")
 
         # Generate per-drift recommendations
-        if drifts:
-            print("\n💡 Generating remediation recommendations...")
-            for drift in report_data.get("drifts", []):
-                recommendation = agent.get_drift_recommendation(
-                    resource_type=drift["type"],
-                    resource_name=drift["name"],
-                    drift_type=drift["drift_type"],
-                    details=drift.get("details"),
-                )
-                drift["recommendation"] = recommendation
-            print(f"✓ Generated recommendations for {len(drifts)} drift(s)")
+        drifts_to_analyze = report_data.get("drifts", [])
+        print(f"\n💡 Found {len(drifts_to_analyze)} drift(s) to generate recommendations for")
+
+        if len(drifts_to_analyze) > 0:
+            print("🤖 Generating recommendations via Claude...")
+            recommendations_count = 0
+
+            for i, drift in enumerate(drifts_to_analyze, 1):
+                try:
+                    drift_name = drift.get("name", "unknown")
+                    print(f"  [{i}/{len(drifts_to_analyze)}] {drift_name}...", end=" ", flush=True)
+
+                    recommendation = agent.get_drift_recommendation(
+                        resource_type=drift.get("type", ""),
+                        resource_name=drift_name,
+                        drift_type=drift.get("drift_type", ""),
+                        details=drift.get("details"),
+                    )
+
+                    drift["recommendation"] = recommendation.strip() if recommendation else "No recommendation generated"
+                    recommendations_count += 1
+                    print("✓")
+
+                except Exception as e:
+                    print(f"✗ ({str(e)[:50]})")
+                    drift["recommendation"] = f"Could not generate recommendation: {str(e)[:100]}"
+
+            print(f"\n✓ Generated recommendations for {recommendations_count}/{len(drifts_to_analyze)} drifts")
+
+            # Update JSON report with recommendations
+            try:
+                with open(report_file, "w") as f:
+                    json.dump(report_data, f, indent=2, default=str)
+                print(f"✓ Saved recommendations to JSON: {report_file}")
+
+                # Verify recommendations are in the file
+                with open(report_file) as f:
+                    verify_data = json.load(f)
+                recs_verified = sum(1 for d in verify_data.get("drifts", []) if d.get("recommendation"))
+                print(f"✓ Verified {recs_verified} recommendations in saved JSON file")
+            except Exception as e:
+                print(f"✗ Failed to save recommendations: {e}")
+        else:
+            print("⊘ No drifts to analyze for recommendations")
 
         # Save analysis
         analysis_file = Path(f"reports/{resource_group}-analysis.md")
