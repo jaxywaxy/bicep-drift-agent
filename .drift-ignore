@@ -103,6 +103,15 @@ ignore:
     drift_type: "*tags*"
     reason: "Tags from union(createObject(...)) expressions resolve correctly at deployment time with computed and parameter values"
 
+  # Nested module parameter names resolve at deployment time
+  - resource_type: "Microsoft.Network/networkInterfaces"
+    drift_type: "*name*"
+    reason: "NIC names from module parameters resolve at deployment time (vmName parameter → actual deployed names). Missing/deleted NICs still reported as resource-level drift."
+
+  - resource_type: "Microsoft.Compute/virtualMachines"
+    drift_type: "*name*"
+    reason: "VM names from module parameters resolve at deployment time. Missing/deleted VMs still reported as resource-level drift."
+
   - resource_type: "Microsoft.RecoveryServices/vaults"
     reason: "API version differences are metadata, not functional drift"
 
