@@ -28,8 +28,8 @@ from tools.smart_matching import (
     detect_unresolvable_expressions,
     smart_match_resources,
     annotate_drifts_with_matches,
-    generate_match_report,
 )
+from tools.property_drift import DriftDetector, PropertyExtractor
 from run_drift_check import run as run_phase1
 
 
@@ -93,7 +93,7 @@ def main():
             print("\n🔗 Attempting smart resource matching...")
             bicep_resources = report_data.get("arm_resources", [])
             azure_resources = report_data.get("live_resources", [])
-            matched, unmatched_bicep, unmatched_azure = smart_match_resources(
+            matched, _, _ = smart_match_resources(
                 bicep_resources, azure_resources, unresolvable
             )
 
@@ -127,6 +127,44 @@ def main():
                 report_data.get("drifts", []),
                 report_data.get("smart_matched", [])
             )
+
+        # Perform property-level drift detection
+        print("\n🔎 Detecting property-level drift (comparing configurations)...")
+        bicep_resources = report_data.get("arm_resources", [])
+        deployed_resources = report_data.get("live_resources", [])
+
+        if bicep_resources and deployed_resources:
+            property_drifts = DriftDetector.detect_drift(bicep_resources, deployed_resources)
+            summary = DriftDetector.generate_summary(property_drifts)
+
+            print(f"✓ Drift detection complete:")
+            print(f"  - Total drifts: {summary['total']}")
+            print(f"  - Missing resources: {summary['missing']}")
+            print(f"  - Extra resources: {summary['extra']}")
+            print(f"  - Modified (config changed): {summary['modified']}")
+
+            # Store property drifts in report
+            report_data["property_drifts"] = [
+                {
+                    "resource_type": d.resource_type,
+                    "resource_name": d.resource_name,
+                    "bicep_name": d.bicep_name,
+                    "deployed_name": d.deployed_name,
+                    "drift_type": d.drift_type,
+                    "match_confidence": d.match_confidence,
+                    "property_diffs": [
+                        {
+                            "property_path": diff.property_path,
+                            "desired_value": diff.desired_value,
+                            "actual_value": diff.actual_value,
+                            "change_type": diff.change_type,
+                            "severity": diff.severity,
+                        }
+                        for diff in d.property_diffs
+                    ],
+                }
+                for d in property_drifts
+            ]
 
         # Build DriftReport object
         drifts = [

@@ -393,6 +393,62 @@ def generate_html_report(
                 color: #d73a49;
             }}
 
+            .property-change {{
+                background: white;
+                border: 1px solid #e0e0e0;
+                border-left: 3px solid #ff9800;
+                border-radius: 4px;
+                padding: 12px;
+                margin-bottom: 12px;
+                font-size: 13px;
+            }}
+
+            .property-change.critical {{
+                border-left-color: #f44336;
+                background: #ffebee;
+            }}
+
+            .property-change.warning {{
+                border-left-color: #ff9800;
+                background: #fff3e0;
+            }}
+
+            .property-change.info {{
+                border-left-color: #2196f3;
+                background: #e3f2fd;
+            }}
+
+            .property-path {{
+                font-family: monospace;
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 8px;
+            }}
+
+            .property-values {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 16px;
+                margin-top: 8px;
+            }}
+
+            .property-value {{
+                padding: 8px;
+                background: #f5f5f5;
+                border-radius: 3px;
+                font-family: monospace;
+                font-size: 12px;
+                word-break: break-all;
+            }}
+
+            .property-value-label {{
+                font-size: 11px;
+                font-weight: 600;
+                color: #666;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+            }}
+
             footer {{
                 text-align: center;
                 padding: 20px;
@@ -468,6 +524,8 @@ def generate_html_report(
                 </div>
             </div>
 
+            {_render_property_drift_section(data)}
+
             <div class="section">
                 <h2>Drift Details</h2>
                 {_render_drift_section(total, drift_rows)}
@@ -530,6 +588,107 @@ def _render_drift_section(total: int, drift_rows: str) -> str:
             </tbody>
         </table>
         """
+
+
+def _render_property_drift_section(data: dict) -> str:
+    """Render property-level drift section."""
+    property_drifts = data.get("property_drifts", [])
+    if not property_drifts:
+        return ""
+
+    # Separate by drift type
+    modified = [d for d in property_drifts if d["drift_type"] == "modified"]
+    missing = [d for d in property_drifts if d["drift_type"] == "missing"]
+    extra = [d for d in property_drifts if d["drift_type"] == "extra"]
+
+    html = ""
+
+    # Modified resources section
+    if modified:
+        html += f"""
+            <div class="section">
+                <h2>⚙️ Modified Configuration</h2>
+                <p>These resources exist in both Bicep and Azure, but their configuration has changed:</p>
+                <div style="margin-top: 16px;">
+        """
+
+        for resource in modified:
+            resource_name = resource.get("deployed_name", resource.get("resource_name", "unknown"))
+            resource_type = resource.get("resource_type", "")
+            html += f"""
+                    <div class="property-drift-resource">
+                        <h3>{resource_type}</h3>
+                        <p><strong>{resource_name}</strong></p>
+            """
+
+            for diff in resource.get("property_diffs", []):
+                severity = diff.get("severity", "info")
+                prop_path = diff.get("property_path", "")
+                change_type = diff.get("change_type", "")
+                desired = diff.get("desired_value", "N/A")
+                actual = diff.get("actual_value", "N/A")
+
+                html += f"""
+                        <div class="property-change {severity}">
+                            <div class="property-path">{prop_path}</div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 8px;">{change_type.title()}</div>
+                            <div class="property-values">
+                                <div>
+                                    <div class="property-value-label">Expected (Bicep)</div>
+                                    <div class="property-value">{json.dumps(desired, default=str)}</div>
+                                </div>
+                                <div>
+                                    <div class="property-value-label">Actual (Azure)</div>
+                                    <div class="property-value">{json.dumps(actual, default=str)}</div>
+                                </div>
+                            </div>
+                        </div>
+                """
+
+            html += """
+                    </div>
+            """
+
+        html += """
+                </div>
+            </div>
+        """
+
+    # Missing resources section
+    if missing:
+        html += f"""
+            <div class="section">
+                <h2>❌ Missing Resources</h2>
+                <p>Defined in Bicep but not deployed to Azure:</p>
+                <div style="margin-top: 16px;">
+        """
+        for resource in missing:
+            resource_type = resource.get("resource_type", "")
+            resource_name = resource.get("resource_name", "")
+            html += f"<div style='padding: 8px; background: #ffebee; border-radius: 4px; margin-bottom: 8px;'><strong>{resource_type}</strong> — {resource_name}</div>"
+        html += """
+                </div>
+            </div>
+        """
+
+    # Extra resources section
+    if extra:
+        html += f"""
+            <div class="section">
+                <h2>⚠️ Extra Resources</h2>
+                <p>Deployed to Azure but not defined in Bicep (orphaned or out-of-band changes):</p>
+                <div style="margin-top: 16px;">
+        """
+        for resource in extra:
+            resource_type = resource.get("resource_type", "")
+            resource_name = resource.get("deployed_name", resource.get("resource_name", ""))
+            html += f"<div style='padding: 8px; background: #e3f2fd; border-radius: 4px; margin-bottom: 8px;'><strong>{resource_type}</strong> — {resource_name}</div>"
+        html += """
+                </div>
+            </div>
+        """
+
+    return html
 
 
 def _render_smart_matched_section(data: dict) -> str:
