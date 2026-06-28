@@ -56,6 +56,11 @@ def diff_states(
     # Filter ARM resources — skip module references and unresolvable ones
     filtered_arm = [r for r in arm_resources if _should_compare_resource(r)]
 
+    # Log what was filtered for debugging
+    unresolvable_count = len(arm_resources) - len(filtered_arm)
+    if unresolvable_count > 0:
+        print(f"  ℹ Filtered {unresolvable_count} resource(s) with unresolvable expressions")
+
     # Normalize live resources to match ARM shape
     normalized_live = normalize_live_resources(live_resources)
 
