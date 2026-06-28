@@ -108,9 +108,34 @@ Remaining limitations:
 
 ## CI/CD: GitHub Actions Workflow
 
-The drift check runs automatically via GitHub Actions on push to `main` or `develop`, or can be triggered manually.
+### For this repo: Built-in drift checks
 
-### Automatic triggers
+This repository has built-in drift checks that run automatically on push to `main` or `develop`.
+
+### For other repos: Reusable workflow
+
+Infrastructure repositories can use the **reusable drift-check workflow** to check their own Bicep files. See [REUSABLE_WORKFLOW.md](REUSABLE_WORKFLOW.md) for setup instructions.
+
+**Quick example:**
+
+```yaml
+jobs:
+  drift-check:
+    uses: jaxywaxy/bicep-drift-agent/.github/workflows/drift-check-reusable.yml@main
+    with:
+      bicep_file: infra/main.bicep
+      resource_group: my-rg
+      fail_on_drift: true
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.DRIFT_CHECK_ANTHROPIC_API_KEY }}
+      AZURE_CLIENT_ID: ${{ secrets.DRIFT_CHECK_AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.DRIFT_CHECK_AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.DRIFT_CHECK_AZURE_SUBSCRIPTION_ID }}
+```
+
+---
+
+### Automatic triggers (this repo)
 
 - **Push to main/develop** with changes to `.bicep` files or workflow config
 - Generates a drift report and uploads artifacts
@@ -143,6 +168,61 @@ To receive drift reports in Slack or Teams, add these secrets:
 | `TEAMS_WEBHOOK_URL` | [Create connector webhook](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/connectors-using) in Teams channel |
 
 Both are optional—the workflow will automatically post to whichever services are configured.
+
+## Report Formats
+
+The drift check generates multiple report formats:
+
+### HTML Report
+
+Beautiful, interactive HTML report with:
+
+- Status summary with color-coded metrics
+- Resource type and drift type filters
+- Detailed drift information
+- Mobile-responsive design
+- Easy to share with stakeholders
+
+Available in the `drift-reports` artifact after workflow completes.
+
+### JSON Report
+
+Machine-readable report containing:
+
+- Raw drift data
+- ARM and live resource states
+- All metadata for processing
+- Used by Phase 2 analysis
+
+### Ignoring Expected Drift
+
+Some drift is expected or acceptable. Use `.drift-ignore` to suppress known differences:
+
+```yaml
+# .drift-ignore
+ignore:
+  # Ignore auto-created managed identities
+  - resource_type: "Microsoft.ManagedIdentity/*"
+    reason: "Auto-created by Azure services"
+  
+  # Ignore scaling changes
+  - resource_type: "Microsoft.Compute/virtualMachineScaleSets"
+    drift_type: "*capacity*"
+    reason: "Auto-scaling expected"
+  
+  # Ignore specific resources
+  - resource_name: "temporary-*"
+    reason: "Temporary resources"
+```
+
+**Features:**
+
+- Wildcard pattern matching (`*` and `?`)
+- Filter by resource type, name, or drift type
+- Document why each pattern is ignored
+- Filtered drifts are excluded from metrics
+
+Copy [`.drift-ignore.example`](.drift-ignore.example) to `.drift-ignore` in your repo root to customize.
 
 ### Viewing results
 

@@ -1,0 +1,60 @@
+# Bicep Drift Ignore Patterns
+#
+# Use this file to define drift patterns that should be ignored/suppressed.
+# Useful for expected differences like auto-scaling changes, managed identities, etc.
+#
+# Patterns support wildcards:
+#   * matches any sequence of characters
+#   ? matches a single character
+#
+# Copy this file to .drift-ignore in your repository root to use custom patterns.
+
+ignore:
+  # Ignore all managed identity auto-created changes
+  - resource_type: "Microsoft.ManagedIdentity/*"
+    reason: "Managed identities can be auto-created by Azure"
+
+  # Ignore scale/capacity changes on specific resource types
+  - resource_type: "Microsoft.Compute/virtualMachineScaleSets"
+    drift_type: "*capacity*"
+    reason: "Auto-scaling changes expected"
+
+  # Ignore specific resource by name
+  - resource_name: "auto-created-*"
+    reason: "Resources matching this pattern are auto-created"
+
+  # Ignore missing resources that are optional
+  - resource_type: "Microsoft.Insights/diagnosticSettings"
+    drift_type: "*missing*"
+    reason: "Diagnostic settings are optional"
+
+  # Ignore extra storage account containers (often created by services)
+  - resource_type: "Microsoft.Storage/storageAccounts/blobServices/containers"
+    drift_type: "*extra*"
+    reason: "Blob containers can be created by Azure services"
+
+  # Ignore tag-only changes
+  - drift_type: "*tags*"
+    reason: "Tag updates are often applied outside of IaC"
+
+  # Ignore modified resources that are monitored elsewhere
+  - resource_name: "monitoring-*"
+    drift_type: "*modified*"
+    reason: "Monitoring resources are managed separately"
+
+# Examples of what each field matches:
+#
+# resource_type: "Microsoft.Storage/storageAccounts"
+#   Matches drifts on this specific resource type
+#   Use wildcards: "Microsoft.Storage/*" matches all storage resources
+#
+# resource_name: "my-storage-prod"
+#   Matches drifts on resources with this exact name
+#   Use wildcards: "my-*" matches "my-storage", "my-database", etc.
+#
+# drift_type: "modified"
+#   Matches drifts of this type: "missing", "extra", "modified", etc.
+#   Use wildcards: "*capacity" matches "capacity_modified", "max_capacity", etc.
+#
+# reason: "Human-readable explanation"
+#   Optional. Appears in reports to explain why this pattern is ignored.

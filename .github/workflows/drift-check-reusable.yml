@@ -1,37 +1,83 @@
-name: Bicep Drift Check
+name: Reusable Bicep Drift Check
 
 on:
-  push:
-    branches: [main, develop]
-    paths:
-      - 'infra/**/*.bicep'
-      - '.github/workflows/drift-check.yml'
-  pull_request:
-    branches: [main]
-    paths:
-      - 'infra/**/*.bicep'
-  workflow_dispatch:
+  workflow_call:
     inputs:
       bicep_file:
-        description: 'Path to bicep file'
+        description: 'Path to Bicep file to check'
         required: true
-        default: './infra/main.bicep'
+        type: string
       resource_group:
-        description: 'Azure resource group'
+        description: 'Azure resource group name'
         required: true
-        default: 'rg-prod'
+        type: string
+      fail_on_drift:
+        description: 'Fail the workflow if drift is detected'
+        required: false
+        type: boolean
+        default: false
+      fail_threshold:
+        description: 'Number of drift issues to fail on (0 = any drift)'
+        required: false
+        type: number
+        default: 0
+    secrets:
+      ANTHROPIC_API_KEY:
+        description: 'Anthropic API key'
+        required: true
+      AZURE_CLIENT_ID:
+        description: 'Azure service principal client ID'
+        required: true
+      AZURE_TENANT_ID:
+        description: 'Azure tenant ID'
+        required: true
+      AZURE_SUBSCRIPTION_ID:
+        description: 'Azure subscription ID'
+        required: true
+      SLACK_WEBHOOK_URL:
+        description: 'Slack webhook URL (optional)'
+        required: false
+      TEAMS_WEBHOOK_URL:
+        description: 'Teams webhook URL (optional)'
+        required: false
+    outputs:
+      total_drifts:
+        description: 'Total number of drift issues detected'
+        value: ${{ jobs.drift-check.outputs.total_drifts }}
+      missing:
+        description: 'Number of missing resources'
+        value: ${{ jobs.drift-check.outputs.missing }}
+      extra:
+        description: 'Number of extra resources'
+        value: ${{ jobs.drift-check.outputs.extra }}
+      status:
+        description: 'Drift check status (success or drift_found)'
+        value: ${{ jobs.drift-check.outputs.status }}
 
 jobs:
   drift-check:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
       id-token: write
 
+    outputs:
+      total_drifts: ${{ steps.drift.outputs.total_drifts }}
+      missing: ${{ steps.drift.outputs.missing }}
+      extra: ${{ steps.drift.outputs.extra }}
+      status: ${{ steps.set-status.outputs.status }}
+
     steps:
-      - name: Checkout code
+      - name: Checkout drift-agent repo
         uses: actions/checkout@v7
+        with:
+          repository: jaxywaxy/bicep-drift-agent
+          ref: main
+
+      - name: Checkout caller repo
+        uses: actions/checkout@v7
+        with:
+          path: caller-repo
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -48,7 +94,6 @@ jobs:
           curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
 
       - name: Azure Login
-        if: github.event_name != 'pull_request'
         uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -57,21 +102,18 @@ jobs:
 
       - name: Run drift check
         id: drift
-        if: github.event_name != 'pull_request'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_PARAMETERS: '{"environment":"prod","location":"australiaeast"}'
+          ARM_PARAMETERS: '{}'
           PYTHONUNBUFFERED: '1'
         run: |
-          BICEP_FILE="${{ github.event.inputs.bicep_file || './infra/main.bicep' }}"
-          RESOURCE_GROUP="${{ github.event.inputs.resource_group || 'rg-prod' }}"
+          BICEP_FILE="caller-repo/${{ inputs.bicep_file }}"
+          RESOURCE_GROUP="${{ inputs.resource_group }}"
 
           echo "Running drift check..."
           echo "Bicep file: $BICEP_FILE"
           echo "Resource group: $RESOURCE_GROUP"
-          echo "Python version:"
-          python --version
           echo ""
 
           python -u analyze_drift.py "$BICEP_FILE" "$RESOURCE_GROUP" 2>&1 | tee drift_output.txt
@@ -103,112 +145,38 @@ jobs:
             echo "extra=$EXTRA"
           } >> $GITHUB_OUTPUT
 
-      - name: Publish drift report to summary
-        if: github.event_name != 'pull_request' && always()
+      - name: Determine status
+        id: set-status
+        env:
+          TOTAL: ${{ steps.drift.outputs.total_drifts }}
+          THRESHOLD: ${{ inputs.fail_threshold }}
+          FAIL_ON_DRIFT: ${{ inputs.fail_on_drift }}
         run: |
-          TOTAL="${{ steps.drift.outputs.total_drifts }}"
-          MISSING="${{ steps.drift.outputs.missing }}"
-          EXTRA="${{ steps.drift.outputs.extra }}"
+          TOTAL="${TOTAL:-0}"
+          THRESHOLD="${THRESHOLD:-0}"
 
-          # Determine status
-          if [ "$TOTAL" = "0" ] || [ -z "$TOTAL" ]; then
-            STATUS="✅ No drift detected"
-            STATUS_COLOR="success"
+          if [ "$TOTAL" = "0" ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
           else
-            STATUS="⚠️ Drift detected"
-            STATUS_COLOR="warning"
+            echo "status=drift_found" >> $GITHUB_OUTPUT
+
+            if [ "$FAIL_ON_DRIFT" = "true" ] && [ "$TOTAL" -gt "$THRESHOLD" ]; then
+              echo ""
+              echo "❌ Drift threshold exceeded: $TOTAL > $THRESHOLD"
+              exit 1
+            fi
           fi
 
-          {
-            echo "## 🔍 Bicep Drift Check Report"
-            echo ""
-            echo "### Status: $STATUS"
-            echo ""
-            echo "### Summary"
-            echo "| Metric | Count |"
-            echo "|--------|-------|"
-            echo "| Total Issues | **${TOTAL:-0}** |"
-            echo "| Missing Resources | ${MISSING:-0} |"
-            echo "| Extra Resources | ${EXTRA:-0} |"
-            echo ""
-
-            if [ "$TOTAL" != "0" ] && [ -f drift_output.txt ]; then
-              echo "### Issues Found"
-              echo ""
-              # Extract drift details from output
-              if grep -q "\[MISSING\]" drift_output.txt; then
-                echo "#### Missing Resources"
-                grep "\[MISSING\]" drift_output.txt | sed 's/^/- /' || echo "- (No details)"
-                echo ""
-              fi
-              if grep -q "\[EXTRA\]" drift_output.txt; then
-                echo "#### Extra Resources"
-                grep "\[EXTRA\]" drift_output.txt | sed 's/^/- /' || echo "- (No details)"
-                echo ""
-              fi
-            fi
-
-            if [ -f drift_output.txt ]; then
-              echo "<details>"
-              echo "<summary>📋 Full Output</summary>"
-              echo ""
-              echo "\`\`\`"
-              cat drift_output.txt
-              echo "\`\`\`"
-              echo ""
-              echo "</details>"
-            fi
-          } >> $GITHUB_STEP_SUMMARY
-
-      - name: Skip drift check for PRs
-        if: github.event_name == 'pull_request'
-        run: echo "ℹ Drift checks only run on push to main/develop. Use workflow_dispatch to test manually."
-
-      - name: Comment on PR
-        if: github.event_name == 'pull_request' && steps.drift.outcome == 'success'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            const fs = require('fs');
-            const output = fs.readFileSync('drift_output.txt', 'utf8');
-            const total = '${{ steps.drift.outputs.total_drifts }}';
-            const missing = '${{ steps.drift.outputs.missing }}';
-            const extra = '${{ steps.drift.outputs.extra }}';
-
-            let comment = `## 🔍 Bicep Drift Check\n\n`;
-            comment += `**Summary:**\n`;
-            comment += `- Total Drift Issues: **${total}**\n`;
-            comment += `- Missing Resources: ${missing}\n`;
-            comment += `- Extra Resources: ${extra}\n\n`;
-
-            if (total > 0) {
-              comment += `### Drift Details\n\`\`\`\n${output.split('\n').slice(-30).join('\n')}\n\`\`\`\n`;
-            } else {
-              comment += `✅ **No drift detected!**\n`;
-            }
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      - name: Block PR if critical drift
-        if: github.event_name == 'pull_request' && steps.drift.outputs.total_drifts > 5
-        run: |
-          echo "❌ Critical drift detected (>5 issues). Please review and fix before merging."
-          exit 1
-
       - name: Post to Slack
-        if: github.event_name != 'pull_request' && always()
+        if: always()
         env:
           WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TOTAL: ${{ steps.drift.outputs.total_drifts }}
           MISSING: ${{ steps.drift.outputs.missing }}
           EXTRA: ${{ steps.drift.outputs.extra }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BICEP_FILE: ${{ inputs.bicep_file }}
+          RG: ${{ inputs.resource_group }}
         run: |
           if [ -z "$WEBHOOK_URL" ]; then exit 0; fi
 
@@ -225,13 +193,18 @@ jobs:
             "attachments": [
               {
                 "color": "$COLOR",
-                "title": "Bicep Drift Check Report",
+                "title": "Bicep Drift Check: $BICEP_FILE",
                 "title_link": "$RUN_URL",
                 "fields": [
                   {
                     "title": "Status",
                     "value": "$STATUS",
                     "short": false
+                  },
+                  {
+                    "title": "Resource Group",
+                    "value": "$RG",
+                    "short": true
                   },
                   {
                     "title": "Total Issues",
@@ -260,13 +233,15 @@ jobs:
             "$WEBHOOK_URL" || echo "⚠️ Failed to post to Slack"
 
       - name: Post to Teams
-        if: github.event_name != 'pull_request' && always()
+        if: always()
         env:
           WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           TOTAL: ${{ steps.drift.outputs.total_drifts }}
           MISSING: ${{ steps.drift.outputs.missing }}
           EXTRA: ${{ steps.drift.outputs.extra }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BICEP_FILE: ${{ inputs.bicep_file }}
+          RG: ${{ inputs.resource_group }}
         run: |
           if [ -z "$WEBHOOK_URL" ]; then exit 0; fi
 
@@ -282,13 +257,17 @@ jobs:
           {
             "@type": "MessageCard",
             "@context": "https://schema.org/extensions",
-            "summary": "Bicep Drift Check: $STATUS",
+            "summary": "Bicep Drift: $BICEP_FILE — $STATUS",
             "themeColor": "$THEME_COLOR",
             "sections": [
               {
-                "activityTitle": "Bicep Drift Check Report",
-                "activitySubtitle": "$STATUS",
+                "activityTitle": "Bicep Drift Check",
+                "activitySubtitle": "$BICEP_FILE in $RG",
                 "facts": [
+                  {
+                    "name": "Status",
+                    "value": "$STATUS"
+                  },
                   {
                     "name": "Total Issues",
                     "value": "${TOTAL:-0}"
@@ -302,12 +281,8 @@ jobs:
                     "value": "${EXTRA:-0}"
                   },
                   {
-                    "name": "Repository",
+                    "name": "Caller Repository",
                     "value": "${{ github.repository }}"
-                  },
-                  {
-                    "name": "Branch",
-                    "value": "${{ github.ref_name }}"
                   }
                 ],
                 "potentialAction": [
@@ -332,23 +307,58 @@ jobs:
             --data "$PAYLOAD" \
             "$WEBHOOK_URL" || echo "⚠️ Failed to post to Teams"
 
-      - name: Upload drift reports
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: drift-reports
-          path: reports/
-          retention-days: 30
-          include-hidden-files: true
-
-      - name: Display HTML report link
+      - name: Publish drift report to summary
         if: always()
         run: |
-          echo "📊 Drift reports generated:"
-          echo ""
-          if [ -f "reports/rg-prod-drift.html" ]; then
-            echo "- HTML Report: Download the 'drift-reports' artifact and open the .html file in a browser"
+          TOTAL="${{ steps.drift.outputs.total_drifts }}"
+          MISSING="${{ steps.drift.outputs.missing }}"
+          EXTRA="${{ steps.drift.outputs.extra }}"
+
+          # Determine status
+          if [ "$TOTAL" = "0" ] || [ -z "$TOTAL" ]; then
+            STATUS="✅ No drift detected"
+          else
+            STATUS="⚠️ Drift detected"
           fi
-          if [ -f "reports/rg-prod-drift.json" ]; then
-            echo "- JSON Data: Available in 'drift-reports' artifact"
-          fi
+
+          {
+            echo "## 🔍 Bicep Drift Check: ${{ inputs.bicep_file }}"
+            echo ""
+            echo "### Status: $STATUS"
+            echo ""
+            echo "**Resource Group:** \`${{ inputs.resource_group }}\`"
+            echo ""
+            echo "### Summary"
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Total Issues | **${TOTAL:-0}** |"
+            echo "| Missing Resources | ${MISSING:-0} |"
+            echo "| Extra Resources | ${EXTRA:-0} |"
+            echo ""
+
+            if [ "$TOTAL" != "0" ] && [ -f drift_output.txt ]; then
+              echo "### Issues Found"
+              echo ""
+              if grep -q "\[MISSING\]" drift_output.txt; then
+                echo "#### Missing Resources"
+                grep "\[MISSING\]" drift_output.txt | sed 's/^/- /' || echo "- (No details)"
+                echo ""
+              fi
+              if grep -q "\[EXTRA\]" drift_output.txt; then
+                echo "#### Extra Resources"
+                grep "\[EXTRA\]" drift_output.txt | sed 's/^/- /' || echo "- (No details)"
+                echo ""
+              fi
+            fi
+
+            if [ -f drift_output.txt ]; then
+              echo "<details>"
+              echo "<summary>📋 Full Output</summary>"
+              echo ""
+              echo "\`\`\`"
+              cat drift_output.txt
+              echo "\`\`\`"
+              echo ""
+              echo "</details>"
+            fi
+          } >> $GITHUB_STEP_SUMMARY
