@@ -20,6 +20,8 @@ def generate_html_report(
         data = json.load(f)
 
     drifts = data.get("drifts", [])
+    recs_found = sum(1 for d in drifts if d.get("recommendation"))
+    print(f"  [HTML] Found {recs_found}/{len(drifts)} recommendations in JSON")
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])

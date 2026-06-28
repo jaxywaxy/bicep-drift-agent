@@ -121,20 +121,35 @@ def main():
         # Generate per-drift recommendations
         if drifts:
             print("\n💡 Generating remediation recommendations...")
-            for drift in report_data.get("drifts", []):
-                recommendation = agent.get_drift_recommendation(
-                    resource_type=drift["type"],
-                    resource_name=drift["name"],
-                    drift_type=drift["drift_type"],
-                    details=drift.get("details"),
-                )
-                drift["recommendation"] = recommendation
-            print(f"✓ Generated recommendations for {len(drifts)} drift(s)")
+            recommendations_count = 0
+            for i, drift in enumerate(report_data.get("drifts", []), 1):
+                try:
+                    print(f"  Generating recommendation {i}/{len(drifts)}: {drift['name']}...", end=" ", flush=True)
+                    recommendation = agent.get_drift_recommendation(
+                        resource_type=drift["type"],
+                        resource_name=drift["name"],
+                        drift_type=drift["drift_type"],
+                        details=drift.get("details"),
+                    )
+                    drift["recommendation"] = recommendation
+                    recommendations_count += 1
+                    print("✓")
+                except Exception as e:
+                    print(f"✗ Error: {e}")
+                    drift["recommendation"] = f"Error generating recommendation: {str(e)}"
+
+            print(f"\n✓ Generated {recommendations_count} recommendation(s)")
 
             # Update JSON report with recommendations
             with open(report_file, "w") as f:
                 json.dump(report_data, f, indent=2, default=str)
             print(f"✓ Updated report with recommendations: {report_file}")
+
+            # Verify recommendations are in the file
+            with open(report_file) as f:
+                verify_data = json.load(f)
+            recs_in_file = sum(1 for d in verify_data.get("drifts", []) if d.get("recommendation"))
+            print(f"✓ Verified {recs_in_file} recommendation(s) in JSON file")
 
         # Save analysis
         analysis_file = Path(f"reports/{resource_group}-analysis.md")
