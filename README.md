@@ -118,3 +118,4 @@ python -m tools.get_live_state your-resource-group
 # Then run the full check
 python run_drift_check.py ./path/to/main.bicep your-resource-group
 ```
+end
