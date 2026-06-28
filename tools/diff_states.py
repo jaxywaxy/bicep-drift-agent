@@ -9,6 +9,7 @@ Generates a drift report showing missing, extra, and modified resources.
 
 from dataclasses import dataclass, field
 from .normalizer import normalize_live_resources, resource_key
+from .property_drift import DriftDetector
 
 
 @dataclass
@@ -36,8 +37,8 @@ def diff_states(
     """
     Compare ARM template resources against live Azure resources.
 
-    Both inputs should be normalized (from normalizer module).
-    Matching is by (type, name) after normalization.
+    Uses intelligent resource matching (exact + fuzzy) to handle
+    parameter-based resource names in modular Bicep templates.
 
     Filters out module references and internal resources that don't
     correspond to actual Azure resources.
@@ -57,43 +58,39 @@ def diff_states(
     # Normalize live resources to match ARM shape
     normalized_live = normalize_live_resources(live_resources)
 
-    # Build lookup maps keyed by (normalised_type, normalised_name)
-    arm_map = {resource_key(r): r for r in filtered_arm}
-    live_map = {resource_key(r): r for r in normalized_live}
+    # Use DriftDetector's intelligent matching (handles fuzzy matching for parameter-based names)
+    detector_drifts = DriftDetector.detect_drift(filtered_arm, normalized_live)
 
-    arm_keys = set(arm_map.keys())
-    live_keys = set(live_map.keys())
-
-    # Resources in Bicep but not deployed
-    for key in arm_keys - live_keys:
-        r = arm_map[key]
-        drifts.append(ResourceDrift(
-            resource_type=r["type"],
-            resource_name=r["name"],
-            drift_type="missing_in_azure",
-        ))
-
-    # Resources deployed but not in Bicep (might be fine — might be shadow IT)
-    for key in live_keys - arm_keys:
-        r = live_map[key]
-        drifts.append(ResourceDrift(
-            resource_type=r["type"],
-            resource_name=r["name"],
-            drift_type="extra_in_azure",
-        ))
-
-    # Resources in both — check for property drift
-    for key in arm_keys & live_keys:
-        arm_r = arm_map[key]
-        live_r = live_map[key]
-        property_diffs = _diff_properties(arm_r, live_r)
-
-        if property_diffs:
+    # Convert detector drifts to our ResourceDrift format
+    for d in detector_drifts:
+        if d.drift_type == "missing":
             drifts.append(ResourceDrift(
-                resource_type=arm_r["type"],
-                resource_name=arm_r["name"],
+                resource_type=d.resource_type,
+                resource_name=d.resource_name,
+                drift_type="missing_in_azure",
+            ))
+        elif d.drift_type == "extra":
+            drifts.append(ResourceDrift(
+                resource_type=d.resource_type,
+                resource_name=d.resource_name,
+                drift_type="extra_in_azure",
+            ))
+        elif d.drift_type == "modified":
+            property_details = {}
+            if d.property_diffs:
+                changed_props = {}
+                for diff in d.property_diffs:
+                    changed_props[diff.property_path] = {
+                        "desired": diff.desired_value,
+                        "actual": diff.actual_value,
+                        "severity": diff.severity,
+                    }
+                property_details["changed_properties"] = changed_props
+            drifts.append(ResourceDrift(
+                resource_type=d.resource_type,
+                resource_name=d.resource_name,
                 drift_type="property_drift",
-                details={"changed_properties": property_diffs},
+                details=property_details,
             ))
 
     return drifts
@@ -132,8 +129,10 @@ def _should_compare_resource(resource: dict) -> bool:
 
     Skips:
     - Module references (Microsoft.Resources/deployments)
-    - Resources with unresolved complex expressions
-    - Internal Azure-managed resources
+    - Resources with truly unresolvable complex expressions
+
+    Note: DriftDetector now uses fuzzy matching, so resources with
+    simple parameter references (like parameters('vmName')) can be matched.
 
     Args:
         resource: Normalized resource dict
@@ -148,11 +147,9 @@ def _should_compare_resource(resource: dict) -> bool:
     if res_type == "microsoft.resources/deployments":
         return False
 
-    # Skip resources with obvious unresolved expressions
-    # (These indicate parameter-driven resources we can't match)
-    unresolved_indicators = [
-        "parameters(",
-        "variables(",
+    # Skip only truly unresolvable complex expressions
+    # Simple parameters() are now handled by fuzzy matching
+    complex_unresolvable = [
         "format(",
         "coalesce(",
         "tryget(",
@@ -165,7 +162,7 @@ def _should_compare_resource(resource: dict) -> bool:
     ]
 
     name_lower = res_name.lower()
-    if any(indicator in name_lower for indicator in unresolved_indicators):
+    if any(indicator in name_lower for indicator in complex_unresolvable):
         return False
 
     # Skip empty or malformed names

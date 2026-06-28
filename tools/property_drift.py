@@ -96,7 +96,22 @@ class PropertyExtractor:
 
 
 class ResourceMatcher:
-    """Match Bicep resources to deployed resources."""
+    """Match Bicep resources to deployed resources using intelligent contextual matching."""
+
+    @staticmethod
+    def _find_associated_resource(resource: Dict, bicep_resources: List[Dict], resource_type: str) -> Dict:
+        """Find a related resource (e.g., find VM for a NIC by name similarity)."""
+        res_name = resource.get("name", "")
+        # Extract name tokens from resource (e.g., 'vm-dev-001-nic' → 'vm-dev-001')
+        name_tokens = res_name.replace('-nic', '').replace('-nic-', '-')
+
+        # Look for resources of target type with similar names
+        for r in bicep_resources:
+            if r.get("type") == resource_type:
+                r_name = r.get("name", "")
+                if name_tokens in r_name or r_name in name_tokens:
+                    return r
+        return None
 
     @staticmethod
     def match_resources(
@@ -104,7 +119,14 @@ class ResourceMatcher:
         deployed_resources: List[Dict],
     ) -> List[Tuple[Dict, Dict, float]]:
         """
-        Match Bicep resources to deployed resources.
+        Match Bicep resources to deployed resources using intelligent contextual matching.
+
+        Strategy:
+        1. Exact name matches (highest confidence)
+        2. Contextual matching: for identical-named resources, use related resources
+           to disambiguate (e.g., match NICs via their VMs)
+        3. Fuzzy token-based matching (parameter-based names)
+        4. Positional matching as fallback for true duplicates
 
         Returns:
             List of (bicep_resource, deployed_resource, confidence) tuples
@@ -117,16 +139,18 @@ class ResourceMatcher:
             resource_type = resource.get("type", "")
             deployed_by_type[resource_type].append(resource)
 
-        # Match each Bicep resource
+        # Track used deployed resources
+        used_deployed = set()
+
+        # First pass: exact matches
         for bicep_resource in bicep_resources:
             resource_type = bicep_resource.get("type", "")
             bicep_name = bicep_resource.get("name", "")
 
-            candidates = deployed_by_type.get(resource_type, [])
+            candidates = [r for r in deployed_by_type.get(resource_type, []) if id(r) not in used_deployed]
             if not candidates:
                 continue
 
-            # Try to match by name first
             exact_match = None
             for deployed in candidates:
                 deployed_name = deployed.get("name", "")
@@ -136,9 +160,80 @@ class ResourceMatcher:
 
             if exact_match:
                 matches.append((bicep_resource, exact_match, 0.95))
-            elif len(candidates) == 1:
-                # Only one resource of this type, likely a match
-                matches.append((bicep_resource, candidates[0], 0.70))
+                used_deployed.add(id(exact_match))
+
+        # Second pass: contextual + fuzzy matching for remaining resources
+        bicep_by_type = defaultdict(list)
+        for bicep_resource in bicep_resources:
+            if id(bicep_resource) not in {id(b) for b, _, _ in matches}:
+                bicep_by_type[bicep_resource.get("type", "")].append(bicep_resource)
+
+        for resource_type, bicep_res_list in bicep_by_type.items():
+            candidates = [r for r in deployed_by_type.get(resource_type, []) if id(r) not in used_deployed]
+            if not candidates:
+                continue
+
+            # Check if all bicep resources have identical names (e.g., 4x "parameters('vmName')-nic")
+            bicep_names = [r.get("name", "") for r in bicep_res_list]
+            all_identical = len(set(bicep_names)) == 1
+
+            for bicep_idx, bicep_resource in enumerate(bicep_res_list):
+                bicep_name = bicep_resource.get("name", "")
+                best_match = None
+                best_score = 0.25
+                best_match_idx = -1
+
+                # For identical-named resources, try contextual matching via related resources
+                if all_identical and resource_type == "Microsoft.Network/networkInterfaces":
+                    # Try to match NIC via its associated VM
+                    associated_vm = ResourceMatcher._find_associated_resource(bicep_resource, bicep_resources, "Microsoft.Compute/virtualMachines")
+                    if associated_vm:
+                        # Find the deployed VM this bicep VM matches to
+                        for matched_bicep, matched_deployed, _ in matches:
+                            if matched_bicep.get("name") == associated_vm.get("name"):
+                                # Now find the NIC that matches this deployed VM
+                                vm_name = matched_deployed.get("name", "")
+                                for cand_idx, candidate in enumerate(candidates):
+                                    cand_name = candidate.get("name", "")
+                                    if vm_name in cand_name:
+                                        best_match = candidate
+                                        best_match_idx = cand_idx
+                                        best_score = 0.90
+                                        break
+                                if best_match:
+                                    break
+
+                # If contextual matching didn't work, try fuzzy matching
+                if not best_match:
+                    for cand_idx, deployed in enumerate(candidates):
+                        deployed_name = deployed.get("name", "")
+                        bicep_clean = bicep_name.replace('[', '').replace(']', '').replace("'", '').replace('parameters(', '').replace(')', '')
+                        deployed_clean = deployed_name
+
+                        bicep_tokens = [t for t in bicep_clean.split('-') if len(t) > 1 and t not in ('vmName', 'vaultName', 'name')]
+                        deployed_tokens = [t for t in deployed_clean.split('-') if len(t) > 1]
+
+                        if bicep_tokens and deployed_tokens:
+                            matches_count = sum(1 for bt in bicep_tokens if any(dt.startswith(bt) or bt in dt for dt in deployed_tokens))
+                            score = matches_count / max(len(bicep_tokens), len(deployed_tokens))
+                            if score > best_score:
+                                best_score = score
+                                best_match = deployed
+                                best_match_idx = cand_idx
+
+                # Fallback: positional matching for identical-named resources
+                if not best_match and all_identical and len(candidates) >= len(bicep_res_list):
+                    # Match by position in list
+                    best_match = candidates[bicep_idx]
+                    best_match_idx = bicep_idx
+                    best_score = 0.60
+
+                if best_match:
+                    matches.append((bicep_resource, best_match, best_score))
+                    used_deployed.add(id(best_match))
+                elif len(candidates) == 1:
+                    matches.append((bicep_resource, candidates[0], 0.70))
+                    used_deployed.add(id(candidates[0]))
 
         return matches
 
@@ -260,6 +355,16 @@ class DriftDetector:
     """Detect all types of drift."""
 
     @staticmethod
+    def _is_internal_resource(resource: Dict) -> bool:
+        """Check if resource is internal/management (not actual infrastructure)."""
+        resource_type = resource.get("type", "")
+        # Filter out deployment modules and other management resources
+        internal_types = {
+            "Microsoft.Resources/deployments",
+        }
+        return resource_type in internal_types
+
+    @staticmethod
     def detect_drift(
         bicep_resources: List[Dict],
         deployed_resources: List[Dict],
@@ -272,6 +377,11 @@ class DriftDetector:
         """
         drifts = []
         extractor = PropertyExtractor()
+
+        # Filter out internal resources (deployments, etc.)
+        bicep_resources = [r for r in bicep_resources if not DriftDetector._is_internal_resource(r)]
+        deployed_resources = [r for r in deployed_resources if not DriftDetector._is_internal_resource(r)]
+
         matches = ResourceMatcher.match_resources(bicep_resources, deployed_resources)
         comparator = PropertyComparator()
 
