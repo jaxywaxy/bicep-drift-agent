@@ -117,16 +117,19 @@ class ResourceMatcher:
             resource_type = resource.get("type", "")
             deployed_by_type[resource_type].append(resource)
 
-        # Match each Bicep resource
+        # Track used deployed resources
+        used_deployed = set()
+
+        # First pass: try exact matches
         for bicep_resource in bicep_resources:
             resource_type = bicep_resource.get("type", "")
             bicep_name = bicep_resource.get("name", "")
 
-            candidates = deployed_by_type.get(resource_type, [])
+            candidates = [r for r in deployed_by_type.get(resource_type, []) if id(r) not in used_deployed]
             if not candidates:
                 continue
 
-            # Try exact match first
+            # Try exact match
             exact_match = None
             for deployed in candidates:
                 deployed_name = deployed.get("name", "")
@@ -136,38 +139,49 @@ class ResourceMatcher:
 
             if exact_match:
                 matches.append((bicep_resource, exact_match, 0.95))
+                used_deployed.add(id(exact_match))
+
+        # Second pass: fuzzy matching for parameter-based names
+        bicep_by_type = defaultdict(list)
+        for bicep_resource in bicep_resources:
+            if id(bicep_resource) not in {id(b) for b, _, _ in matches}:
+                bicep_by_type[bicep_resource.get("type", "")].append(bicep_resource)
+
+        for resource_type, bicep_res_list in bicep_by_type.items():
+            candidates = [r for r in deployed_by_type.get(resource_type, []) if id(r) not in used_deployed]
+            if not candidates:
                 continue
 
-            # Try fuzzy name matching for parameter-based names
-            best_match = None
-            best_score = 0.4
+            for bicep_resource in bicep_res_list:
+                bicep_name = bicep_resource.get("name", "")
+                best_match = None
+                best_score = 0.25
 
-            for deployed in candidates:
-                deployed_name = deployed.get("name", "")
-                # Token-based matching: split names by - and compare overlapping parts
-                bicep_tokens = set(bicep_name.replace('[', '').replace(']', '').replace("'", '').split('-'))
-                deployed_tokens = set(deployed_name.replace('[', '').replace(']', '').replace("'", '').split('-'))
+                for deployed in candidates:
+                    deployed_name = deployed.get("name", "")
+                    # Clean parameter expressions
+                    bicep_clean = bicep_name.replace('[', '').replace(']', '').replace("'", '').replace('parameters(', '').replace(')', '')
+                    deployed_clean = deployed_name
 
-                # Remove parameter noise
-                bicep_tokens.discard('parameters')
-                bicep_tokens.discard('vmName')
-                bicep_tokens.discard('vaultName')
-                deployed_tokens.discard('nic')
+                    # Token-based matching
+                    bicep_tokens = [t for t in bicep_clean.split('-') if len(t) > 1 and t not in ('vmName', 'vaultName', 'name')]
+                    deployed_tokens = [t for t in deployed_clean.split('-') if len(t) > 1]
 
-                if bicep_tokens and deployed_tokens:
-                    # Jaccard similarity: intersection / union
-                    intersection = bicep_tokens & deployed_tokens
-                    union = bicep_tokens | deployed_tokens
-                    score = len(intersection) / len(union) if union else 0.0
-                    if score > best_score:
-                        best_score = score
-                        best_match = deployed
+                    if bicep_tokens and deployed_tokens:
+                        # Count matching tokens (prefix match)
+                        matches_count = sum(1 for bt in bicep_tokens if any(dt.startswith(bt) or bt in dt for dt in deployed_tokens))
+                        score = matches_count / max(len(bicep_tokens), len(deployed_tokens))
+                        if score > best_score:
+                            best_score = score
+                            best_match = deployed
 
-            if best_match:
-                matches.append((bicep_resource, best_match, best_score))
-            elif len(candidates) == 1:
-                # Only one resource of this type, likely a match
-                matches.append((bicep_resource, candidates[0], 0.70))
+                if best_match and best_score >= 0.25:
+                    matches.append((bicep_resource, best_match, best_score))
+                    used_deployed.add(id(best_match))
+                elif len(candidates) == 1:
+                    # Fallback: single resource of type
+                    matches.append((bicep_resource, candidates[0], 0.70))
+                    used_deployed.add(id(candidates[0]))
 
         return matches
 
