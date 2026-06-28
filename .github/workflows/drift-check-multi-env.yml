@@ -77,5 +77,23 @@ jobs:
             echo "- ✓ **rg-prod**: ./infra/main.bicep" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Download Reports" >> $GITHUB_STEP_SUMMARY
-          echo "Artifacts are available for download with full HTML reports and recommendations." >> $GITHUB_STEP_SUMMARY
+          echo "### 📊 View Reports" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Click the **Artifacts** button at the top right to download reports:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.dev-enabled }}" = "true" ]; then
+            echo "- **drift-reports-rg-dev** → Open `rg-dev-drift.html` in browser" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ github.event.inputs.staging-enabled }}" = "true" ]; then
+            echo "- **drift-reports-rg-staging** → Open `rg-staging-drift.html` in browser" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ "${{ github.event.inputs.prod-enabled }}" = "true" ]; then
+            echo "- **drift-reports-rg-prod** → Open `rg-prod-drift.html` in browser" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Each report includes:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 📈 Summary metrics and status" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔍 Detailed drift table" >> $GITHUB_STEP_SUMMARY
+          echo "- 💡 Claude AI remediation recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "- 📄 Full analysis and details" >> $GITHUB_STEP_SUMMARY
