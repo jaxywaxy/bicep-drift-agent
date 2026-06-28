@@ -86,14 +86,22 @@ jobs:
           echo ""
           echo "✓ Drift check completed successfully"
 
-          # Extract key metrics
-          TOTAL_DRIFTS=$(grep -o "Found [0-9]*" drift_output.txt | head -1 | grep -o "[0-9]*" || echo "0")
-          MISSING=$(grep -c "\[MISSING\]" drift_output.txt || echo "0")
-          EXTRA=$(grep -c "\[EXTRA\]" drift_output.txt || echo "0")
+          # Extract key metrics (set safe defaults)
+          TOTAL_DRIFTS=$(grep -o "Found [0-9]*" drift_output.txt | head -1 | grep -o "[0-9]*" 2>/dev/null || true)
+          TOTAL_DRIFTS="${TOTAL_DRIFTS:-0}"
 
-          echo "total_drifts=$TOTAL_DRIFTS" >> $GITHUB_OUTPUT
-          echo "missing=$MISSING" >> $GITHUB_OUTPUT
-          echo "extra=$EXTRA" >> $GITHUB_OUTPUT
+          MISSING=$(grep -c "\[MISSING\]" drift_output.txt 2>/dev/null || true)
+          MISSING="${MISSING:-0}"
+
+          EXTRA=$(grep -c "\[EXTRA\]" drift_output.txt 2>/dev/null || true)
+          EXTRA="${EXTRA:-0}"
+
+          # Write outputs in correct format
+          {
+            echo "total_drifts=$TOTAL_DRIFTS"
+            echo "missing=$MISSING"
+            echo "extra=$EXTRA"
+          } >> $GITHUB_OUTPUT
 
       - name: Skip drift check for PRs
         if: github.event_name == 'pull_request'
