@@ -3,15 +3,12 @@ tools/diff_states.py
 
 Compares desired state (from compiled ARM JSON) against live Azure state.
 
-This is the interesting hard problem — the two shapes don't match natively.
-ARM uses parameter expressions like "[parameters('vmName')]", live state has
-resolved values. This module handles basic normalisation and diffing.
-
-Phase 1: naive name/type matching + property diff.
-Phase 2 will handle parameter resolution, copy loops, nested resources.
+Uses the normalizer to resolve expressions and flatten resources.
+Generates a drift report showing missing, extra, and modified resources.
 """
 
 from dataclasses import dataclass, field
+from .normalizer import normalize_live_resources, resource_key
 
 
 @dataclass
@@ -39,22 +36,30 @@ def diff_states(
     """
     Compare ARM template resources against live Azure resources.
 
-    Matching strategy (Phase 1): normalised resource type + name.
-    ARM names may contain parameter expressions — we strip brackets and common
-    prefixes as a best-effort. Real resolution needs parameter values passed in.
+    Both inputs should be normalized (from normalizer module).
+    Matching is by (type, name) after normalization.
+
+    Filters out module references and internal resources that don't
+    correspond to actual Azure resources.
 
     Args:
-        arm_resources: Output of extract_resources_from_arm()
-        live_resources: Output of get_live_state()
+        arm_resources: Normalized resources from extract_resources_from_arm()
+        live_resources: Raw resources from get_live_state() (normalized here)
 
     Returns:
         List of ResourceDrift objects describing what's different.
     """
     drifts = []
 
+    # Filter ARM resources — skip module references and unresolvable ones
+    filtered_arm = [r for r in arm_resources if _should_compare_resource(r)]
+
+    # Normalize live resources to match ARM shape
+    normalized_live = normalize_live_resources(live_resources)
+
     # Build lookup maps keyed by (normalised_type, normalised_name)
-    arm_map = {_resource_key(r["type"], r["name"]): r for r in arm_resources}
-    live_map = {_resource_key(r["type"], r["name"]): r for r in live_resources}
+    arm_map = {resource_key(r): r for r in filtered_arm}
+    live_map = {resource_key(r): r for r in normalized_live}
 
     arm_keys = set(arm_map.keys())
     live_keys = set(live_map.keys())
@@ -94,27 +99,6 @@ def diff_states(
     return drifts
 
 
-def _resource_key(resource_type: str, name: str) -> tuple[str, str]:
-    """
-    Normalise type and name for matching.
-
-    ARM expressions like "[parameters('vmName')]" won't match live names.
-    For Phase 1 we strip brackets — Phase 2 needs actual parameter resolution.
-    """
-    normalised_type = resource_type.lower().strip()
-
-    # Strip ARM expression brackets if present
-    normalised_name = name.strip()
-    if normalised_name.startswith("[") and normalised_name.endswith("]"):
-        # e.g. "[parameters('vmName')]" -> "parameters('vmName')"
-        # Not a real match but at least won't crash
-        normalised_name = normalised_name[1:-1].lower()
-    else:
-        normalised_name = normalised_name.lower()
-
-    return (normalised_type, normalised_name)
-
-
 def _diff_properties(arm_resource: dict, live_resource: dict) -> dict:
     """
     Compare properties between desired and live state.
@@ -140,6 +124,55 @@ def _diff_properties(arm_resource: dict, live_resource: dict) -> dict:
             diffs[field] = {"desired": arm_val, "actual": live_val}
 
     return diffs
+
+
+def _should_compare_resource(resource: dict) -> bool:
+    """
+    Determine if a resource should be included in drift comparison.
+
+    Skips:
+    - Module references (Microsoft.Resources/deployments)
+    - Resources with unresolved complex expressions
+    - Internal Azure-managed resources
+
+    Args:
+        resource: Normalized resource dict
+
+    Returns:
+        True if resource should be compared, False otherwise
+    """
+    res_type = resource.get("type", "").lower()
+    res_name = resource.get("name", "")
+
+    # Skip module deployments — these are Bicep syntax, not real resources
+    if res_type == "microsoft.resources/deployments":
+        return False
+
+    # Skip resources with obvious unresolved expressions
+    # (These indicate parameter-driven resources we can't match)
+    unresolved_indicators = [
+        "parameters(",
+        "variables(",
+        "format(",
+        "coalesce(",
+        "tryget(",
+        "guid(",
+        "resourceid(",
+        "copyindex(",
+        "unique-string",
+        "copy-index",
+        "deployment()",
+    ]
+
+    name_lower = res_name.lower()
+    if any(indicator in name_lower for indicator in unresolved_indicators):
+        return False
+
+    # Skip empty or malformed names
+    if not res_name or res_name == "unknown":
+        return False
+
+    return True
 
 
 def format_drift_report(drifts: list[ResourceDrift], resource_group: str) -> str:

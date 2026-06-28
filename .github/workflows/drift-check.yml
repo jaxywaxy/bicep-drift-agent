@@ -1,0 +1,123 @@
+name: Bicep Drift Check
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'infra/**/*.bicep'
+      - '.github/workflows/drift-check.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**/*.bicep'
+  workflow_dispatch:
+    inputs:
+      bicep_file:
+        description: 'Path to bicep file'
+        required: true
+        default: './infra/main.bicep'
+      resource_group:
+        description: 'Azure resource group'
+        required: true
+        default: 'rg-prod'
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Azure CLI
+        run: |
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Run drift check
+        id: drift
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ARM_PARAMETERS: '{"environment":"prod","location":"australiaeast"}'
+        run: |
+          BICEP_FILE="${{ github.event.inputs.bicep_file || './infra/main.bicep' }}"
+          RESOURCE_GROUP="${{ github.event.inputs.resource_group || 'rg-prod' }}"
+
+          echo "Running drift check..."
+          python analyze_drift.py "$BICEP_FILE" "$RESOURCE_GROUP" > drift_output.txt 2>&1
+
+          # Extract key metrics
+          TOTAL_DRIFTS=$(grep -o "Found [0-9]*" drift_output.txt | head -1 | grep -o "[0-9]*" || echo "0")
+          MISSING=$(grep -c "\[MISSING\]" drift_output.txt || echo "0")
+          EXTRA=$(grep -c "\[EXTRA\]" drift_output.txt || echo "0")
+
+          echo "total_drifts=$TOTAL_DRIFTS" >> $GITHUB_OUTPUT
+          echo "missing=$MISSING" >> $GITHUB_OUTPUT
+          echo "extra=$EXTRA" >> $GITHUB_OUTPUT
+
+          cat drift_output.txt
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const output = fs.readFileSync('drift_output.txt', 'utf8');
+            const total = '${{ steps.drift.outputs.total_drifts }}';
+            const missing = '${{ steps.drift.outputs.missing }}';
+            const extra = '${{ steps.drift.outputs.extra }}';
+
+            let comment = `## 🔍 Bicep Drift Check\n\n`;
+            comment += `**Summary:**\n`;
+            comment += `- Total Drift Issues: **${total}**\n`;
+            comment += `- Missing Resources: ${missing}\n`;
+            comment += `- Extra Resources: ${extra}\n\n`;
+
+            if (total > 0) {
+              comment += `### Drift Details\n\`\`\`\n${output.split('\n').slice(-30).join('\n')}\n\`\`\`\n`;
+            } else {
+              comment += `✅ **No drift detected!**\n`;
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+      - name: Block PR if critical drift
+        if: github.event_name == 'pull_request' && steps.drift.outputs.total_drifts > 5
+        run: |
+          echo "❌ Critical drift detected (>5 issues). Please review and fix before merging."
+          exit 1
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: drift-reports
+          path: reports/
+          retention-days: 30

@@ -60,26 +60,56 @@ def compile_bicep(bicep_file_path: str) -> dict:
     return arm_template
 
 
-def extract_resources_from_arm(arm_template: dict) -> list[dict]:
+def detect_deployment_scope(arm_template: dict) -> str:
     """
-    Pull out the resources array from an ARM template and normalise minimally.
+    Detect the deployment scope from an ARM template.
 
-    ARM resources look like:
-    {
-        "type": "Microsoft.Compute/virtualMachines",
-        "apiVersion": "2023-03-01",
-        "name": "[parameters('vmName')]",
-        "location": "[parameters('location')]",
-        "properties": { ... }
-    }
+    Args:
+        arm_template: Parsed ARM template dict
 
-    This is the shape we'll compare against live state.
+    Returns:
+        "subscription" or "resource_group" (default)
     """
-    resources = arm_template.get("resources", [])
+    schema = arm_template.get("$schema", "")
 
-    # Flatten any nested resource collections (some templates use copy loops)
-    # For now, return as-is. Normalisation is phase 2.
-    return resources
+    # Subscription-scoped templates have specific schema patterns
+    if "subscriptionDeploymentTemplate" in schema:
+        return "subscription"
+
+    # Check metadata for scope hint
+    metadata = arm_template.get("metadata", {})
+    if metadata.get("targetScope") == "subscription":
+        return "subscription"
+
+    # Default to resource group
+    return "resource_group"
+
+
+def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> list[dict]:
+    """
+    Extract and normalize resources from an ARM template.
+
+    Handles:
+    - Parameter resolution (e.g., [parameters('vmName')] → actual value)
+    - Nested deployment flattening
+    - Shape normalization for comparison against live state
+
+    Args:
+        arm_template: Parsed ARM template dict
+        parameter_overrides: Optional dict of parameter values to override defaults
+
+    Returns:
+        List of normalized resource dicts
+    """
+    from .normalizer import flatten_resources, extract_parameters
+
+    parameters = extract_parameters(arm_template)
+    # Override with provided values (e.g., from environment or CLI)
+    if parameter_overrides:
+        parameters.update(parameter_overrides)
+
+    normalized = flatten_resources(arm_template, parameters)
+    return normalized
 
 
 if __name__ == "__main__":
