@@ -37,7 +37,12 @@ class IgnorePattern:
         try:
             # If it looks like a glob pattern, convert to regex
             if "*" in pattern or "?" in pattern:
-                pattern = pattern.replace("*", ".*").replace("?", ".")
+                # Escape regex special chars first, then apply glob replacements
+                pattern = re.escape(pattern)
+                pattern = pattern.replace("\\*", ".*").replace("\\?", ".")
+            else:
+                # No wildcards, just escape regex special chars
+                pattern = re.escape(pattern)
             return re.compile(f"^{pattern}$", re.IGNORECASE)
         except re.error:
             return None
