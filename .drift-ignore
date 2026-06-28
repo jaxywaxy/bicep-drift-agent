@@ -10,16 +10,86 @@ ignore:
   - resource_type: "Microsoft.Network/virtualNetworks/subnets"
     reason: "Subnets are part of LZ pattern, managed as part of VNet deployment"
 
-  # Auto-managed by VMs (child resources)
+  # Auto-managed by VMs and Compute
   - resource_type: "Microsoft.Compute/disks"
     reason: "OS/data disks are auto-created and managed by VMs, not separately defined in IaC"
 
+  - resource_type: "Microsoft.Compute/virtualMachines/extensions"
+    reason: "VM extensions auto-managed by VMs, not separately defined in Bicep"
+
+  - resource_type: "Microsoft.Compute/virtualMachineScaleSets"
+    reason: "VMSS auto-created by AKS node pools, managed separately"
+
+  # AKS auto-managed resources
+  - resource_type: "Microsoft.ContainerService/managedClusters/agentPools"
+    reason: "Agent pools auto-managed by AKS cluster"
+
+  - resource_type: "Microsoft.Network/loadBalancers"
+    reason: "Load balancers auto-created by AKS and App Services"
+
+  - resource_type: "Microsoft.Network/publicIPAddresses"
+    reason: "Public IPs auto-created by LBs, App Gateways, or referenced as existing"
+
+  - resource_type: "Microsoft.Network/networkSecurityGroups"
+    reason: "NSGs often referenced as existing from shared networking"
+
+  - resource_type: "Microsoft.Network/routeTables"
+    reason: "Route tables often referenced as existing from shared networking"
+
+  # Storage account auto-managed services
+  - resource_type: "Microsoft.Storage/storageAccounts/blobServices"
+    reason: "Blob services auto-created with storage account"
+
+  - resource_type: "Microsoft.Storage/storageAccounts/fileServices"
+    reason: "File services auto-created with storage account"
+
+  - resource_type: "Microsoft.Storage/storageAccounts/tableServices"
+    reason: "Table services auto-created with storage account"
+
+  - resource_type: "Microsoft.Storage/storageAccounts/queueServices"
+    reason: "Queue services auto-created with storage account"
+
+  - resource_type: "Microsoft.Storage/storageAccounts/blobServices/containers"
+    reason: "Blob containers often auto-created or managed separately"
+
+  # SQL Server auto-managed resources
+  - resource_type: "Microsoft.Sql/servers/databases"
+    resource_name: "master"
+    reason: "Master database auto-created with SQL Server"
+
+  - resource_type: "Microsoft.Sql/servers/auditingSettings"
+    reason: "Auditing settings auto-configured by policies"
+
+  - resource_type: "Microsoft.Sql/servers/securityAlertPolicies"
+    reason: "Security policies auto-configured by Azure Defender"
+
+  # App Service auto-managed resources
+  - resource_type: "Microsoft.Web/sites/slots"
+    reason: "Deployment slots auto-created for certain App Service configurations"
+
+  - resource_type: "Microsoft.Web/sites/config"
+    reason: "Site config managed by App Service runtime"
+
+  - resource_type: "Microsoft.Web/sites/extensions"
+    reason: "Site extensions auto-managed by App Service"
+
+  # System/Compliance resources
+  - resource_type: "Microsoft.Authorization/locks"
+    reason: "Resource locks auto-created by policies, not IaC-managed"
+
+  - resource_type: "Microsoft.Authorization/roleAssignments"
+    reason: "Role assignments auto-created by policies or RBAC automation"
+
+  # Monitoring/Diagnostics
   - resource_type: "Microsoft.OperationalInsights/workspaces"
     reason: "Auto-created by Azure Defender/Monitor, not explicitly managed in IaC"
 
   - resource_type: "microsoft.insights/actiongroups"
     resource_name: ".*Smart Detection.*"
     reason: "Auto-created by Application Insights Smart Detection feature"
+
+  - resource_type: "Microsoft.Insights/diagnosticSettings"
+    reason: "Diagnostic settings auto-created by Azure policies"
 
   # Parameter expression drift (expected differences)
   - resource_type: "Microsoft.Compute/virtualMachines"
@@ -30,3 +100,6 @@ ignore:
 
   - resource_type: "Microsoft.RecoveryServices/vaults"
     reason: "API version differences are metadata, not functional drift"
+
+  - resource_type: "Microsoft.ContainerService/managedClusters"
+    reason: "AKS cluster properties may have runtime-resolved values"
