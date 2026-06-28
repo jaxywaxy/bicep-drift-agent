@@ -106,20 +106,58 @@ jobs:
       - name: Publish drift report to summary
         if: github.event_name != 'pull_request' && always()
         run: |
+          TOTAL="${{ steps.drift.outputs.total_drifts }}"
+          MISSING="${{ steps.drift.outputs.missing }}"
+          EXTRA="${{ steps.drift.outputs.extra }}"
+
+          # Determine status
+          if [ "$TOTAL" = "0" ] || [ -z "$TOTAL" ]; then
+            STATUS="✅ No drift detected"
+            STATUS_COLOR="success"
+          else
+            STATUS="⚠️ Drift detected"
+            STATUS_COLOR="warning"
+          fi
+
           {
             echo "## 🔍 Bicep Drift Check Report"
             echo ""
+            echo "### Status: $STATUS"
+            echo ""
+            echo "### Summary"
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Total Issues | **${TOTAL:-0}** |"
+            echo "| Missing Resources | ${MISSING:-0} |"
+            echo "| Extra Resources | ${EXTRA:-0} |"
+            echo ""
+
+            if [ "$TOTAL" != "0" ] && [ -f drift_output.txt ]; then
+              echo "### Issues Found"
+              echo ""
+              # Extract drift details from output
+              if grep -q "\[MISSING\]" drift_output.txt; then
+                echo "#### Missing Resources"
+                grep "\[MISSING\]" drift_output.txt | sed 's/^/- /' || echo "- (No details)"
+                echo ""
+              fi
+              if grep -q "\[EXTRA\]" drift_output.txt; then
+                echo "#### Extra Resources"
+                grep "\[EXTRA\]" drift_output.txt | sed 's/^/- /' || echo "- (No details)"
+                echo ""
+              fi
+            fi
+
             if [ -f drift_output.txt ]; then
-              echo "### Drift Check Output"
+              echo "<details>"
+              echo "<summary>📋 Full Output</summary>"
+              echo ""
               echo "\`\`\`"
               cat drift_output.txt
               echo "\`\`\`"
+              echo ""
+              echo "</details>"
             fi
-            echo ""
-            echo "### Metrics"
-            echo "- **Total Drifts:** ${{ steps.drift.outputs.total_drifts }}"
-            echo "- **Missing Resources:** ${{ steps.drift.outputs.missing }}"
-            echo "- **Extra Resources:** ${{ steps.drift.outputs.extra }}"
           } >> $GITHUB_STEP_SUMMARY
 
       - name: Skip drift check for PRs
