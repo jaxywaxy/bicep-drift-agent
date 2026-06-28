@@ -32,7 +32,7 @@ def run(bicep_file: str, resource_group: str):
     print(f"  Resource group: {resource_group}")
     print()
 
-    # Load parameter overrides from environment
+    # Load parameter overrides from environment or bicepparam file
     import os
     param_overrides = {}
     arm_params_env = os.environ.get("ARM_PARAMETERS")
@@ -42,6 +42,30 @@ def run(bicep_file: str, resource_group: str):
             print(f"  Parameters:     {param_overrides}")
         except json.JSONDecodeError:
             print(f"  ⚠ Invalid JSON in ARM_PARAMETERS")
+    else:
+        # Try to load from bicepparam file based on resource group
+        environment = resource_group.split('-')[-1]  # rg-prod → prod
+        bicepparam_file = Path(bicep_file).parent / "parameters" / f"{environment}.bicepparam"
+        if bicepparam_file.exists():
+            try:
+                with open(bicepparam_file) as f:
+                    bicepparam_content = f.read()
+                # Parse bicepparam file (simple key=value format after 'using' line)
+                for line in bicepparam_content.split('\n'):
+                    line = line.strip()
+                    if line.startswith('param ') and '=' in line:
+                        # Parse: param vaultName = 'rsv-prod-aue-001'
+                        parts = line.replace('param ', '').split('=', 1)
+                        if len(parts) == 2:
+                            key = parts[0].strip()
+                            value = parts[1].strip().strip("'\"")
+                            param_overrides[key] = value
+                if param_overrides:
+                    print(f"  Parameters loaded from: {bicepparam_file.name}")
+                    for k, v in param_overrides.items():
+                        print(f"    {k}: {v}")
+            except Exception as e:
+                print(f"  ⚠ Could not load {bicepparam_file.name}: {e}")
 
     # Step 1: Compile Bicep → ARM JSON
     print("Step 1: Compiling Bicep template...")
