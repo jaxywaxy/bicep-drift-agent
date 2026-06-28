@@ -98,6 +98,11 @@ ignore:
   - resource_type: "Microsoft.Network/networkInterfaces"
     reason: "Parameter-based names resolve at deployment time"
 
+  # Complex Bicep expressions that resolve at deployment time
+  - resource_type: "Microsoft.RecoveryServices/vaults"
+    drift_type: "*tags*"
+    reason: "Tags from union(createObject(...)) expressions resolve correctly at deployment time with computed and parameter values"
+
   - resource_type: "Microsoft.RecoveryServices/vaults"
     reason: "API version differences are metadata, not functional drift"
 
