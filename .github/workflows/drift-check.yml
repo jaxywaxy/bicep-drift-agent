@@ -332,10 +332,23 @@ jobs:
             --data "$PAYLOAD" \
             "$WEBHOOK_URL" || echo "⚠️ Failed to post to Teams"
 
-      - name: Upload drift report
+      - name: Upload drift reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: drift-reports
           path: reports/
           retention-days: 30
+          include-hidden-files: true
+
+      - name: Display HTML report link
+        if: always()
+        run: |
+          echo "📊 Drift reports generated:"
+          echo ""
+          if [ -f "reports/rg-prod-drift.html" ]; then
+            echo "- HTML Report: Download the 'drift-reports' artifact and open the .html file in a browser"
+          fi
+          if [ -f "reports/rg-prod-drift.json" ]; then
+            echo "- JSON Data: Available in 'drift-reports' artifact"
+          fi
