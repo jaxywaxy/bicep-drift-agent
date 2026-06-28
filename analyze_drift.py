@@ -131,6 +131,11 @@ def main():
                 drift["recommendation"] = recommendation
             print(f"✓ Generated recommendations for {len(drifts)} drift(s)")
 
+            # Update JSON report with recommendations
+            with open(report_file, "w") as f:
+                json.dump(report_data, f, indent=2, default=str)
+            print(f"✓ Updated report with recommendations: {report_file}")
+
         # Save analysis
         analysis_file = Path(f"reports/{resource_group}-analysis.md")
         with open(analysis_file, "w") as f:
