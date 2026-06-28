@@ -30,6 +30,7 @@ from tools.smart_matching import (
     annotate_drifts_with_matches,
 )
 from tools.property_drift import DriftDetector, PropertyExtractor
+from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 
 
@@ -134,7 +135,28 @@ def main():
         deployed_resources = report_data.get("live_resources", [])
 
         if bicep_resources and deployed_resources:
-            property_drifts = DriftDetector.detect_drift(bicep_resources, deployed_resources)
+            # Filter resources to exclude unresolvable ones (same as Phase 1)
+            filtered_bicep_resources = [r for r in bicep_resources if _should_compare_resource(r)]
+            unresolvable_count = len(bicep_resources) - len(filtered_bicep_resources)
+            if unresolvable_count > 0:
+                print(f"  ℹ Filtered {unresolvable_count} resource(s) with unresolvable expressions")
+
+            # Detect property-level drift
+            property_drifts = DriftDetector.detect_drift(filtered_bicep_resources, deployed_resources)
+
+            # Apply ignore patterns to property drifts
+            raw_property_drifts = [
+                {
+                    "type": d.resource_type,
+                    "name": d.resource_name,
+                    "drift_type": d.drift_type,
+                }
+                for d in property_drifts
+            ]
+            filtered_property_dicts, ignored_property_dicts = ignore_list.filter_drifts(raw_property_drifts)
+            filtered_property_names = {(d["type"], d["name"]) for d in filtered_property_dicts}
+            property_drifts = [d for d in property_drifts if (d.resource_type, d.resource_name) in filtered_property_names]
+
             summary = DriftDetector.generate_summary(property_drifts)
 
             print(f"✓ Drift detection complete:")
