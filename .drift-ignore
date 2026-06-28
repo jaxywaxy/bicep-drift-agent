@@ -1,0 +1,21 @@
+ignore_patterns:
+  # Auto-created by Azure
+  - pattern: "Microsoft.Network/networkWatchers/*"
+    reason: "Auto-created by Azure in each region, not IaC-managed"
+
+  # Auto-managed by VMs (child resources)
+  - pattern: "Microsoft.Compute/disks/*"
+    reason: "OS/data disks are auto-created and managed by VMs, not separately defined in IaC"
+
+  # Parameter expression drift (expected)
+  - pattern: "Microsoft.Compute/virtualMachines/.*"
+    property_path: "tags"
+    reason: "Parameter expressions resolve at deployment time"
+
+  - pattern: "Microsoft.Network/networkInterfaces/.*"
+    property_path: "name"
+    reason: "Parameter-based names resolve at deployment time"
+
+  - pattern: ".*"
+    property_path: "apiVersion"
+    reason: "API version differences are metadata, not functional drift"
