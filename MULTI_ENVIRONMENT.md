@@ -4,27 +4,25 @@ Check drift across multiple Azure resource groups in a single workflow run.
 
 ## Quick Start
 
-The `drift-check-multi-env` workflow checks multiple environments in parallel. By default, it checks:
-- `rg-dev`
-- `rg-prod`
+The `drift-check-multi-env` workflow checks multiple environments. It's triggered manually with toggles for each environment:
+
+- **rg-dev** (checked by default)
+- **rg-staging** (optional)
+- **rg-prod** (checked by default)
 
 Each environment is checked independently and generates its own report.
 
-## Manual Trigger with Custom Environments
+## Manual Trigger
 
-Go to **Actions** → **Bicep Drift Check - Multi-Environment** → **Run workflow** and provide:
+Go to **Actions** → **Bicep Drift Check - Multi-Environment** → **Run workflow**
 
-```json
-[
-  {"bicep_file": "./infra/main.bicep", "resource_group": "rg-dev"},
-  {"bicep_file": "./infra/main.bicep", "resource_group": "rg-staging"},
-  {"bicep_file": "./infra/main.bicep", "resource_group": "rg-prod"}
-]
-```
+Select which environments to check:
 
-Each object requires:
-- `bicep_file` — Path to the Bicep template
-- `resource_group` — Azure resource group name
+- ☑️ Check dev environment (default: on)
+- ☑️ Check staging environment (default: off)
+- ☑️ Check prod environment (default: on)
+
+Only enabled environments will be checked, running in parallel.
 
 ## How It Works
 
