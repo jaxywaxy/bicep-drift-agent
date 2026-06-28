@@ -22,6 +22,8 @@ load_dotenv()
 
 from agent.drift_agent import DriftAgent
 from tools.models import DriftReport, Drift
+from tools.ignore_patterns import IgnorePatternList
+from tools.html_report import generate_html_report
 from run_drift_check import run as run_phase1
 
 
@@ -71,6 +73,22 @@ def main():
         with open(report_file) as f:
             report_data = json.load(f)
 
+        # Load and apply ignore patterns
+        ignore_list = IgnorePatternList.from_file(Path(".drift-ignore"))
+        if ignore_list.patterns:
+            print(f"\n📋 Loading ignore patterns...")
+            ignore_list.print_summary()
+            raw_drifts = report_data.get("drifts", [])
+            filtered_drifts, ignored_drifts = ignore_list.filter_drifts(raw_drifts)
+
+            if ignored_drifts:
+                print(f"\n⊘ Ignoring {len(ignored_drifts)} drift(s) per ignore patterns")
+                for d in ignored_drifts:
+                    print(f"  - {d['type']} '{d['name']}': {d.get('ignored_reason', 'Matched pattern')}")
+
+            report_data["drifts"] = filtered_drifts
+            report_data["ignored_drifts"] = ignored_drifts
+
         # Build DriftReport object
         drifts = [
             Drift(
@@ -108,6 +126,16 @@ def main():
             f.write(analysis)
 
         print(f"✓ Analysis saved to: {analysis_file}")
+
+        # Generate HTML report
+        html_file = Path(f"reports/{resource_group}-drift.html")
+        generate_html_report(
+            drift_json_file=Path(f"reports/{resource_group}-drift.json"),
+            output_file=html_file,
+            resource_group=resource_group,
+            bicep_file=bicep_file,
+        )
+        print(f"✓ HTML report saved to: {html_file}")
 
         # Interactive follow-up (only in interactive mode)
         if os.isatty(0):

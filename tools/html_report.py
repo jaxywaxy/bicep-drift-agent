@@ -1,0 +1,418 @@
+"""
+Generate HTML reports from drift analysis results.
+"""
+
+import json
+from pathlib import Path
+from datetime import datetime
+from typing import List, Dict, Any
+
+
+def generate_html_report(
+    drift_json_file: Path,
+    output_file: Path,
+    resource_group: str,
+    bicep_file: str,
+) -> None:
+    """Generate an HTML report from a drift JSON file."""
+
+    with open(drift_json_file) as f:
+        data = json.load(f)
+
+    drifts = data.get("drifts", [])
+    total = len(drifts)
+    missing = len([d for d in drifts if "missing" in d["drift_type"]])
+    extra = len([d for d in drifts if "extra" in d["drift_type"]])
+    modified = len([d for d in drifts if "modified" in d["drift_type"]])
+
+    # Determine status
+    if total == 0:
+        status = "✅ No Drift"
+        status_class = "success"
+    else:
+        status = "⚠️ Drift Detected"
+        status_class = "warning"
+
+    # Generate drift rows
+    drift_rows = ""
+    for drift in drifts:
+        drift_type = drift["drift_type"]
+        type_badge = _get_type_badge(drift_type)
+
+        details = drift.get("details", "N/A")
+        if isinstance(details, dict):
+            details = json.dumps(details, indent=2)
+
+        drift_rows += f"""
+        <tr>
+            <td>{drift['type']}</td>
+            <td>{drift['name']}</td>
+            <td>{type_badge}</td>
+            <td><pre>{details}</pre></td>
+        </tr>
+        """
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Bicep Drift Report - {resource_group}</title>
+        <style>
+            * {{
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }}
+
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                background: #f5f5f5;
+                color: #333;
+                line-height: 1.6;
+            }}
+
+            .container {{
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+
+            header {{
+                background: white;
+                padding: 30px 20px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+
+            header h1 {{
+                font-size: 28px;
+                margin-bottom: 10px;
+            }}
+
+            .status {{
+                display: inline-block;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-weight: 600;
+                margin-bottom: 15px;
+            }}
+
+            .status.success {{
+                background: #d4edda;
+                color: #155724;
+            }}
+
+            .status.warning {{
+                background: #fff3cd;
+                color: #856404;
+            }}
+
+            .meta {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+                margin-top: 15px;
+                font-size: 14px;
+            }}
+
+            .meta-item {{
+                background: #f8f9fa;
+                padding: 10px;
+                border-radius: 4px;
+                border-left: 3px solid #0066cc;
+            }}
+
+            .meta-label {{
+                font-weight: 600;
+                color: #555;
+            }}
+
+            .meta-value {{
+                color: #333;
+                margin-top: 5px;
+                word-break: break-all;
+            }}
+
+            .metrics {{
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+                margin-bottom: 20px;
+            }}
+
+            .metric-card {{
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+
+            .metric-card.total {{
+                border-top: 4px solid #ff9800;
+            }}
+
+            .metric-card.missing {{
+                border-top: 4px solid #f44336;
+            }}
+
+            .metric-card.extra {{
+                border-top: 4px solid #2196f3;
+            }}
+
+            .metric-card.modified {{
+                border-top: 4px solid #ff9800;
+            }}
+
+            .metric-number {{
+                font-size: 32px;
+                font-weight: 700;
+                margin: 10px 0;
+                color: #333;
+            }}
+
+            .metric-label {{
+                font-size: 12px;
+                color: #666;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }}
+
+            .section {{
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+
+            .section h2 {{
+                font-size: 20px;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #f0f0f0;
+            }}
+
+            .no-drift {{
+                text-align: center;
+                padding: 40px 20px;
+                color: #666;
+            }}
+
+            .no-drift svg {{
+                width: 64px;
+                height: 64px;
+                margin-bottom: 15px;
+            }}
+
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+            }}
+
+            th {{
+                background: #f8f9fa;
+                padding: 12px;
+                text-align: left;
+                font-weight: 600;
+                color: #333;
+                border-bottom: 2px solid #e9ecef;
+            }}
+
+            td {{
+                padding: 12px;
+                border-bottom: 1px solid #e9ecef;
+            }}
+
+            tr:hover {{
+                background: #f8f9fa;
+            }}
+
+            .badge {{
+                display: inline-block;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+            }}
+
+            .badge.missing {{
+                background: #ffebee;
+                color: #c62828;
+            }}
+
+            .badge.extra {{
+                background: #e3f2fd;
+                color: #1565c0;
+            }}
+
+            .badge.modified {{
+                background: #fff3e0;
+                color: #e65100;
+            }}
+
+            pre {{
+                background: #f5f5f5;
+                padding: 10px;
+                border-radius: 4px;
+                overflow-x: auto;
+                font-size: 12px;
+                line-height: 1.4;
+            }}
+
+            footer {{
+                text-align: center;
+                padding: 20px;
+                color: #999;
+                font-size: 12px;
+            }}
+
+            @media (max-width: 768px) {{
+                .container {{
+                    padding: 10px;
+                }}
+
+                header {{
+                    padding: 15px;
+                }}
+
+                header h1 {{
+                    font-size: 20px;
+                }}
+
+                table {{
+                    font-size: 12px;
+                }}
+
+                td, th {{
+                    padding: 8px;
+                }}
+
+                pre {{
+                    font-size: 10px;
+                }}
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <div class="status {status_class}">{status}</div>
+                <h1>Bicep Drift Analysis Report</h1>
+
+                <div class="meta">
+                    <div class="meta-item">
+                        <div class="meta-label">Resource Group</div>
+                        <div class="meta-value">{resource_group}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="meta-label">Bicep File</div>
+                        <div class="meta-value">{bicep_file}</div>
+                    </div>
+                    <div class="meta-item">
+                        <div class="meta-label">Generated</div>
+                        <div class="meta-value">{timestamp}</div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="metrics">
+                <div class="metric-card total">
+                    <div class="metric-label">Total Issues</div>
+                    <div class="metric-number">{total}</div>
+                </div>
+                <div class="metric-card missing">
+                    <div class="metric-label">Missing</div>
+                    <div class="metric-number">{missing}</div>
+                </div>
+                <div class="metric-card extra">
+                    <div class="metric-label">Extra</div>
+                    <div class="metric-number">{extra}</div>
+                </div>
+                <div class="metric-card modified">
+                    <div class="metric-label">Modified</div>
+                    <div class="metric-number">{modified}</div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Drift Details</h2>
+                {_render_drift_section(total, drift_rows)}
+            </div>
+
+            <footer>
+                Generated by Bicep Drift Agent | {timestamp}
+            </footer>
+        </div>
+    </body>
+    </html>
+    """
+
+    with open(output_file, "w") as f:
+        f.write(html_content)
+
+    print(f"✓ HTML report generated: {output_file}")
+
+
+def _get_type_badge(drift_type: str) -> str:
+    """Get HTML badge for drift type."""
+    if "missing" in drift_type.lower():
+        return '<span class="badge missing">Missing</span>'
+    elif "extra" in drift_type.lower():
+        return '<span class="badge extra">Extra</span>'
+    else:
+        return '<span class="badge modified">Modified</span>'
+
+
+def _render_drift_section(total: int, drift_rows: str) -> str:
+    """Render drift section HTML."""
+    if total == 0:
+        return """
+        <div class="no-drift">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                <polyline points="22 4 12 14.01 9 11.01"></polyline>
+            </svg>
+            <h3>No Drift Detected</h3>
+            <p>Your infrastructure matches the Bicep template</p>
+        </div>
+        """
+    else:
+        return f"""
+        <table>
+            <thead>
+                <tr>
+                    <th>Resource Type</th>
+                    <th>Resource Name</th>
+                    <th>Type</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {drift_rows}
+            </tbody>
+        </table>
+        """
+
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 3:
+        print("Usage: python -m tools.html_report <drift-json> <output-html>")
+        sys.exit(1)
+
+    json_file = Path(sys.argv[1])
+    html_file = Path(sys.argv[2])
+
+    if not json_file.exists():
+        print(f"Error: {json_file} not found")
+        sys.exit(1)
+
+    generate_html_report(json_file, html_file, "resource-group", "main.bicep")
