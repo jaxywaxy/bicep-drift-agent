@@ -108,9 +108,34 @@ Remaining limitations:
 
 ## CI/CD: GitHub Actions Workflow
 
-The drift check runs automatically via GitHub Actions on push to `main` or `develop`, or can be triggered manually.
+### For this repo: Built-in drift checks
 
-### Automatic triggers
+This repository has built-in drift checks that run automatically on push to `main` or `develop`.
+
+### For other repos: Reusable workflow
+
+Infrastructure repositories can use the **reusable drift-check workflow** to check their own Bicep files. See [REUSABLE_WORKFLOW.md](REUSABLE_WORKFLOW.md) for setup instructions.
+
+**Quick example:**
+
+```yaml
+jobs:
+  drift-check:
+    uses: jaxywaxy/bicep-drift-agent/.github/workflows/drift-check-reusable.yml@main
+    with:
+      bicep_file: infra/main.bicep
+      resource_group: my-rg
+      fail_on_drift: true
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.DRIFT_CHECK_ANTHROPIC_API_KEY }}
+      AZURE_CLIENT_ID: ${{ secrets.DRIFT_CHECK_AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.DRIFT_CHECK_AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.DRIFT_CHECK_AZURE_SUBSCRIPTION_ID }}
+```
+
+---
+
+### Automatic triggers (this repo)
 
 - **Push to main/develop** with changes to `.bicep` files or workflow config
 - Generates a drift report and uploads artifacts
