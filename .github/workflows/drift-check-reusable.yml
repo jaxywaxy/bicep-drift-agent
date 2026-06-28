@@ -362,3 +362,12 @@ jobs:
               echo "</details>"
             fi
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload drift reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: drift-reports-${{ inputs.resource_group }}
+          path: reports/
+          retention-days: 30
+          include-hidden-files: true
