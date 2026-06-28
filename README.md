@@ -106,6 +106,44 @@ Remaining limitations:
 - Complex nested functions still partially unresolved
 - This is why Phase 2 needs an agent — to reason about unresolvable expressions
 
+## CI/CD: GitHub Actions Workflow
+
+The drift check runs automatically via GitHub Actions on push to `main` or `develop`, or can be triggered manually.
+
+### Automatic triggers
+
+- **Push to main/develop** with changes to `.bicep` files or workflow config
+- Generates a drift report and uploads artifacts
+- Results visible in the workflow run summary
+
+### Manual trigger
+
+Go to **Actions** → **Bicep Drift Check** → **Run workflow** and enter:
+- **Bicep file path** (default: `./infra/main.bicep`)
+- **Azure resource group** (default: `rg-prod`)
+
+### Required GitHub secrets
+
+Configure these in your repository settings:
+
+| Secret | Description |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | API key from [console.anthropic.com](https://console.anthropic.com) |
+| `AZURE_CLIENT_ID` | Azure service principal client ID (for OIDC auth) |
+| `AZURE_TENANT_ID` | Azure tenant ID |
+| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
+
+### Viewing results
+
+1. **Workflow summary** — Shows status, metrics, and issues directly in the GitHub Actions run
+2. **Artifacts** — Download detailed JSON reports from the "drift-reports" artifact
+3. **Logs** — See full execution logs and error messages in the workflow logs
+
+### Current limitations
+
+- ⚠️ Drift checks **do not run on pull requests** (Azure federated identity credentials only configured for push/manual triggers)
+- To enable PR support, update your Azure Entra app's federated identity credential to accept `repo:*:pull_request` subject claims
+
 ## Testing the tools individually
 
 ```bash
@@ -118,4 +156,3 @@ python -m tools.get_live_state your-resource-group
 # Then run the full check
 python run_drift_check.py ./path/to/main.bicep your-resource-group
 ```
-end# Test change
