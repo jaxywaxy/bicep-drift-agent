@@ -14,27 +14,8 @@ ignore:
   - resource_type: "Microsoft.Compute/disks"
     reason: "OS/data disks are auto-created and managed by VMs, not separately defined in IaC"
 
-  # Drift-agent test infrastructure (not production)
-  - resource_name: "drifttest.*"
-    reason: "Test infrastructure used during development, not production"
-
-  - resource_name: "driftfuncstore.*"
-    reason: "Test storage account for drift-agent, not production"
-
-  - resource_type: "Microsoft.Web/sites"
-    resource_name: "drift-agent-*"
-    reason: "Drift-agent test Function App, not production"
-
-  - resource_type: "Microsoft.Web/serverFarms"
-    resource_name: "AustraliaEastLinuxDynamicPlan"
-    reason: "Drift-agent test App Service Plan, not production"
-
   - resource_type: "Microsoft.OperationalInsights/workspaces"
     reason: "Auto-created by Azure Defender/Monitor, not explicitly managed in IaC"
-
-  - resource_type: "Microsoft.Insights/components"
-    resource_name: "drift-agent-*"
-    reason: "Drift-agent test Application Insights, not production"
 
   - resource_type: "microsoft.insights/actiongroups"
     resource_name: ".*Smart Detection.*"
