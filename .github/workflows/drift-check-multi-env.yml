@@ -22,6 +22,9 @@ on:
 jobs:
   drift-check-dev:
     if: github.event.inputs.dev-enabled == 'true'
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/drift-check-reusable.yml
     with:
       bicep_file: ./infra/main.bicep
@@ -31,6 +34,9 @@ jobs:
 
   drift-check-staging:
     if: github.event.inputs.staging-enabled == 'true'
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/drift-check-reusable.yml
     with:
       bicep_file: ./infra/main.bicep
@@ -40,6 +46,9 @@ jobs:
 
   drift-check-prod:
     if: github.event.inputs.prod-enabled == 'true'
+    permissions:
+      contents: read
+      id-token: write
     uses: ./.github/workflows/drift-check-reusable.yml
     with:
       bicep_file: ./infra/main.bicep
