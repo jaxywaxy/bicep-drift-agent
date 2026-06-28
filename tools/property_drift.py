@@ -332,20 +332,12 @@ class PropertyComparator:
                     )
                 )
 
-        # Check for added properties (deployed but not in Bicep)
-        for key, deployed_value in deployed_flat.items():
-            if key not in bicep_flat:
-                # Skip system-generated properties
-                if not PropertyComparator._is_system_property(key):
-                    diffs.append(
-                        PropertyDiff(
-                            property_path=key,
-                            desired_value=None,
-                            actual_value=deployed_value,
-                            change_type="added",
-                            severity="info",
-                        )
-                    )
+        # NOTE: Skip added properties (deployed but not in Bicep)
+        # These are optional properties that Azure manages automatically.
+        # If not explicitly defined in the Bicep template, they should not
+        # be reported as drift. Examples: sku fields, tags added by policies,
+        # Azure-managed system properties, etc.
+        # Only report properties that are explicitly defined in Bicep template.
 
         return diffs
 
