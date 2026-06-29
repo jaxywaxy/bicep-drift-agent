@@ -414,5 +414,7 @@ jobs:
               echo "\`\`\`"
             fi
             echo ""
-            echo "[View Full Report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "### 📊 Reports"
+            echo "- **Full Report:** [View Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+            echo "- **HTML Reports:** Download from Artifacts (drift-reports-$LZ.zip)"
           } >> $GITHUB_STEP_SUMMARY
