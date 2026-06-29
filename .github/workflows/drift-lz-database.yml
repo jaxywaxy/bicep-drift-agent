@@ -1,0 +1,13 @@
+name: Database Landing Zone Drift Check
+
+on:
+  schedule:
+    - cron: '0 18 * * *'  # Daily at 6pm UTC
+  workflow_dispatch:
+
+jobs:
+  drift-database:
+    uses: ./.github/workflows/drift-check-lz-reusable.yml@main
+    with:
+      landing_zone: database
+    secrets: inherit
