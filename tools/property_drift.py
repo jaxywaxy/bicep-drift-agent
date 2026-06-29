@@ -294,6 +294,25 @@ class PropertyComparator:
         "properties.workerSize",
     }
 
+    WRITE_ONLY_PROPERTIES = {
+        # VM OS profile (not returned by Azure API for security/privacy)
+        "properties.osprofile.adminusername",
+        "properties.osprofile.adminpassword",
+        "properties.osprofile.computername",
+        "properties.osprofile.linuxconfiguration.disablepasswordauthentication",
+        "properties.osprofile.linuxconfiguration.ssh",
+        "properties.osprofile.windowsconfiguration.enableautomaticupdates",
+        "properties.osprofile.windowsconfiguration.provisionvmagent",
+        # Storage profile (image reference is immutable post-deployment)
+        "properties.storageprofile.imagereference.publisher",
+        "properties.storageprofile.imagereference.offer",
+        "properties.storageprofile.imagereference.sku",
+        "properties.storageprofile.imagereference.version",
+        # OS disk properties (immutable post-deployment)
+        "properties.storageprofile.osdisk.createoption",
+        "properties.storageprofile.osdisk.manageddisk.storageaccounttype",
+    }
+
     @staticmethod
     def compare_properties(
         bicep_properties: Dict[str, Any],
@@ -330,6 +349,10 @@ class PropertyComparator:
         # Check for removed properties (in Bicep but not deployed)
         for key, bicep_value in bicep_flat.items():
             if key not in deployed_flat:
+                # Skip write-only properties (Azure doesn't return these in API responses)
+                if PropertyComparator._is_write_only_property(key):
+                    continue
+
                 diffs.append(
                     PropertyDiff(
                         property_path=key,
@@ -371,6 +394,21 @@ class PropertyComparator:
             if critical in property_path.lower():
                 return "critical"
         return "warning"
+
+    @staticmethod
+    def _is_write_only_property(property_path: str) -> bool:
+        """Check if property is write-only (not returned by Azure API).
+
+        Write-only properties include:
+        - Credentials (admin passwords, SSH keys)
+        - OS profile settings (Azure returns null)
+        - Immutable properties (image reference, disk creation options)
+        """
+        path_lower = property_path.lower()
+        for write_only in PropertyComparator.WRITE_ONLY_PROPERTIES:
+            if write_only == path_lower or path_lower.startswith(write_only + "."):
+                return True
+        return False
 
     @staticmethod
     def _is_system_property(key: str) -> bool:
