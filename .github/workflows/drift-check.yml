@@ -30,8 +30,16 @@ jobs:
       id-token: write
 
     steps:
-      - name: Checkout code
+      - name: Checkout drift detection tools
         uses: actions/checkout@v7
+
+      - name: Checkout external Bicep repository (shallow clone)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.DRIFT_BICEP_REPO || 'jaxywaxy/drift-test-resources' }}
+          ref: ${{ vars.DRIFT_BICEP_BRANCH || 'main' }}
+          path: bicep-repo
+          fetch-depth: 1
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -67,7 +75,15 @@ jobs:
           # Priority: workflow input > env var > default
           BICEP_FILE="${{ github.event.inputs.bicep_file }}"
           BICEP_FILE="${BICEP_FILE:-$DRIFT_BICEP_FILE}"
-          BICEP_FILE="${BICEP_FILE:-./infra/main.bicep}"
+
+          # If path starts with ../ or absolute, use as-is; otherwise prepend bicep-repo
+          if [[ "$BICEP_FILE" == /* ]] || [[ "$BICEP_FILE" == ../* ]]; then
+            # Absolute or relative path
+            BICEP_FILE="${BICEP_FILE}"
+          else
+            # Relative to external repo
+            BICEP_FILE="bicep-repo/${BICEP_FILE:-bicep/main.bicep}"
+          fi
 
           RESOURCE_GROUP="${{ github.event.inputs.resource_group }}"
           RESOURCE_GROUP="${RESOURCE_GROUP:-$DRIFT_RESOURCE_GROUP}"
