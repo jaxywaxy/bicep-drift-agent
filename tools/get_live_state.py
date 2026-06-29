@@ -127,8 +127,11 @@ def _enrich_storage_accounts(credential, subscription_id: str, resource_group: s
                 account = storage_client.storage_accounts.get_properties(resource_group, account_name)
                 if "properties" not in resource:
                     resource["properties"] = {}
-                # Handle both dict and object responses
-                props = account.get("properties", {}) if isinstance(account, dict) else getattr(account, "properties", {})
+
+                # Azure SDK returns models with _data dict attribute
+                data = account._data if hasattr(account, "_data") else account
+                props = data.get("properties", {}) if isinstance(data, dict) else {}
+
                 if props:
                     resource["properties"].update({
                         "accessTier": str(props.get("accessTier", "")).split(".")[-1],
@@ -154,16 +157,23 @@ def _enrich_app_services(credential, subscription_id: str, resource_group: str, 
                 site = web_client.web_apps.get(resource_group, site_name)
                 if "properties" not in resource:
                     resource["properties"] = {}
-                site_props = site.get("properties", {}) if isinstance(site, dict) else getattr(site, "properties", {})
+
+                # Azure SDK returns models with _data dict attribute
+                data = site._data if hasattr(site, "_data") else site
+                site_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
                 if site_props:
                     resource["properties"].update({
                         "serverFarmId": site_props.get("appServicePlanId"),
                         "httpsOnly": site_props.get("httpsOnly"),
                     })
+
                 # Get site config separately
                 try:
                     config = web_client.web_apps.get_configuration(resource_group, site_name)
-                    config_props = config.get("properties", {}) if isinstance(config, dict) else getattr(config, "properties", {})
+                    data = config._data if hasattr(config, "_data") else config
+                    config_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
                     if config_props:
                         resource["properties"]["siteConfig"] = {
                             "linuxFxVersion": config_props.get("linuxFxVersion"),
@@ -191,7 +201,11 @@ def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, re
                 vault = kv_client.vaults.get(resource_group, vault_name)
                 if "properties" not in resource:
                     resource["properties"] = {}
-                vault_props = vault.get("properties", {}) if isinstance(vault, dict) else getattr(vault, "properties", {})
+
+                # Azure SDK returns models with _data dict attribute
+                data = vault._data if hasattr(vault, "_data") else vault
+                vault_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
                 if vault_props:
                     resource["properties"].update({
                         "tenantId": str(vault_props.get("tenantId", "")),
