@@ -45,3 +45,4 @@ reports/
 *.tmp
 *.bak
 *.log
+*.pyc
