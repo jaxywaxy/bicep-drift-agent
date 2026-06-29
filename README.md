@@ -1,280 +1,332 @@
-# bicep-drift-agent
+# Bicep Drift Agent
 
-Detects drift between a Bicep file and deployed Azure state. Built as a learning project for agentic AI workflows.
+Production-ready infrastructure drift detection for enterprise Bicep deployments. Detects missing resources, extra resources, property-level changes, and critical SKU modifications.
 
 ## What it does
 
-1. Compiles a Bicep file to ARM JSON
-2. Queries live Azure state via the ARM API
-3. Diffs the two
-4. Reports what's drifted and how
+1. Compiles Bicep files to ARM JSON
+2. Queries live Azure state via ARM API
+3. Compares desired state (Bicep) vs actual state (Azure)
+4. Reports drift with property-level details
+5. Sends notifications to teams via Slack/Teams
 
-## Project phases
+## For enterprises: Hybrid Landing Zone model
 
-### Phase 1 (✅ Done): Standalone tools
+Multiple teams, multiple infrastructure layers, multiple resource groups—all self-service.
 
-- ✅ Compiles Bicep → ARM JSON
-- ✅ Queries live Azure state
-- ✅ Normalizes both shapes for comparison
-- ✅ Generates drift reports
-- ✅ Resolves parameters and variables
-- ✅ Flattens nested deployments
-- ✅ Filters out module references
-- 📝 Limitation: Can't fully resolve complex ARM functions (format with runtime values, uniqueString, etc.)
-
-### Phase 2 (Next): Agent loop
-
-Wrap the tools for the Anthropic API. Let Claude reason over the diff, classify severity, and write a proper report. Handle unresolvable expressions and complex resource relationships.
-
-### Phase 3 (Later): Expand scope
-
-- Type-specific property comparison (VM, storage, networking)
-- PR creation with drift report
-- CI/CD integration
-- Drift remediation suggestions
-
-## Setup
-
-```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-cp .env.example .env
-# Fill in ANTHROPIC_API_KEY and AZURE_SUBSCRIPTION_ID
-```
-
-Azure auth uses `DefaultAzureCredential` — if you're already logged in via `az login`, it just works.
-
-## Run it
-
-```bash
-python run_drift_check.py ./path/to/main.bicep your-resource-group-name
-```
-
-### With parameter values
-
-If your Bicep template uses parameters (like `environment=prod`), pass them via the `.env` file:
-
-```bash
-# .env
-ARM_PARAMETERS={"environment":"prod","location":"australiaeast"}
-```
-
-Or set it inline:
-
-```bash
-export ARM_PARAMETERS='{"environment":"prod"}' && python run_drift_check.py ./main.bicep my-rg
-```
-
-## Project structure
-
-```
-bicep-drift-agent/
-├── tools/
-│   ├── compile_bicep.py     # az bicep build → ARM JSON
-│   ├── get_live_state.py    # ARM API → live resource state
-│   └── diff_states.py       # desired vs actual comparison
-├── agent/                   # Phase 2 — agent loop goes here
-├── reports/                 # Output JSON files (gitignored)
-├── tests/
-├── run_drift_check.py       # Phase 1 entry point
-├── requirements.txt
-└── .env.example
-```
-
-## The normalizer: Solving the shape mismatch
-
-ARM templates use expressions like `[parameters('vmName')]` and `[format('prefix-{0}', parameters('env'))]`.
-Live Azure state has fully resolved values like `prefix-prod`.
-
-The **normalizer** (`tools/normalizer.py`) bridges this gap by:
-
-1. **Extracting parameters** from the template with their default values
-2. **Merging parameter overrides** from the environment
-3. **Resolving expressions** in resource names:
-   - `[parameters('foo')]` → looks up parameter value
-   - `[variables('bar')]` → looks up variable value
-   - `[format('template-{0}', param)]` → substitutes arguments
-   - `[uniqueString(...)]` → placeholder (can't resolve at compile time)
-4. **Flattening nested deployments** recursively
-5. **Filtering out module references** that don't map to real resources
-
-Remaining limitations:
-
-- Runtime functions like `uniqueString()`, `copyIndex()` can't be resolved without execution context
-- Complex nested functions still partially unresolved
-- This is why Phase 2 needs an agent — to reason about unresolvable expressions
-
-## CI/CD: GitHub Actions Workflows
-
-### For this repo: Built-in drift checks
-
-This repository has two built-in workflows:
-
-**Single Environment** — `drift-check.yml`
-
-- Checks one resource group per run
-- Automatically triggered on push
-- Manual trigger for on-demand checks
-
-**Multi-Environment** — `drift-check-multi-env.yml`
-
-- Checks multiple resource groups in parallel
-- Default: checks rg-dev and rg-prod
-- Customizable via workflow input
-- See [MULTI_ENVIRONMENT.md](MULTI_ENVIRONMENT.md) for details
-
-### For other repos: Reusable workflow
-
-Infrastructure repositories can use the **reusable drift-check workflow** to check their own Bicep files. See [REUSABLE_WORKFLOW.md](REUSABLE_WORKFLOW.md) for setup instructions.
-
-**Quick example:**
+**Teams own their config** (versioned with their Bicep):
 
 ```yaml
-jobs:
-  drift-check:
-    uses: jaxywaxy/bicep-drift-agent/.github/workflows/drift-check-reusable.yml@main
-    with:
-      bicep_file: infra/main.bicep
-      resource_group: my-rg
-      fail_on_drift: true
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.DRIFT_CHECK_ANTHROPIC_API_KEY }}
-      AZURE_CLIENT_ID: ${{ secrets.DRIFT_CHECK_AZURE_CLIENT_ID }}
-      AZURE_TENANT_ID: ${{ secrets.DRIFT_CHECK_AZURE_TENANT_ID }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.DRIFT_CHECK_AZURE_SUBSCRIPTION_ID }}
+# myorg/my-bicep/.github/drift-lz-config.yml
+name: myteam
+notifications:
+  slack: https://hooks.slack.com/services/XXX
+
+checks:
+  - name: My Infrastructure
+    repo: myorg/my-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-prod, rg-dr]
+```
+
+**Central tool orchestrates** (in this drift-agent repo):
+
+```yaml
+# .github/lz-index.yml
+landing_zones:
+  myteam:
+    repo: myorg/my-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 9 * * *'
+    workflow: drift-lz-myteam.yml
+```
+
+**Result:** Single notification per team, consolidated report, no manual setup.
+
+## Quick start
+
+### Setup (one-time)
+
+1. Add landing zone to `.github/lz-index.yml`
+2. Team creates `.github/drift-lz-config.yml` in their Bicep repo
+3. Create workflow (copy `drift-lz-frontend.yml`, update schedule)
+4. Set Azure secrets
+
+### Run
+
+```bash
+# Automatic: runs on schedule
+# Manual:
+gh workflow run drift-lz-myteam.yml
+```
+
+See [LANDING_ZONES.md](LANDING_ZONES.md) for complete setup.
+
+---
+
+## Features
+
+✅ **Enterprise-ready**
+
+- Multiple teams, multiple repos, multiple RGs
+- Parallel drift checks
+- Consolidated notifications
+
+✅ **Accurate drift detection**
+
+- Property-level comparison
+- Bicep module support
+- Expression resolution (parameters, variables, format, concat)
+- Resource type normalization (handles Azure SDK casing)
+- Write-only property filtering
+
+✅ **Smart resource matching**
+
+- Fuzzy prefix matching for `[uniqueString()]` names
+- 0.95 confidence for exact matches
+- 0.85 confidence for prefix matches
+
+✅ **Type-specific enrichment**
+
+- Storage Accounts (accessTier, minTlsVersion, publicNetworkAccess)
+- App Services (httpsOnly, siteConfig)
+- Key Vaults (enableRbac, softDelete, networkAcls)
+- VMs (SKU, data disks, hardware profile)
+- Log Analytics (sku, retention, publicNetworkAccess)
+- Event Hubs (capacity, autoInflate, zoneRedundant)
+- Logic Apps (state, definition)
+
+✅ **Flexible notifications**
+
+- Slack and/or Teams
+- Per-team filtering (drift only, extra only, missing only)
+- Custom message templates
+
+---
+
+## Architecture
+
+```
+bicep-drift-agent/ (central tool)
+├── .github/
+│   ├── lz-index.yml                    # Maps LZs to external repos
+│   └── workflows/
+│       ├── drift-check-lz-hybrid.yml   # Orchestrator (reusable)
+│       ├── drift-lz-frontend.yml       # Team triggers
+│       ├── drift-lz-backend.yml
+│       └── drift-lz-database.yml
+├── tools/
+│   ├── compile_bicep.py                # Bicep → ARM JSON
+│   ├── get_live_state.py               # Query Azure resources
+│   ├── property_drift.py                # Compare & diff
+│   ├── normalizer.py                   # Resolve expressions
+│   └── send_notifications.py           # Slack/Teams
+└── requirements.txt
+
+myorg/frontend-bicep/ (team's Bicep repo)
+├── bicep/
+│   └── main.bicep
+└── .github/
+    └── drift-lz-config.yml             # Team owns this
 ```
 
 ---
 
-### Automatic triggers (this repo)
+## Setup for your organization
 
-- **Push to main/develop** with changes to `.bicep` files or workflow config
-- Generates a drift report and uploads artifacts
-- Results visible in the workflow run summary
+### Step 1: Azure secrets (one-time)
 
-### Manual trigger
-
-Go to **Actions** → **Bicep Drift Check** → **Run workflow** and enter:
-- **Bicep file path** (default: `./infra/main.bicep`)
-- **Azure resource group** (default: `rg-prod`)
-
-### Required GitHub secrets
-
-Configure these in your repository settings:
-
-| Secret | Description |
-| --- | --- |
-| `ANTHROPIC_API_KEY` | API key from [console.anthropic.com](https://console.anthropic.com) |
-| `AZURE_CLIENT_ID` | Azure service principal client ID (for OIDC auth) |
-| `AZURE_TENANT_ID` | Azure tenant ID |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
-
-### Optional: Slack and Teams notifications
-
-To receive drift reports in Slack or Teams, add these secrets:
-
-| Secret | Setup |
-| --- | --- |
-| `SLACK_WEBHOOK_URL` | [Create incoming webhook](https://api.slack.com/messaging/webhooks) in Slack workspace |
-| `TEAMS_WEBHOOK_URL` | [Create connector webhook](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/connectors-using) in Teams channel |
-
-Both are optional—the workflow will automatically post to whichever services are configured.
-
-## Report Formats
-
-The drift check generates multiple report formats:
-
-### HTML Report
-
-Beautiful, interactive HTML report with:
-
-- Status summary with color-coded metrics
-- Detailed drift table showing all drift information
-- **Dedicated remediation section** with Claude AI recommendations
-- Resource type and drift type filters
-- Mobile-responsive design
-- Easy to share with stakeholders
-
-**Smart-Matched Resources Section:**
-Detects resources with runtime-generated names (using `uniqueString()`, `format()`, etc.) and intelligently matches them to deployed resources. Shows:
-
-- Bicep name expression vs. actual deployed name
-- Match confidence level (high/medium)
-- Why the match was made
-
-**Drift Details Table:**
-Shows each drift with resource type, name, drift type, and detailed change information.
-
-**Remediation Recommendations Section:**
-Numbered recommendations for resolving each drift, powered by Claude. Each recommendation includes:
-
-- Numbered badge (#1, #2, etc.)
-- Resource type and name
-- Claude's AI-generated remediation suggestion
-
-Available in the `drift-reports` artifact after workflow completes.
-
-### JSON Report
-
-Machine-readable report containing:
-
-- Raw drift data
-- ARM and live resource states
-- All metadata for processing
-- Used by Phase 2 analysis
-
-### Ignoring Expected Drift
-
-Some drift is expected or acceptable. Use `.drift-ignore` to suppress known differences:
-
-```yaml
-# .drift-ignore
-ignore:
-  # Ignore auto-created managed identities
-  - resource_type: "Microsoft.ManagedIdentity/*"
-    reason: "Auto-created by Azure services"
-  
-  # Ignore scaling changes
-  - resource_type: "Microsoft.Compute/virtualMachineScaleSets"
-    drift_type: "*capacity*"
-    reason: "Auto-scaling expected"
-  
-  # Ignore specific resources
-  - resource_name: "temporary-*"
-    reason: "Temporary resources"
-```
-
-**Features:**
-
-- Wildcard pattern matching (`*` and `?`)
-- Filter by resource type, name, or drift type
-- Document why each pattern is ignored
-- Filtered drifts are excluded from metrics
-
-Copy [`.drift-ignore.example`](.drift-ignore.example) to `.drift-ignore` in your repo root to customize.
-
-### Viewing results
-
-1. **Workflow summary** — Shows status, metrics, and issues directly in the GitHub Actions run
-2. **Artifacts** — Download detailed JSON reports from the "drift-reports" artifact
-3. **Logs** — See full execution logs and error messages in the workflow logs
-
-### Current limitations
-
-- ⚠️ Drift checks **do not run on pull requests** (Azure federated identity credentials only configured for push/manual triggers)
-- To enable PR support, update your Azure Entra app's federated identity credential to accept `repo:*:pull_request` subject claims
-
-## Testing the tools individually
+Set in drift-agent repo settings:
 
 ```bash
-# Test Bicep compilation
-python -m tools.compile_bicep ./path/to/main.bicep
+gh secret set AZURE_CLIENT_ID --body "..."
+gh secret set AZURE_TENANT_ID --body "..."
+gh secret set AZURE_SUBSCRIPTION_ID --body "..."
+gh secret set ANTHROPIC_API_KEY --body "..."
+```
 
-# Test live state query
-python -m tools.get_live_state your-resource-group
+For private Bicep repos:
 
-# Then run the full check
+```bash
+gh secret set BICEP_REPO_TOKEN --body "ghp_xxxx"
+```
+
+### Step 2: Add landing zones
+
+Edit `.github/lz-index.yml`:
+
+```yaml
+landing_zones:
+  frontend:
+    repo: myorg/frontend-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 9 * * 1,3,5'
+    workflow: drift-lz-frontend.yml
+```
+
+### Step 3: Teams create config
+
+Each team in their Bicep repo:
+
+```bash
+# myorg/frontend-bicep/.github/drift-lz-config.yml
+name: frontend
+notifications:
+  slack: https://hooks.slack.com/services/XXX
+  filter: all
+
+checks:
+  - name: Frontend Services
+    repo: myorg/frontend-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-frontend-prod, rg-frontend-dr]
+```
+
+### Step 4: Create team workflows
+
+Copy `drift-lz-frontend.yml`, update:
+
+- Schedule (cron expression)
+- Landing zone name
+- Workflow name
+
+See [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) for multi-team setups.
+
+---
+
+## Local development
+
+### Setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example .env
+# Set ANTHROPIC_API_KEY and AZURE_SUBSCRIPTION_ID
+```
+
+### Run drift check locally
+
+```bash
 python run_drift_check.py ./path/to/main.bicep your-resource-group
 ```
+
+With parameters:
+
+```bash
+export ARM_PARAMETERS='{"environment":"prod"}'
+python run_drift_check.py ./main.bicep my-rg
+```
+
+### Test individual tools
+
+```bash
+# Compile Bicep to ARM
+python -m tools.compile_bicep ./main.bicep
+
+# Query live Azure state
+python -m tools.get_live_state your-resource-group
+
+# Run full drift check
+python run_drift_check.py ./main.bicep your-resource-group
+```
+
+---
+
+## How drift detection works
+
+### 1. Compile Bicep → ARM Template
+
+```bash
+az bicep build --file main.bicep --outfile template.json
+```
+
+### 2. Extract Desired State
+
+- Parse ARM template
+- Resolve parameters and variables
+- Handle expressions: `[parameters('foo')]`, `[format('x-{0}', param)]`
+- Flatten nested deployments
+- Extract resource definitions
+
+### 3. Query Live State
+
+- Connect to Azure via `DefaultAzureCredential`
+- Query each resource group
+- Get actual resource properties
+- Enrich with type-specific details (storage, compute, networking, etc.)
+
+### 4. Normalize & Compare
+
+- Normalize resource types to lowercase (Azure SDK inconsistency)
+- Match deployed resources to Bicep definitions
+- Fuzzy prefix matching for runtime-generated names
+- Filter out write-only/immutable properties
+- Compare property by property
+
+### 5. Generate Report
+
+- [DRIFT] = resource exists but config changed
+- [EXTRA] = resource deployed but not in Bicep
+- [MISSING] = resource in Bicep but not deployed
+- Send to Slack/Teams
+
+---
+
+## Documentation
+
+- [LANDING_ZONES.md](LANDING_ZONES.md) — Full hybrid architecture guide
+- [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) — Multi-team setup
+- [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) — Notification configuration
+
+---
+
+## Limitations
+
+- Runtime functions (`uniqueString()`, `copyIndex()`) are fuzzy-matched, not fully resolved
+- Complex nested ARM expressions may be partially unresolved
+- Drift checks don't run on PRs (Azure federated identity only configured for push/manual)
+
+## Roadmap
+
+- Agent-based analysis for unresolvable expressions
+- Drift remediation suggestions
+- PR comments with detailed findings
+- Terraform support
+
+---
+
+## Project structure
+
+```text
+bicep-drift-agent/
+├── tools/
+│   ├── compile_bicep.py        # bicep build
+│   ├── get_live_state.py       # Query Azure ARM API
+│   ├── property_drift.py        # Diff & comparison
+│   ├── normalizer.py            # Expression resolution
+│   ├── send_notifications.py    # Slack/Teams posting
+│   └── models.py                # Data models
+├── run_drift_check.py           # Local CLI entry point
+├── requirements.txt
+├── .env.example
+└── .github/
+    ├── lz-index.yml
+    └── workflows/
+        ├── drift-check-lz-hybrid.yml
+        ├── drift-lz-frontend.yml
+        ├── drift-lz-backend.yml
+        └── drift-lz-database.yml
+```
+
+---
+
+## Built with
+
+- **Python** — Drift detection tools
+- **Bicep** — Infrastructure as code
+- **Azure SDK** — Query live resources
+- **GitHub Actions** — CI/CD orchestration
+- **Anthropic Claude** — AI analysis and recommendations

@@ -166,59 +166,118 @@ notifications:
   filter: all|drift|extra|missing          # Optional: filter events (default: all)
 
 checks:
-  - name: Layer Display Name               # Required: human-readable name
+  - name: Check Display Name               # Required: human-readable name (what this Bicep deploys)
     repo: org/repo-name                    # Required: GitHub repo with Bicep
     branch: main                           # Optional: branch (default: main)
     path: bicep/main.bicep                 # Required: path to Bicep file
-    resource_groups:                       # Required: list of RGs to test
+    resource_groups:                       # Required: RGs this Bicep deploys to
       - rg-prod
       - rg-dr
-      - rg-staging
 ```
 
 ---
 
 ## Examples
 
-### Simple Single-Layer LZ
+### Complete Example with All Parameters
+
+```yaml
+# This example shows every available parameter and option
+name: backend                                          # Display name for this LZ
+
+notifications:
+  slack: https://hooks.slack.com/services/AAA/BBB/CCC # Slack webhook (optional)
+  teams: https://outlook.webhook.office.com/...       # Teams webhook (optional)
+  filter: all                                          # Filter: all, drift, extra, missing (default: all)
+
+checks:
+  # Check 1: Backend API services
+  - name: Backend APIs                                 # Human-readable check name
+    repo: myorg/backend-api                            # GitHub repo with Bicep
+    branch: main                                       # Branch to test (default: main)
+    path: bicep/main.bicep                             # Path to Bicep file in that repo
+    resource_groups:                                   # List of RGs this Bicep deploys to
+      - rg-backend-api-prod
+      - rg-backend-api-dr
+
+  # Check 2: Backend databases
+  - name: Backend Data
+    repo: myorg/backend-databases
+    branch: main
+    path: bicep/databases/main.bicep
+    resource_groups:
+      - rg-backend-sql
+      - rg-backend-sql-dr
+      - rg-backend-cache
+
+  # Check 3: Shared infrastructure from different repo
+  - name: Monitoring
+    repo: myorg/shared-infrastructure
+    branch: main
+    path: bicep/monitoring/main.bicep
+    resource_groups:
+      - rg-logging
+      - rg-monitoring
+```
+
+**What each parameter means:**
+
+| Parameter | Required | Description | Example |
+| --- | --- | --- | --- |
+| `name` | Yes | Display name for the landing zone | `backend` |
+| `notifications.slack` | No | Slack webhook for notifications | `https://hooks.slack.com/...` |
+| `notifications.teams` | No | Teams webhook for notifications | `https://outlook.webhook.office.com/...` |
+| `notifications.filter` | No | Which events to send: `all`, `drift`, `extra`, `missing` | `all` |
+| `checks[].name` | Yes | Human-readable check name (what this Bicep deploys) | `Backend APIs` |
+| `checks[].repo` | Yes | GitHub repository with Bicep code | `myorg/backend-api` |
+| `checks[].branch` | No | Git branch to use (default: `main`) | `main` |
+| `checks[].path` | Yes | Path to Bicep file within repo | `bicep/main.bicep` |
+| `checks[].resource_groups` | Yes | List of Azure RGs this Bicep deploys to | `[rg-backend-api-prod, rg-backend-api-dr]` |
+
+---
+
+### Simple Single-Check Example
 
 ```yaml
 name: platform
 notifications:
   slack: https://hooks.slack.com/services/XXX/platform
+
 checks:
-  - name: Core Infrastructure
+  - name: Platform Infrastructure
     repo: myorg/platform-bicep
     path: bicep/main.bicep
     resource_groups: [rg-platform-prod, rg-platform-dr]
 ```
 
-### Complex Multi-Layer LZ
+---
+
+### Multi-Check Example
 
 ```yaml
 name: enterprise
 notifications:
   slack: https://hooks.slack.com/services/XXX/enterprise
   teams: https://outlook.webhook.office.com/...
-  filter: all
+  filter: drift                                        # Only notify on config changes, not EXTRA/MISSING
 
 checks:
-  - name: Compute
+  - name: Compute Layer
     repo: myorg/enterprise-compute
     path: bicep/compute/main.bicep
     resource_groups: [rg-compute, rg-compute-dr, rg-compute-staging]
   
-  - name: Networking
+  - name: Networking Layer
     repo: myorg/shared-networking
     path: bicep/enterprise/main.bicep
     resource_groups: [rg-network, rg-firewall, rg-security]
   
-  - name: Data
+  - name: Data Layer
     repo: myorg/enterprise-data
     path: bicep/databases/main.bicep
     resource_groups: [rg-sql, rg-sql-dr, rg-cache, rg-storage]
   
-  - name: Security
+  - name: Security Layer
     repo: myorg/enterprise-security
     path: bicep/main.bicep
     resource_groups: [rg-security, rg-identity]
@@ -229,21 +288,25 @@ checks:
 ## Key Advantages
 
 ✅ **Teams Own Configuration**
+
 - Config lives in same repo as Bicep
 - Updated in same PR as infrastructure changes
 - Versioned with infrastructure code
 
 ✅ **Central Tool Orchestrates**
+
 - Single drift-agent repo for all teams
 - Consistent workflow logic across org
 - Easy to improve tool for everyone
 
 ✅ **Flexible and Scalable**
+
 - Add new team: just add to lz-index.yml
 - Team modifies config: only touches their repo
 - Multi-layer support with parallel execution
 
 ✅ **Clean Separation**
+
 - Tool logic: drift-agent repo
 - Infrastructure config: team's Bicep repo
 - Easy to maintain and evolve
@@ -257,6 +320,7 @@ checks:
 **Cause:** Missing or misspelled LZ name in index
 
 **Fix:**
+
 ```bash
 # Verify LZ exists in index
 gh api repos/org/repo/contents/.github/lz-index.yml | jq '.landing_zones'
@@ -269,6 +333,7 @@ gh api repos/org/repo/contents/.github/lz-index.yml | jq '.landing_zones'
 **Cause:** Team's config path wrong or not created
 
 **Fix:**
+
 ```bash
 # Verify config exists in team's repo
 gh api repos/org/bicep-repo/contents/.github/drift-lz-config.yml
@@ -279,6 +344,7 @@ gh api repos/org/bicep-repo/contents/.github/drift-lz-config.yml
 **Cause:** Missing BICEP_REPO_TOKEN for private repos
 
 **Fix:**
+
 ```bash
 gh secret set BICEP_REPO_TOKEN --body 'ghp_xxxx'
 ```
@@ -288,6 +354,7 @@ gh secret set BICEP_REPO_TOKEN --body 'ghp_xxxx'
 **Cause:** Invalid YAML syntax
 
 **Fix:**
+
 ```bash
 # Validate YAML locally
 cat .github/drift-lz-config.yml | python3 -c "import sys, yaml; yaml.safe_load(sys.stdin)"
@@ -298,6 +365,7 @@ cat .github/drift-lz-config.yml | python3 -c "import sys, yaml; yaml.safe_load(s
 ## Scheduling Tips
 
 **Avoid thundering herd:**
+
 ```yaml
 # Stagger team schedules
 frontend:  '0 9 * * 1,3,5'    # Mon, Wed, Fri 9am
@@ -307,6 +375,7 @@ platform:  '0 3 * * *'       # Daily 3am
 ```
 
 **Off-peak Azure testing:**
+
 - 3am UTC: lowest API throttling
 - 6pm UTC: end of business for US teams
 - Avoid 9-5 UTC when Azure load is highest
