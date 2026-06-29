@@ -266,7 +266,7 @@ jobs:
           name: drift-reports-${{ needs.load-config.outputs.lz-name }}
           path: |
             drift_*.txt
-            reports/
+            drift-tools/reports/
           retention-days: 30
 
   consolidate-results:
