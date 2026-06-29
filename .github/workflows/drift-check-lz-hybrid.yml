@@ -13,9 +13,11 @@ jobs:
     name: Load LZ Config from External Repo
     runs-on: ubuntu-latest
     outputs:
-      lz-config: ${{ steps.config.outputs.config }}
       lz-repo: ${{ steps.load.outputs.repo }}
+      lz-config-path: ${{ steps.load.outputs.config_path }}
       lz-name: ${{ steps.load.outputs.name }}
+      lz-checks: ${{ steps.validate.outputs.checks }}
+      lz-notifications: ${{ steps.validate.outputs.notifications }}
     steps:
       - name: Checkout drift-agent (for index)
         uses: actions/checkout@v4
@@ -114,11 +116,14 @@ jobs:
           echo "config=$CONFIG_B64" >> $GITHUB_OUTPUT
 
       - name: Parse and Validate Config
+        id: validate
         run: |
           python3 << 'PYTHON_SCRIPT'
           import yaml
           import sys
           import base64
+          import json
+          import os
 
           config_b64 = "${{ steps.config.outputs.config }}"
           config_text = base64.b64decode(config_b64).decode('utf-8')
@@ -133,6 +138,14 @@ jobs:
             print(f"  Checks: {len(checks)}")
             print(f"  Notifications: {', '.join(notif.keys())}")
 
+            # Output checks array as JSON for matrix
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+              with open(github_output, 'a') as f:
+                f.write(f"checks={json.dumps(checks)}\n")
+                f.write(f"notifications={json.dumps(notif)}\n")
+              print(f"✓ Checks array written to GitHub outputs")
+
           except Exception as e:
             print(f"❌ Invalid config: {e}")
             sys.exit(1)
@@ -144,7 +157,7 @@ jobs:
     needs: load-config
     strategy:
       matrix:
-        check: ${{ fromJson(needs.load-config.outputs.lz-config).checks }}
+        check: ${{ fromJson(needs.load-config.outputs.lz-checks) }}
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -277,29 +290,39 @@ jobs:
           echo "  - MISSING (undeployed resources): $TOTAL_MISSING"
           echo "  - TOTAL ISSUES: $TOTAL_ISSUES"
 
+      - name: Checkout external repo for notifications config
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.load-config.outputs.lz-repo }}
+          path: lz-repo
+          fetch-depth: 1
+          token: ${{ secrets.BICEP_REPO_TOKEN || github.token }}
+
       - name: Send consolidated notifications
         if: always()
         env:
-          LZ_CONFIG_B64: ${{ needs.load-config.outputs.lz-config }}
+          CONFIG_PATH: ${{ needs.load-config.outputs.lz-config-path }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           PYTHONUNBUFFERED: '1'
         run: |
           # Extract notifications from config
           NOTIFICATIONS=$(python3 << 'PYTHON_SCRIPT'
-          import sys, yaml, base64, json, os
+          import sys, yaml, json, os
 
-          config_b64 = os.environ.get('LZ_CONFIG_B64', '')
-          if not config_b64:
+          config_path = os.environ.get('CONFIG_PATH', '.github/drift-lz-config.yml')
+          config_file = f"lz-repo/{config_path}"
+
+          if not os.path.exists(config_file):
             print("{}")
             sys.exit(0)
 
           try:
-            config_text = base64.b64decode(config_b64).decode('utf-8')
-            config = yaml.safe_load(config_text)
+            with open(config_file) as f:
+              config = yaml.safe_load(f)
             print(json.dumps(config.get('notifications', {})))
           except Exception as e:
-            print(f"❌ Error decoding config: {e}", file=sys.stderr)
+            print(f"❌ Error reading config: {e}", file=sys.stderr)
             print("{}")
           PYTHON_SCRIPT
           )
