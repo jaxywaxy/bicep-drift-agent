@@ -5,6 +5,10 @@ on:
     - cron: '0 * * * *'  # Every hour for testing
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   drift-check:
     uses: ./.github/workflows/drift-check-lz-hybrid.yml
