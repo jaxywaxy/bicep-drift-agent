@@ -3,6 +3,7 @@ Generate HTML reports from drift analysis results.
 """
 
 import json
+import html
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any
@@ -53,10 +54,10 @@ def generate_html_report(
 
         drift_rows += f"""
         <tr>
-            <td><strong>{drift['type']}</strong></td>
-            <td><code>{drift['name']}</code></td>
+            <td><strong>{html.escape(drift['type'])}</strong></td>
+            <td><code>{html.escape(drift['name'])}</code></td>
             <td>{type_badge}</td>
-            <td><pre>{details}</pre></td>
+            <td><pre>{html.escape(details)}</pre></td>
         </tr>
         """
 
@@ -67,11 +68,11 @@ def generate_html_report(
         <div class="recommendation-item">
             <div class="recommendation-header">
                 <span class="recommendation-number">#{i}</span>
-                <strong>{drift['name']}</strong>
+                <strong>{html.escape(drift['name'])}</strong>
                 {type_badge}
             </div>
-            <div class="recommendation-resource">{drift['type']}</div>
-            <div class="recommendation-text">{recommendation}</div>
+            <div class="recommendation-resource">{html.escape(drift['type'])}</div>
+            <div class="recommendation-text">{html.escape(recommendation)}</div>
         </div>
         """
 
@@ -83,7 +84,7 @@ def generate_html_report(
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Bicep Drift Report - {resource_group}</title>
+        <title>Bicep Drift Report - {html.escape(resource_group)}</title>
         <style>
             * {{
                 margin: 0;
@@ -502,11 +503,11 @@ def generate_html_report(
                 <div class="meta">
                     <div class="meta-item">
                         <div class="meta-label">Resource Group</div>
-                        <div class="meta-value">{resource_group}</div>
+                        <div class="meta-value">{html.escape(resource_group)}</div>
                     </div>
                     <div class="meta-item">
                         <div class="meta-label">Bicep File</div>
-                        <div class="meta-value">{bicep_file}</div>
+                        <div class="meta-value">{html.escape(bicep_file)}</div>
                     </div>
                     <div class="meta-item">
                         <div class="meta-label">Generated</div>

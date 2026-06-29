@@ -353,6 +353,22 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
     return flattened
 
 
+def _resolve_value(value: Any, parameters: dict, variables: dict) -> Any:
+    """
+    Recursively resolve parameter/variable expressions in a value.
+
+    Handles strings (expressions), dicts (nested objects), and lists.
+    """
+    if isinstance(value, str):
+        return resolve_expression(value, parameters, variables)
+    elif isinstance(value, dict):
+        return {k: _resolve_value(v, parameters, variables) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [_resolve_value(item, parameters, variables) for item in value]
+    else:
+        return value
+
+
 def _normalize_resource(resource: dict, parameters: dict, variables: dict = None) -> dict:
     """
     Normalize a single resource, resolving expression-based fields.
@@ -373,8 +389,8 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
         "name": resolve_expression(resource.get("name", ""), parameters, variables),
         "location": resolve_expression(resource.get("location"), parameters, variables) or "unknown",
         "apiVersion": resource.get("apiVersion", ""),
-        "tags": resource.get("tags") or {},
-        "sku": resource.get("sku"),
+        "tags": _resolve_value(resource.get("tags") or {}, parameters, variables),
+        "sku": _resolve_value(resource.get("sku"), parameters, variables),
         "kind": resource.get("kind"),
     }
 
