@@ -202,11 +202,11 @@ jobs:
           echo "========================================" >> "$DRIFT_FILE"
           echo "" >> "$DRIFT_FILE"
 
-          # Test each resource group
-          RG_COUNT=$(echo '${{ toJson(matrix.check.resource_groups) }}' | jq 'length')
-          echo "Testing $RG_COUNT resource group(s)..."
+          # Test each resource group (avoid subshell by using mapfile)
+          readarray -t RESOURCE_GROUPS < <(echo '${{ toJson(matrix.check.resource_groups) }}' | jq -r '.[]')
+          echo "Testing ${#RESOURCE_GROUPS[@]} resource group(s)..."
 
-          echo '${{ toJson(matrix.check.resource_groups) }}' | jq -r '.[]' | while read RG; do
+          for RG in "${RESOURCE_GROUPS[@]}"; do
             echo "Testing: $RG" | tee -a "$DRIFT_FILE"
             echo "---" >> "$DRIFT_FILE"
 
@@ -217,10 +217,20 @@ jobs:
             echo "" >> "$DRIFT_FILE"
           done
 
-          # Count issues
-          DRIFT_COUNT=$(grep -c "^\[DRIFT\]" "$DRIFT_FILE" || echo "0")
-          EXTRA_COUNT=$(grep -c "^\[EXTRA\]" "$DRIFT_FILE" || echo "0")
-          MISSING_COUNT=$(grep -c "^\[MISSING\]" "$DRIFT_FILE" || echo "0")
+          # Count issues (handle empty file gracefully)
+          if [ -f "$DRIFT_FILE" ]; then
+            DRIFT_COUNT=$(grep -c "^\[DRIFT\]" "$DRIFT_FILE" 2>/dev/null || true)
+            EXTRA_COUNT=$(grep -c "^\[EXTRA\]" "$DRIFT_FILE" 2>/dev/null || true)
+            MISSING_COUNT=$(grep -c "^\[MISSING\]" "$DRIFT_FILE" 2>/dev/null || true)
+            DRIFT_COUNT=${DRIFT_COUNT:-0}
+            EXTRA_COUNT=${EXTRA_COUNT:-0}
+            MISSING_COUNT=${MISSING_COUNT:-0}
+          else
+            DRIFT_COUNT=0
+            EXTRA_COUNT=0
+            MISSING_COUNT=0
+          fi
+
           TOTAL_ISSUES=$((DRIFT_COUNT + EXTRA_COUNT + MISSING_COUNT))
 
           echo "drift_count=$DRIFT_COUNT" >> $GITHUB_OUTPUT
