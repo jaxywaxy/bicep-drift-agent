@@ -10,10 +10,10 @@ azure-mgmt-sql==3.0.1
 azure-mgmt-cosmosdb==9.3.0
 azure-mgmt-containerregistry==15.0.0
 azure-mgmt-containerinstance==10.1.0
-azure-mgmt-containerservice==23.1.0
-azure-mgmt-apimanagement==13.1.0
-azure-mgmt-servicebus==9.2.0
-azure-mgmt-eventhub==10.2.0
+azure-mgmt-containerservice==41.3.0
+azure-mgmt-apimanagement==6.0.0b1
+azure-mgmt-servicebus==9.0.0
+azure-mgmt-eventhub==11.2.0
 azure-mgmt-applicationinsights==12.0.0
 azure-mgmt-redis==14.2.0
 azure-mgmt-cdn==13.2.0
