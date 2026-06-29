@@ -285,10 +285,20 @@ jobs:
             [ -f "$file" ] && echo "" >> consolidated_drift_report.txt
           done
 
-          # Count totals
-          TOTAL_DRIFT=$(grep -c "^\[DRIFT\]" consolidated_drift_report.txt || echo "0")
-          TOTAL_EXTRA=$(grep -c "^\[EXTRA\]" consolidated_drift_report.txt || echo "0")
-          TOTAL_MISSING=$(grep -c "^\[MISSING\]" consolidated_drift_report.txt || echo "0")
+          # Count totals (handle empty file and grep edge cases)
+          if [ -f consolidated_drift_report.txt ] && [ -s consolidated_drift_report.txt ]; then
+            TOTAL_DRIFT=$(grep -c "^\[DRIFT\]" consolidated_drift_report.txt 2>/dev/null || true)
+            TOTAL_EXTRA=$(grep -c "^\[EXTRA\]" consolidated_drift_report.txt 2>/dev/null || true)
+            TOTAL_MISSING=$(grep -c "^\[MISSING\]" consolidated_drift_report.txt 2>/dev/null || true)
+            TOTAL_DRIFT=${TOTAL_DRIFT:-0}
+            TOTAL_EXTRA=${TOTAL_EXTRA:-0}
+            TOTAL_MISSING=${TOTAL_MISSING:-0}
+          else
+            TOTAL_DRIFT=0
+            TOTAL_EXTRA=0
+            TOTAL_MISSING=0
+          fi
+
           TOTAL_ISSUES=$((TOTAL_DRIFT + TOTAL_EXTRA + TOTAL_MISSING))
 
           echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
