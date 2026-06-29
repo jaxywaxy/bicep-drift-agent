@@ -60,7 +60,7 @@ jobs:
 
           # Save for next step
           with open('/tmp/lz_index.txt', 'w') as f:
-            f.write(f"{repo}|{config_path}")
+            f.write(f"{repo}|{config_path}\n")
 
           PYTHON_SCRIPT
 
