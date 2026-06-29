@@ -172,6 +172,7 @@ jobs:
       contents: read
     env:
       AZURE_SUBSCRIPTION_ID: ${{ needs.load-config.outputs.lz-subscription-id }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - name: Azure Login (OIDC)
         uses: azure/login@v2
