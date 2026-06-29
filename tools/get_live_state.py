@@ -108,10 +108,10 @@ def _extract_resource_group_from_id(resource_id: str) -> str | None:
 
 
 def _enrich_vm_properties(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
-    """Enrich VM resources with detailed hardware properties via ComputeManagementClient.
+    """Enrich VM resources with detailed properties via ComputeManagementClient.
 
-    The generic ResourceManagementClient doesn't return detailed VM properties like
-    hardwareProfile.vmSize. This function fetches those details separately.
+    The generic ResourceManagementClient doesn't return detailed VM properties.
+    This function fetches hardware profile, storage profile (data disks), and network profile.
 
     Modifies resources list in place.
     """
@@ -124,12 +124,49 @@ def _enrich_vm_properties(credential, subscription_id: str, resource_group: str,
                     vm_name = resource["name"]
                     vm = compute_client.virtual_machines.get(resource_group, vm_name, expand="instanceView")
 
-                    # Merge detailed properties into resource
+                    if "properties" not in resource:
+                        resource["properties"] = {}
+
+                    # Hardware profile (vmSize)
                     if vm.hardware_profile:
-                        if "properties" not in resource:
-                            resource["properties"] = {}
                         resource["properties"]["hardwareProfile"] = {
                             "vmSize": vm.hardware_profile.vm_size
+                        }
+
+                    # Storage profile (data disks, OS disk)
+                    if vm.storage_profile:
+                        storage = {}
+                        if vm.storage_profile.data_disks:
+                            storage["dataDisks"] = [
+                                {
+                                    "lun": disk.lun,
+                                    "name": disk.name,
+                                    "caching": disk.caching,
+                                    "diskSizeGB": disk.disk_size_gb,
+                                    "managedDisk": {
+                                        "id": disk.managed_disk.id if disk.managed_disk else None
+                                    } if disk.managed_disk else None,
+                                }
+                                for disk in vm.storage_profile.data_disks
+                            ]
+                        if vm.storage_profile.os_disk:
+                            storage["osDisk"] = {
+                                "name": vm.storage_profile.os_disk.name,
+                                "caching": vm.storage_profile.os_disk.caching,
+                                "diskSizeGB": vm.storage_profile.os_disk.disk_size_gb,
+                                "managedDisk": {
+                                    "id": vm.storage_profile.os_disk.managed_disk.id
+                                } if vm.storage_profile.os_disk.managed_disk else None,
+                            }
+                        if storage:
+                            resource["properties"]["storageProfile"] = storage
+
+                    # Network profile (NICs)
+                    if vm.network_profile and vm.network_profile.network_interfaces:
+                        resource["properties"]["networkProfile"] = {
+                            "networkInterfaces": [
+                                {"id": nic.id} for nic in vm.network_profile.network_interfaces
+                            ]
                         }
                 except Exception:
                     # If enrichment fails for a specific VM, continue without it
