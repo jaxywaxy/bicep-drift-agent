@@ -86,7 +86,7 @@ jobs:
           repository: ${{ steps.load.outputs.repo }}
           path: lz-repo
           fetch-depth: 1
-          token: ${{ secrets.BICEP_REPO_TOKEN }}
+          token: ${{ secrets.BICEP_REPO_TOKEN || github.token }}
 
       - name: Load LZ Config from External Repo
         id: config
@@ -162,7 +162,7 @@ jobs:
           ref: ${{ matrix.check.branch || 'main' }}
           path: bicep-${{ matrix.check.name }}
           fetch-depth: 1
-          token: ${{ secrets.BICEP_REPO_TOKEN }}
+          token: ${{ secrets.BICEP_REPO_TOKEN || github.token }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
