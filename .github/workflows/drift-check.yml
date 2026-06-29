@@ -13,13 +13,13 @@ on:
   workflow_dispatch:
     inputs:
       bicep_file:
-        description: 'Path to bicep file'
-        required: true
-        default: './infra/main.bicep'
+        description: 'Path to bicep file (or use DRIFT_BICEP_FILE env var)'
+        required: false
+        default: ''
       resource_group:
-        description: 'Azure resource group'
-        required: true
-        default: 'rg-prod'
+        description: 'Azure resource group (or use DRIFT_RESOURCE_GROUP env var)'
+        required: false
+        default: ''
 
 jobs:
   drift-check:
@@ -61,11 +61,17 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_PARAMETERS: '{"environment":"prod","location":"australiaeast"}'
+          ARM_PARAMETERS: ${{ vars.DRIFT_ARM_PARAMETERS || '{"environment":"prod","location":"australiaeast"}' }}
           PYTHONUNBUFFERED: '1'
         run: |
-          BICEP_FILE="${{ github.event.inputs.bicep_file || './infra/main.bicep' }}"
-          RESOURCE_GROUP="${{ github.event.inputs.resource_group || 'rg-prod' }}"
+          # Priority: workflow input > env var > default
+          BICEP_FILE="${{ github.event.inputs.bicep_file }}"
+          BICEP_FILE="${BICEP_FILE:-$DRIFT_BICEP_FILE}"
+          BICEP_FILE="${BICEP_FILE:-./infra/main.bicep}"
+
+          RESOURCE_GROUP="${{ github.event.inputs.resource_group }}"
+          RESOURCE_GROUP="${RESOURCE_GROUP:-$DRIFT_RESOURCE_GROUP}"
+          RESOURCE_GROUP="${RESOURCE_GROUP:-rg-prod}"
 
           echo "Running drift check..."
           echo "Bicep file: $BICEP_FILE"
