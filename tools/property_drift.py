@@ -93,6 +93,15 @@ class ResourceMatcher:
     """Match Bicep resources to deployed resources using intelligent contextual matching."""
 
     @staticmethod
+    def _normalize_resource_type(resource_type: str) -> str:
+        """Normalize resource type to lowercase for consistent comparison.
+
+        Azure SDK may return different casing for the same resource type.
+        Example: Microsoft.Web/serverfarms vs Microsoft.Web/serverFarms
+        """
+        return resource_type.lower() if resource_type else ""
+
+    @staticmethod
     def _find_associated_resource(resource: Dict, bicep_resources: List[Dict], resource_type: str) -> Dict:
         """Find a related resource (e.g., find VM for a NIC by name similarity)."""
         res_name = resource.get("name", "")
@@ -146,9 +155,9 @@ class ResourceMatcher:
         matches = []
         deployed_by_type = defaultdict(list)
 
-        # Index deployed resources by type
+        # Index deployed resources by normalized type (lowercase)
         for resource in deployed_resources:
-            resource_type = resource.get("type", "")
+            resource_type = ResourceMatcher._normalize_resource_type(resource.get("type", ""))
             deployed_by_type[resource_type].append(resource)
 
         # Track used deployed resources
@@ -156,7 +165,7 @@ class ResourceMatcher:
 
         # First pass: exact matches
         for bicep_resource in bicep_resources:
-            resource_type = bicep_resource.get("type", "")
+            resource_type = ResourceMatcher._normalize_resource_type(bicep_resource.get("type", ""))
             bicep_name = bicep_resource.get("name", "")
 
             candidates = [r for r in deployed_by_type.get(resource_type, []) if id(r) not in used_deployed]
@@ -189,7 +198,8 @@ class ResourceMatcher:
         bicep_by_type = defaultdict(list)
         for bicep_resource in bicep_resources:
             if id(bicep_resource) not in {id(b) for b, _, _ in matches}:
-                bicep_by_type[bicep_resource.get("type", "")].append(bicep_resource)
+                resource_type = ResourceMatcher._normalize_resource_type(bicep_resource.get("type", ""))
+                bicep_by_type[resource_type].append(bicep_resource)
 
         for resource_type, bicep_res_list in bicep_by_type.items():
             candidates = [r for r in deployed_by_type.get(resource_type, []) if id(r) not in used_deployed]
