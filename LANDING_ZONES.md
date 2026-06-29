@@ -1,578 +1,320 @@
-# Landing Zone Drift Testing
+# Landing Zone Drift Testing (Hybrid Model)
 
-Enterprise-scale drift detection for Azure Landing Zones with multiple repos, multiple resource groups, and team-based notifications.
+Enterprise drift detection where **teams own their LZ configuration** in their Bicep repository, while the **central tool orchestrates** drift checks.
 
 ## Architecture
 
-One **Landing Zone** = One **Team** with multiple **infrastructure layers**
+```
+bicep-drift-agent/  (Central drift detection tool)
+├── .github/
+│   ├── lz-index.yml                    ← Maps LZs to external repos
+│   └── workflows/
+│       ├── drift-check-lz-hybrid.yml   ← Orchestrator workflow
+│       ├── drift-lz-frontend.yml       ← Team 1 trigger
+│       ├── drift-lz-backend.yml        ← Team 2 trigger
+│       └── drift-lz-database.yml       ← Team 3 trigger
+└── tools/
+
+myorg/frontend-compute/  (Team's Bicep repo)
+├── bicep/
+│   ├── compute/
+│   │   └── main.bicep
+│   └── data/
+│       └── main.bicep
+└── .github/
+    └── drift-lz-config.yml             ← Frontend LZ config (owned by team)
+
+myorg/backend-api/  (Another team's Bicep repo)
+├── bicep/
+│   └── main.bicep
+└── .github/
+    └── drift-lz-config.yml             ← Backend LZ config (owned by team)
+```
+
+## How It Works
+
+### 1. Index File (drift-agent repo)
+
+```yaml
+# bicep-drift-agent/.github/lz-index.yml
+landing_zones:
+  frontend:
+    repo: myorg/frontend-compute
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 9 * * 1,3,5'
+    workflow: drift-lz-frontend.yml
+  
+  backend:
+    repo: myorg/backend-api
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 14 * * 2,4'
+    workflow: drift-lz-backend.yml
+```
+
+### 2. LZ Config File (in each Bicep repo)
+
+```yaml
+# myorg/frontend-compute/.github/drift-lz-config.yml
+name: frontend
+notifications:
+  slack: https://hooks.slack.com/services/XXX/frontend
+  filter: all
+
+checks:
+  - name: Compute Layer
+    repo: myorg/frontend-compute
+    branch: main
+    path: bicep/compute/main.bicep
+    resource_groups: [rg-frontend-compute, rg-frontend-compute-dr]
+  
+  - name: Data Layer
+    repo: myorg/frontend-compute
+    branch: main
+    path: bicep/data/main.bicep
+    resource_groups: [rg-frontend-data, rg-frontend-backup]
+```
+
+### 3. Execution Flow
 
 ```
-Frontend Landing Zone (Team A)
-├── Layer 1: Compute (Repo A, Bicep File X)
-│   ├── RG: rg-frontend-compute
-│   ├── RG: rg-frontend-compute-dr
-│   └── RG: rg-frontend-compute-staging
-│
-├── Layer 2: Networking (Repo B, Bicep File Y)
-│   ├── RG: rg-frontend-network
-│   ├── RG: rg-frontend-vwan
-│   └── RG: rg-frontend-security
-│
-├── Layer 3: Data (Repo A, Bicep File Z)
-│   ├── RG: rg-frontend-data
-│   ├── RG: rg-frontend-cache
-│   └── RG: rg-frontend-backup
-│
-└── Consolidated Notification
-    └── #frontend-lz-drift (Slack) + Teams (optional)
+1. Workflow triggers (e.g., drift-lz-frontend.yml)
+   ↓
+2. Hybrid orchestrator reads lz-index.yml in drift-agent
+   "frontend" → fetch from "myorg/frontend-compute"
+   ↓
+3. Clones external repo, reads .github/drift-lz-config.yml
+   ↓
+4. Parses config: 2 layers, 4 resource groups
+   ↓
+5. Runs drift checks in parallel
+   (clones each Bicep repo mentioned in checks)
+   ↓
+6. Consolidates results from all layers
+   ↓
+7. Sends single notification based on team's config
 ```
 
 ---
 
 ## Quick Setup
 
-### Step 1: Define Your Landing Zones
+### Step 1: Add LZ to Index
 
-```bash
-gh variable set DRIFT_LANDING_ZONES --body '{
-  "frontend": {
-    "notifications": {
-      "slack": "https://hooks.slack.com/services/T00/B00/XX",
-      "filter": "all"
-    },
-    "checks": [
-      {
-        "name": "Compute Layer",
-        "repo": "myorg/frontend-compute",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": [
-          "rg-frontend-compute",
-          "rg-frontend-compute-dr"
-        ]
-      },
-      {
-        "name": "Network Layer",
-        "repo": "myorg/shared-networking",
-        "branch": "main",
-        "path": "bicep/frontend/main.bicep",
-        "resource_groups": [
-          "rg-frontend-network",
-          "rg-frontend-vwan"
-        ]
-      }
-    ]
-  }
-}'
+Edit `.github/lz-index.yml` in drift-agent repo:
+
+```yaml
+landing_zones:
+  myteam:
+    repo: myorg/my-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 9 * * 1,3,5'
+    workflow: drift-lz-myteam.yml
 ```
 
-### Step 2: Trigger Workflow
+### Step 2: Team Creates Config in Their Repo
 
-```bash
-gh workflow run drift-lz-frontend.yml
+```yaml
+# myorg/my-bicep/.github/drift-lz-config.yml
+name: myteam
+notifications:
+  slack: https://hooks.slack.com/services/XXX/myteam
+  filter: all
+
+checks:
+  - name: Layer Name
+    repo: myorg/my-bicep
+    branch: main
+    path: bicep/main.bicep
+    resource_groups: [rg-prod, rg-dr]
 ```
 
-**Result:** 
-- Tests 2 repos × 2-3 RGs each = 4-6 drift checks
-- Consolidates all results
-- Sends 1 notification to #frontend-lz-drift
+### Step 3: Create Team Workflow
+
+Copy `drift-lz-frontend.yml`, update the schedule:
+
+```yaml
+name: My Team Landing Zone Drift
+
+on:
+  schedule:
+    - cron: '0 9 * * 1,3,5'
+  workflow_dispatch:
+
+jobs:
+  drift:
+    uses: ./.github/workflows/drift-check-lz-hybrid.yml
+    with:
+      landing_zone: myteam
+    secrets: inherit
+```
+
+### Step 4: Test
+
+```bash
+gh workflow run drift-lz-myteam.yml
+```
 
 ---
 
-## Configuration
+## LZ Config Reference
 
-### Full Landing Zone Schema
+```yaml
+name: team-name                              # Required: display name
+notifications:
+  slack: https://hooks.slack.com/...       # Optional: Slack webhook
+  teams: https://outlook.webhook.office.com/... # Optional: Teams webhook
+  filter: all|drift|extra|missing          # Optional: filter events (default: all)
 
-```json
-{
-  "landing_zone_name": {
-    "notifications": {
-      "slack": "https://hooks.slack.com/services/...",
-      "teams": "https://outlook.webhook.office.com/...",
-      "filter": "all|drift|extra|missing|drift,extra"
-    },
-    "checks": [
-      {
-        "name": "Layer Name",
-        "repo": "org/repo-name",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": [
-          "rg-prod",
-          "rg-dr",
-          "rg-staging"
-        ]
-      }
-    ]
-  }
-}
+checks:
+  - name: Layer Display Name               # Required: human-readable name
+    repo: org/repo-name                    # Required: GitHub repo with Bicep
+    branch: main                           # Optional: branch (default: main)
+    path: bicep/main.bicep                 # Required: path to Bicep file
+    resource_groups:                       # Required: list of RGs to test
+      - rg-prod
+      - rg-dr
+      - rg-staging
 ```
-
-### Field Descriptions
-
-| Field | Required | Description | Example |
-|-------|----------|-------------|---------|
-| `name` | ✅ | Display name for this infrastructure layer | "Compute Layer", "Database" |
-| `repo` | ✅ | GitHub repo containing Bicep | "myorg/frontend-compute" |
-| `branch` | ❌ | Git branch (default: main) | "main", "develop", "v1.0" |
-| `path` | ✅ | Path to Bicep file in repo | "bicep/main.bicep" |
-| `resource_groups` | ✅ | List of RGs to test against | ["rg-prod", "rg-dr"] |
-
-### Notification Filters
-
-| Filter | Events |
-|--------|--------|
-| `all` | DRIFT + EXTRA + MISSING |
-| `drift` | Configuration changes only |
-| `extra` | Orphaned resources only |
-| `missing` | Undeployed resources only |
-| `drift,extra` | Config changes + orphaned |
-| `extra,missing` | Orphaned + undeployed |
 
 ---
 
 ## Examples
 
-### Example 1: Simple Landing Zone (Single Layer)
-
-```json
-{
-  "platform": {
-    "notifications": {
-      "slack": "https://hooks.slack.com/services/XXX/platform"
-    },
-    "checks": [
-      {
-        "name": "Core Infrastructure",
-        "repo": "myorg/platform-bicep",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": ["rg-platform-prod", "rg-platform-dr"]
-      }
-    ]
-  }
-}
-```
-
-### Example 2: Complex Landing Zone (Multi-Layer)
-
-```json
-{
-  "enterprise": {
-    "notifications": {
-      "slack": "https://hooks.slack.com/services/XXX/enterprise",
-      "teams": "https://outlook.webhook.office.com/...",
-      "filter": "all"
-    },
-    "checks": [
-      {
-        "name": "Compute",
-        "repo": "myorg/enterprise-compute",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": [
-          "rg-enterprise-aks",
-          "rg-enterprise-aks-dr",
-          "rg-enterprise-vms"
-        ]
-      },
-      {
-        "name": "Networking",
-        "repo": "myorg/shared-networking",
-        "branch": "main",
-        "path": "bicep/enterprise/main.bicep",
-        "resource_groups": [
-          "rg-enterprise-hub",
-          "rg-enterprise-firewall",
-          "rg-enterprise-security"
-        ]
-      },
-      {
-        "name": "Data",
-        "repo": "myorg/enterprise-data",
-        "branch": "main",
-        "path": "bicep/databases/main.bicep",
-        "resource_groups": [
-          "rg-enterprise-sql",
-          "rg-enterprise-sql-dr",
-          "rg-enterprise-cache",
-          "rg-enterprise-storage"
-        ]
-      },
-      {
-        "name": "Security",
-        "repo": "myorg/enterprise-security",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": [
-          "rg-enterprise-security",
-          "rg-enterprise-identity"
-        ]
-      }
-    ]
-  }
-}
-```
-
-### Example 3: Multi-Team Enterprise Setup
-
-```json
-{
-  "frontend": {
-    "notifications": {
-      "slack": "https://hooks.slack.com/services/XXX/frontend",
-      "filter": "all"
-    },
-    "checks": [
-      {
-        "name": "Web Tier",
-        "repo": "myorg/frontend-web",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": ["rg-frontend-web", "rg-frontend-web-dr"]
-      },
-      {
-        "name": "API Tier",
-        "repo": "myorg/frontend-api",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": ["rg-frontend-api"]
-      }
-    ]
-  },
-  "backend": {
-    "notifications": {
-      "teams": "https://outlook.webhook.office.com/...",
-      "filter": "extra"
-    },
-    "checks": [
-      {
-        "name": "Services",
-        "repo": "myorg/backend-services",
-        "branch": "main",
-        "path": "bicep/main.bicep",
-        "resource_groups": ["rg-backend-svc", "rg-backend-svc-dr"]
-      }
-    ]
-  },
-  "data": {
-    "notifications": {
-      "slack": "https://hooks.slack.com/services/XXX/data",
-      "filter": "missing"
-    },
-    "checks": [
-      {
-        "name": "Databases",
-        "repo": "myorg/data-bicep",
-        "branch": "main",
-        "path": "bicep/databases/main.bicep",
-        "resource_groups": ["rg-data-sql", "rg-data-sql-dr", "rg-data-cache"]
-      }
-    ]
-  }
-}
-```
-
----
-
-## Setting Up Landing Zones
-
-### Step 1: Plan Your Landing Zones
-
-Map your infrastructure to landing zones:
-
-```
-Organization Structure         Landing Zones
-────────────────────────────  ─────────────────
-Frontend Team
-  ├── Web Layer                → frontend
-  ├── API Layer
-  └── Cache Layer
-
-Backend Team
-  ├── Services                 → backend
-  └── Integration
-
-Platform Team
-  ├── Networking               → platform
-  ├── Security
-  └── Shared Services
-
-Data Team
-  ├── Databases                → data
-  └── Warehousing
-```
-
-### Step 2: Create Landing Zone Configuration
-
-For each team/LZ, list the infrastructure layers:
-
-```bash
-# Frontend LZ = 3 layers across 2 repos
-{
-  "frontend": {
-    "checks": [
-      { "name": "Web", "repo": "frontend-web", ... },
-      { "name": "API", "repo": "frontend-api", ... },
-      { "name": "Cache", "repo": "frontend-web", ... }
-    ]
-  }
-}
-```
-
-### Step 3: Set Repository Variable
-
-```bash
-gh variable set DRIFT_LANDING_ZONES --body '{...your LZ config...}'
-```
-
-**Tip:** Use jq to validate JSON before setting:
-```bash
-echo '{...your config...}' | jq . && gh variable set DRIFT_LANDING_ZONES --body '{...}'
-```
-
-### Step 4: Create Team Workflow
-
-Copy one of the example workflows:
-
-```bash
-# For Frontend team
-cp .github/workflows/drift-lz-frontend.yml.example .github/workflows/drift-lz-frontend.yml
-
-# For Backend team
-cp .github/workflows/drift-lz-backend.yml.example .github/workflows/drift-lz-backend.yml
-```
-
-Edit the schedule to match team needs:
+### Simple Single-Layer LZ
 
 ```yaml
-on:
-  schedule:
-    - cron: '0 9 * * 1,3,5'  # Mon, Wed, Fri at 9am
+name: platform
+notifications:
+  slack: https://hooks.slack.com/services/XXX/platform
+checks:
+  - name: Core Infrastructure
+    repo: myorg/platform-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-platform-prod, rg-platform-dr]
 ```
 
-### Step 5: Test
-
-```bash
-# Manual trigger
-gh workflow run drift-lz-frontend.yml
-
-# Monitor
-gh run list --workflow drift-lz-frontend.yml
-```
-
----
-
-## Workflow Execution
-
-### What Happens
-
-1. **Parse Configuration**
-   - Reads DRIFT_LANDING_ZONES variable
-   - Extracts checks for requested LZ
-   - Validates configuration
-
-2. **Parallel Drift Checks**
-   - Each layer tested in parallel
-   - Each RG tested against its Bicep
-   - Separate report per layer
-
-3. **Consolidate Results**
-   - Combine all layer reports
-   - Calculate totals
-   - Generate summary
-
-4. **Send Notification**
-   - Apply team's filter (all/drift/extra/missing)
-   - Apply custom template
-   - Send to Slack/Teams
-
-5. **Publish Summary**
-   - Post to GitHub Actions summary
-   - Upload full reports as artifact
-   - Retain for 30 days
-
----
-
-## Scheduling
-
-### Recommended Schedules
+### Complex Multi-Layer LZ
 
 ```yaml
-# Critical infrastructure (daily)
-- cron: '0 6 * * *'
+name: enterprise
+notifications:
+  slack: https://hooks.slack.com/services/XXX/enterprise
+  teams: https://outlook.webhook.office.com/...
+  filter: all
 
-# Important infrastructure (3x per week)
-- cron: '0 9 * * 1,3,5'
-
-# Standard infrastructure (2x per week)
-- cron: '0 14 * * 2,4'
-
-# Non-critical infrastructure (weekly)
-- cron: '0 18 * * 0'
-
-# Off-peak times
-- cron: '0 3 * * *'   # 3am UTC
-- cron: '0 23 * * *'  # 11pm UTC
-```
-
-**Tip:** Stagger team schedules to avoid Azure throttling:
-
-```
-Frontend: Mon/Wed/Fri 9am
-Backend:  Tue/Thu 2pm
-Data:     Daily 6pm
-Platform: Daily 3am
+checks:
+  - name: Compute
+    repo: myorg/enterprise-compute
+    path: bicep/compute/main.bicep
+    resource_groups: [rg-compute, rg-compute-dr, rg-compute-staging]
+  
+  - name: Networking
+    repo: myorg/shared-networking
+    path: bicep/enterprise/main.bicep
+    resource_groups: [rg-network, rg-firewall, rg-security]
+  
+  - name: Data
+    repo: myorg/enterprise-data
+    path: bicep/databases/main.bicep
+    resource_groups: [rg-sql, rg-sql-dr, rg-cache, rg-storage]
+  
+  - name: Security
+    repo: myorg/enterprise-security
+    path: bicep/main.bicep
+    resource_groups: [rg-security, rg-identity]
 ```
 
 ---
 
-## Multi-Repo Access
+## Key Advantages
 
-### Same Organization, Private Repos
-✅ **Automatic** - GITHUB_TOKEN has access
+✅ **Teams Own Configuration**
+- Config lives in same repo as Bicep
+- Updated in same PR as infrastructure changes
+- Versioned with infrastructure code
 
-### Different Organization, Private Repos
-⚠️ **Requires** Personal Access Token (PAT)
+✅ **Central Tool Orchestrates**
+- Single drift-agent repo for all teams
+- Consistent workflow logic across org
+- Easy to improve tool for everyone
 
-```bash
-# 1. Create PAT in GitHub settings (scope: repo)
-# 2. Add as secret
-gh secret set BICEP_REPO_TOKEN --body 'ghp_xxxx'
+✅ **Flexible and Scalable**
+- Add new team: just add to lz-index.yml
+- Team modifies config: only touches their repo
+- Multi-layer support with parallel execution
 
-# 3. Workflow automatically uses it for cross-org private access
-```
-
-See [CROSS_REPO_SETUP.md](CROSS_REPO_SETUP.md) for details.
-
----
-
-## Notifications Per Landing Zone
-
-Each LZ gets **one consolidated notification** with:
-
-- Summary table (DRIFT, EXTRA, MISSING counts)
-- Details from all layers
-- Filtered by team's notification config
-- Routed to team's Slack/Teams channel
-
-Example notification:
-
-```
-🏗️ Frontend Landing Zone Drift Check
-
-⚠️ 5 Issues Detected
-
-| Type | Count |
-|------|-------|
-| Configuration Changes (DRIFT) | 2 |
-| Orphaned Resources (EXTRA) | 2 |
-| Undeployed Resources (MISSING) | 1 |
-| TOTAL | 5 |
-
-Layers Checked:
-  ✓ Compute Layer (2 RGs)
-  ✓ Network Layer (2 RGs)
-  ⚠ Data Layer (3 RGs) - 3 issues
-
-View Report: [GitHub Actions Run]
-```
+✅ **Clean Separation**
+- Tool logic: drift-agent repo
+- Infrastructure config: team's Bicep repo
+- Easy to maintain and evolve
 
 ---
 
 ## Troubleshooting
 
-### "Landing Zone not found"
+### "Landing Zone not found in lz-index.yml"
 
-**Cause:** Typo in workflow input or DRIFT_LANDING_ZONES variable
+**Cause:** Missing or misspelled LZ name in index
 
 **Fix:**
 ```bash
-# Check variable is set
-gh variable get DRIFT_LANDING_ZONES
+# Verify LZ exists in index
+gh api repos/org/repo/contents/.github/lz-index.yml | jq '.landing_zones'
 
-# Verify LZ name exactly
-# (YAML is case-sensitive)
+# Check exact spelling
 ```
 
-### "Repository not found" on private cross-org repo
+### "Config file not found"
 
-**Cause:** Missing BICEP_REPO_TOKEN
+**Cause:** Team's config path wrong or not created
 
 **Fix:**
 ```bash
-# Create PAT and set secret
+# Verify config exists in team's repo
+gh api repos/org/bicep-repo/contents/.github/drift-lz-config.yml
+```
+
+### "Repository not found" on cross-org repo
+
+**Cause:** Missing BICEP_REPO_TOKEN for private repos
+
+**Fix:**
+```bash
 gh secret set BICEP_REPO_TOKEN --body 'ghp_xxxx'
 ```
 
-### "No drift detected" but you know there's drift
+### Config parsing fails
 
-**Cause:** Resource group mismatch or Bicep path wrong
-
-**Fix:**
-```bash
-# Verify resource group exists
-az group show --name rg-prod
-
-# Verify Bicep file path in repo
-gh api repos/myorg/repo/contents/bicep/main.bicep
-```
-
-### Workflow runs but doesn't send notifications
-
-**Cause:** Notification config missing or malformed
+**Cause:** Invalid YAML syntax
 
 **Fix:**
 ```bash
-# Validate JSON in DRIFT_LANDING_ZONES
-gh variable get DRIFT_LANDING_ZONES | jq .
-
-# Verify Slack/Teams URL format
-# Slack: https://hooks.slack.com/services/...
-# Teams: https://outlook.webhook.office.com/...
+# Validate YAML locally
+cat .github/drift-lz-config.yml | python3 -c "import sys, yaml; yaml.safe_load(sys.stdin)"
 ```
 
 ---
 
-## Performance
+## Scheduling Tips
 
-### Expected Runtime
+**Avoid thundering herd:**
+```yaml
+# Stagger team schedules
+frontend:  '0 9 * * 1,3,5'    # Mon, Wed, Fri 9am
+backend:   '0 14 * * 2,4'    # Tue, Thu 2pm
+database:  '0 18 * * *'      # Daily 6pm
+platform:  '0 3 * * *'       # Daily 3am
+```
 
-| Layers | RGs | Est. Time |
-|--------|-----|-----------|
-| 1 | 2 | 2-3 min |
-| 2 | 4 | 3-4 min |
-| 3 | 6 | 4-5 min |
-| 4 | 8+ | 5-7 min |
-
-Parallel execution means layers run simultaneously, not serially.
-
-### Cost Optimization
-
-- ✅ Shallow clone (fetch-depth: 1) = ~80% faster checkout
-- ✅ Parallel layer testing = better resource utilization
-- ✅ Off-peak scheduling = lower Azure throttle risk
-
----
-
-## Best Practices
-
-✅ **One LZ per team** - Clear ownership and notifications
-
-✅ **Related layers in same LZ** - Easier to understand drift impact
-
-✅ **Separate repos for independent layers** - Enables team autonomy
-
-✅ **Staggered schedules** - Avoid Azure API throttling
-
-✅ **Regular manual runs** - Test configuration before scheduling
-
-✅ **Monitor trends** - Weekly reports help identify patterns
+**Off-peak Azure testing:**
+- 3am UTC: lowest API throttling
+- 6pm UTC: end of business for US teams
+- Avoid 9-5 UTC when Azure load is highest
 
 ---
 
 ## See Also
 
-- [CROSS_REPO_SETUP.md](CROSS_REPO_SETUP.md) - Multi-repo testing guide
-- [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) - Notification configuration
-- [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) - General setup
+- [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) — General setup
+- [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) — Notification configuration
+- [CROSS_REPO_SETUP.md](CROSS_REPO_SETUP.md) — Multi-repo testing guide

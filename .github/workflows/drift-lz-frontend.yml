@@ -7,7 +7,7 @@ on:
 
 jobs:
   drift-frontend:
-    uses: ./.github/workflows/drift-check-lz-reusable.yml@main
+    uses: ./.github/workflows/drift-check-lz-hybrid.yml
     with:
       landing_zone: frontend
     secrets: inherit

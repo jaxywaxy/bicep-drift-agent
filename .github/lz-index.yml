@@ -1,0 +1,31 @@
+# Landing Zone Index
+#
+# This file maps Landing Zones to their configuration files in external Bicep repos.
+# Each team manages their own LZ config in their Bicep repository.
+#
+# Format:
+#   landing_zones:
+#     lz-name:
+#       repo: org/repo-name                    # GitHub repo with Bicep
+#       config_path: .github/drift-lz-config.yml  # Path to LZ config in that repo
+#       schedule: 'cron expression'           # When to run drift checks
+#       workflow: drift-lz-{name}.yml         # Workflow file name
+
+landing_zones:
+  frontend:
+    repo: myorg/frontend-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 9 * * 1,3,5'
+    workflow: drift-lz-frontend.yml
+
+  backend:
+    repo: myorg/backend-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 14 * * 2,4'
+    workflow: drift-lz-backend.yml
+
+  database:
+    repo: myorg/database-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 18 * * *'
+    workflow: drift-lz-database.yml
