@@ -311,6 +311,8 @@ class PropertyComparator:
         # OS disk properties (immutable post-deployment)
         "properties.storageprofile.osdisk.createoption",
         "properties.storageprofile.osdisk.manageddisk.storageaccounttype",
+        # Network interfaces (Bicep uses expressions, Azure returns resolved IDs - functionally equivalent)
+        "properties.networkprofile.networkinterfaces",
     }
 
     @staticmethod
@@ -333,6 +335,10 @@ class PropertyComparator:
         # Check for modified properties
         for key, bicep_value in bicep_flat.items():
             if key in deployed_flat:
+                # Skip write-only properties (Azure doesn't return these in API responses)
+                if PropertyComparator._is_write_only_property(key):
+                    continue
+
                 deployed_value = deployed_flat[key]
                 if bicep_value != deployed_value:
                     severity = PropertyComparator._get_severity(key)
