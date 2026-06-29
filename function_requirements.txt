@@ -1,8 +1,0 @@
-azure-functions>=1.17.0
-anthropic>=0.25.0
-azure-identity>=1.15.0
-azure-mgmt-resource>=23.0.0
-azure-mgmt-compute>=30.0.0
-azure-mgmt-network>=25.0.0
-azure-mgmt-storage>=21.0.0
-python-dotenv>=1.0.0
