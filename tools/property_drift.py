@@ -173,6 +173,17 @@ class ResourceMatcher:
             if exact_match:
                 matches.append((bicep_resource, exact_match, 0.95))
                 used_deployed.add(id(exact_match))
+            else:
+                # Try fuzzy matching for unresolvable names like sttestdrift[uniqueString(...)]
+                if "[" in bicep_name and "]" in bicep_name:
+                    # Extract prefix before the bracket
+                    prefix = bicep_name.split("[")[0]
+                    if prefix:  # Only if there's a meaningful prefix
+                        prefix_matches = [d for d in candidates if d.get("name", "").startswith(prefix)]
+                        if len(prefix_matches) == 1:
+                            # Exactly one match found via prefix
+                            matches.append((bicep_resource, prefix_matches[0], 0.85))
+                            used_deployed.add(id(prefix_matches[0]))
 
         # Second pass: contextual + fuzzy matching for remaining resources
         bicep_by_type = defaultdict(list)
