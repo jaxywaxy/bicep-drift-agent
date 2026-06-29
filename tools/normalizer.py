@@ -215,13 +215,13 @@ def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     """
     call = call.strip()
 
-    # uniqueString() — can't resolve, use a placeholder
+    # uniqueString() — can't resolve at compile time, leave as expression for smart matching
     if call.startswith("uniqueString"):
-        return "unique-string"
+        return f"[{call}]"
 
-    # copyIndex() — can't resolve, use a placeholder
+    # copyIndex() — can't resolve, leave as expression for smart matching
     if call.startswith("copyIndex"):
-        return "copy-index"
+        return f"[{call}]"
 
     # substring() — try to extract at least the string part
     if call.startswith("substring"):
