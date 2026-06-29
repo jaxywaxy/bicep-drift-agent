@@ -14,6 +14,8 @@ from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.storage import StorageManagementClient
 from azure.mgmt.web import WebSiteManagementClient
 from azure.mgmt.keyvault import KeyVaultManagementClient
+from azure.mgmt.logic import LogicManagementClient
+from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 
 
 def get_live_state(
@@ -93,6 +95,8 @@ def get_live_state(
         _enrich_storage_accounts(credential, sub_id, resource_group, resources)
         _enrich_app_services(credential, sub_id, resource_group, resources)
         _enrich_key_vaults(credential, sub_id, resource_group, resources)
+        _enrich_logic_apps(credential, sub_id, resource_group, resources)
+        _enrich_log_analytics(credential, sub_id, resource_group, resources)
         _enrich_vm_properties(credential, sub_id, resource_group, resources)
 
     return resources
@@ -226,6 +230,62 @@ def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, re
                             "defaultAction": acls.get("defaultAction"),
                             "bypass": acls.get("bypass"),
                         }
+            except Exception:
+                pass
+
+
+def _enrich_logic_apps(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
+    """Enrich Logic App properties using LogicManagementClient."""
+    try:
+        logic_client = LogicManagementClient(credential, subscription_id)
+    except Exception:
+        return
+
+    for resource in resources:
+        if resource["type"] == "Microsoft.Logic/workflows":
+            workflow_name = resource["name"]
+            try:
+                workflow = logic_client.workflows.get(resource_group, workflow_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+
+                data = workflow._data if hasattr(workflow, "_data") else workflow
+                workflow_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
+                if workflow_props:
+                    resource["properties"].update({
+                        "state": workflow_props.get("state"),
+                        "definition": workflow_props.get("definition"),
+                    })
+            except Exception:
+                pass
+
+
+def _enrich_log_analytics(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
+    """Enrich Log Analytics Workspace properties using LogAnalyticsManagementClient."""
+    try:
+        analytics_client = LogAnalyticsManagementClient(credential, subscription_id)
+    except Exception:
+        return
+
+    for resource in resources:
+        if resource["type"] == "Microsoft.OperationalInsights/workspaces":
+            workspace_name = resource["name"]
+            try:
+                workspace = analytics_client.workspaces.get(resource_group, workspace_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+
+                data = workspace._data if hasattr(workspace, "_data") else workspace
+                workspace_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
+                if workspace_props:
+                    resource["properties"].update({
+                        "sku": workspace_props.get("sku"),
+                        "retentionInDays": workspace_props.get("retentionInDays"),
+                        "publicNetworkAccessForIngestion": workspace_props.get("publicNetworkAccessForIngestion"),
+                        "publicNetworkAccessForQuery": workspace_props.get("publicNetworkAccessForQuery"),
+                    })
             except Exception:
                 pass
 
