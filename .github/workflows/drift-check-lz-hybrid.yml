@@ -13,7 +13,7 @@ jobs:
     name: Load LZ Config from External Repo
     runs-on: ubuntu-latest
     outputs:
-      lz-config: ${{ steps.load.outputs.config }}
+      lz-config: ${{ steps.config.outputs.config }}
       lz-repo: ${{ steps.load.outputs.repo }}
       lz-name: ${{ steps.load.outputs.name }}
     steps:
