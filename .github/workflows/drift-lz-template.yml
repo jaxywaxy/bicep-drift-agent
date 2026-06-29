@@ -5,6 +5,9 @@
 
 name: Landing Zone Drift Check - TEMPLATE (customize me)
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
 on:
   schedule:
     - cron: '0 9 * * *'  # Example: daily at 9am UTC - change as needed
