@@ -40,29 +40,43 @@ jobs:
           import sys
           import os
 
-          LZ = '${{ inputs.landing_zone }}'
+          try:
+            LZ = '${{ inputs.landing_zone }}'
 
-          # Load index
-          with open('.github/lz-index.yml') as f:
-            index = yaml.safe_load(f)
+            # Load index
+            with open('.github/lz-index.yml') as f:
+              index = yaml.safe_load(f)
 
-          if LZ not in index.get('landing_zones', {}):
-            print(f"❌ Landing Zone '{LZ}' not found in lz-index.yml")
+            if LZ not in index.get('landing_zones', {}):
+              print(f"❌ Landing Zone '{LZ}' not found in lz-index.yml")
+              sys.exit(1)
+
+            lz_index = index['landing_zones'][LZ]
+            repo = lz_index['repo']
+            config_path = lz_index['config_path']
+
+            print(f"✓ Found Landing Zone: {LZ}")
+            print(f"  Repo: {repo}")
+            print(f"  Config: {config_path}")
+
+            # Write directly to GitHub Actions output
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if not github_output:
+              print("❌ GITHUB_OUTPUT env var not set")
+              sys.exit(1)
+
+            with open(github_output, 'a') as f:
+              f.write(f"repo={repo}\n")
+              f.write(f"config_path={config_path}\n")
+              f.write(f"name={LZ}\n")
+
+            print(f"✓ Outputs written to $GITHUB_OUTPUT")
+
+          except Exception as e:
+            print(f"❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
             sys.exit(1)
-
-          lz_index = index['landing_zones'][LZ]
-          repo = lz_index['repo']
-          config_path = lz_index['config_path']
-
-          print(f"✓ Found Landing Zone: {LZ}")
-          print(f"  Repo: {repo}")
-          print(f"  Config: {config_path}")
-
-          # Write directly to GitHub Actions output
-          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
-            f.write(f"repo={repo}\n")
-            f.write(f"config_path={config_path}\n")
-            f.write(f"name={LZ}\n")
 
           PYTHON_SCRIPT
 
