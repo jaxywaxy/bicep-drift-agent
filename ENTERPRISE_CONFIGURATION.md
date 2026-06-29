@@ -1,195 +1,364 @@
 # Enterprise Configuration Guide
 
-## GitHub Actions Drift Detection Workflow
+For enterprise deployments with **multiple teams**, **multiple infrastructure layers**, and **multiple resource groups per team**.
 
-The drift detection workflow is fully configurable for enterprise deployments without modifying code.
+## Quick Answer
 
-### Configuration Priority
+**Where is the configuration?**
 
-Configurations are applied in this order (first match wins):
-
-1. **Workflow Dispatch Inputs** (manual override via GitHub UI)
-2. **Repository Variables** (org-wide settings)
-3. **Default Values** (built-in fallbacks)
+- **Index file** (what repo to test, owned by drift-agent) → `.github/lz-index.yml`
+- **Team config** (which Bicep files + RGs to test, owned by each team) → `.github/drift-lz-config.yml` in their Bicep repo
 
 ---
 
-## Repository Variables
+## Architecture
 
-Set these in GitHub → Settings → Secrets and variables → Variables:
-
-### `DRIFT_BICEP_FILE`
-Path to the Bicep template to test against.
-
-**Example:**
 ```
-../drift-test-resources/bicep/main.bicep
-./infra/main.bicep
-../enterprise-bicep/prod/main.bicep
-```
+bicep-drift-agent/ (central tool)
+├── .github/
+│   ├── lz-index.yml                    ← Maps landing zones to external repos
+│   └── workflows/
+│       ├── drift-check-lz-hybrid.yml   ← Orchestrator (reusable)
+│       ├── drift-lz-template.yml       ← Template to copy for each team
+│       ├── drift-lz-frontend.yml       ← Copy of template (one per team)
+│       ├── drift-lz-backend.yml        ← Copy of template (one per team)
+│       └── drift-lz-database.yml       ← Copy of template (one per team)
 
-**Default if not set:** `./infra/main.bicep`
+myorg/frontend-bicep/ (team A's Bicep repo)
+├── bicep/
+│   └── main.bicep
+└── .github/
+    └── drift-lz-config.yml             ← Team A owns this
 
----
-
-### `DRIFT_RESOURCE_GROUP`
-Azure resource group to test drift against.
-
-**Example:**
-```
-rg-drift-test
-rg-prod
-rg-enterprise-validate
-```
-
-**Default if not set:** `rg-prod`
-
----
-
-### `DRIFT_ARM_PARAMETERS`
-ARM template parameters as JSON (location, environment, etc).
-
-**Example:**
-```json
-{"environment":"prod","location":"australiaeast"}
-```
-
-```json
-{"environment":"test","location":"eastus"}
-```
-
-**Default if not set:**
-```json
-{"environment":"prod","location":"australiaeast"}
+myorg/backend-bicep/ (team B's Bicep repo)
+├── bicep/
+│   └── main.bicep
+└── .github/
+    └── drift-lz-config.yml             ← Team B owns this
 ```
 
 ---
 
 ## Setup for Teams/Organizations
 
-### Step 1: Set Repository Variables
+### Step 1: Central Tool Setup (drift-agent repo, one-time)
+
+Add landing zones to the index file:
 
 ```bash
-# Via GitHub CLI (requires gh auth)
-gh variable set DRIFT_BICEP_FILE --body '../drift-test-resources/bicep/main.bicep'
-gh variable set DRIFT_RESOURCE_GROUP --body 'rg-drift-test'
-gh variable set DRIFT_ARM_PARAMETERS --body '{"environment":"test","location":"australiaeast"}'
+# Edit .github/lz-index.yml
+landing_zones:
+  frontend:
+    repo: myorg/frontend-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 9 * * 1,3,5'           # Mon, Wed, Fri 9am UTC
+    workflow: drift-lz-frontend.yml
+
+  backend:
+    repo: myorg/backend-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 14 * * 2,4'            # Tue, Thu 2pm UTC
+    workflow: drift-lz-backend.yml
 ```
 
-Or via GitHub UI:
-1. Go to **Settings** → **Secrets and variables** → **Variables**
-2. Click **New repository variable**
-3. Add each configuration above
+### Step 2: Each Team Creates Config (their Bicep repo, one-time)
 
-### Step 2: Set Azure Secrets
+Team A creates their drift config in their Bicep repo:
 
-Required secrets (already configured):
-- `AZURE_CLIENT_ID` - Service principal client ID
-- `AZURE_TENANT_ID` - Azure tenant ID
-- `AZURE_SUBSCRIPTION_ID` - Azure subscription ID
-- `ANTHROPIC_API_KEY` - Claude AI API key
-
-Optional webhooks:
-- `SLACK_WEBHOOK_URL` - For Slack notifications
-- `TEAMS_WEBHOOK_URL` - For Teams notifications
-
-### Step 3: Run Workflow
-
-**Automatic:** Workflow runs on push to `main` or `develop` branches
-
-**Manual:** Use workflow_dispatch
 ```bash
-gh workflow run drift-check.yml \
-  -f bicep_file='./custom/path/main.bicep' \
-  -f resource_group='rg-custom'
+# myorg/frontend-bicep/.github/drift-lz-config.yml
+name: frontend
+notifications:
+  slack: https://hooks.slack.com/services/XXX/frontend
+  filter: all
+
+checks:
+  - name: Frontend Services
+    repo: myorg/frontend-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-frontend-prod, rg-frontend-dr]
+```
+
+Team B does the same:
+
+```bash
+# myorg/backend-bicep/.github/drift-lz-config.yml
+name: backend
+notifications:
+  slack: https://hooks.slack.com/services/XXX/backend
+  filter: drift
+
+checks:
+  - name: Backend APIs
+    repo: myorg/backend-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-backend-api, rg-backend-api-dr]
+  
+  - name: Backend Data
+    repo: myorg/backend-data
+    path: bicep/databases/main.bicep
+    resource_groups: [rg-backend-sql, rg-backend-sql-dr]
+```
+
+### Step 3: Azure Secrets (one-time)
+
+Set secrets in drift-agent repo:
+
+```bash
+gh secret set AZURE_CLIENT_ID --body "YOUR_CLIENT_ID"
+gh secret set AZURE_TENANT_ID --body "YOUR_TENANT_ID"
+gh secret set AZURE_SUBSCRIPTION_ID --body "YOUR_SUB_ID"
+gh secret set ANTHROPIC_API_KEY --body "YOUR_API_KEY"
+```
+
+### Step 4: Workflows Run on Schedule
+
+Each team workflow runs on its configured schedule (from lz-index.yml):
+
+```bash
+# Automatic: Runs on schedule
+# Manual: gh workflow run drift-lz-frontend.yml
 ```
 
 ---
 
-## Multi-Team Setup
+## Configuration Files Reference
 
-For organizations with multiple teams, create separate repository variables per team environment:
+### lz-index.yml (drift-agent repo)
 
-**Team A (Frontend):**
-```
-DRIFT_BICEP_FILE = ./teams/frontend/main.bicep
-DRIFT_RESOURCE_GROUP = rg-frontend-prod
+Maps each landing zone to its external Bicep repo and config:
+
+```yaml
+landing_zones:
+  LANDING_ZONE_NAME:
+    repo: org/repo-name                 # GitHub repo with Bicep
+    config_path: .github/drift-lz-config.yml  # Path to config in that repo
+    schedule: '0 9 * * 1,3,5'          # Cron schedule (UTC)
+    workflow: drift-lz-LANDING_ZONE_NAME.yml  # Workflow file to trigger
 ```
 
-**Team B (Backend):**
-```
-DRIFT_BICEP_FILE = ./teams/backend/main.bicep
-DRIFT_RESOURCE_GROUP = rg-backend-prod
+**Example:**
+```yaml
+landing_zones:
+  frontend:
+    repo: myorg/frontend-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 9 * * 1,3,5'
+    workflow: drift-lz-frontend.yml
+  
+  backend:
+    repo: myorg/backend-bicep
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 14 * * 2,4'
+    workflow: drift-lz-backend.yml
 ```
 
-Then use workflow_dispatch to select team-specific runs.
+### drift-lz-config.yml (team's Bicep repo)
+
+Teams configure what to test in their own repo:
+
+```yaml
+name: team-name                                    # Display name
+notifications:
+  slack: https://hooks.slack.com/services/...    # Slack webhook (optional)
+  teams: https://outlook.webhook.office.com/...  # Teams webhook (optional)
+  filter: all|drift|extra|missing                # Filter (optional, default: all)
+
+checks:
+  - name: Check Name                              # Display name for this check
+    repo: org/bicep-repo                          # Repo with Bicep
+    branch: main                                  # Branch (default: main)
+    path: bicep/main.bicep                        # Path to Bicep file
+    resource_groups: [rg-prod, rg-dr]             # RGs to test
+```
+
+**Example:**
+```yaml
+name: backend
+notifications:
+  slack: https://hooks.slack.com/services/XXX/backend
+  filter: drift
+
+checks:
+  - name: Backend APIs
+    repo: myorg/backend-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-backend-api, rg-backend-api-dr]
+  
+  - name: Backend Databases
+    repo: myorg/backend-data
+    path: bicep/databases/main.bicep
+    resource_groups: [rg-backend-sql, rg-backend-sql-dr, rg-backend-cache]
+```
 
 ---
 
-## Environment-Specific Configurations
+## Common Scenarios
 
-For dev/test/prod environments:
+### Scenario 1: Add a New Team
 
-**GitHub Environments** (Settings → Environments):
-- Create `dev`, `test`, `prod` environments
-- Assign different variables per environment
-- Restrict deployments by approvers
-
-Then trigger workflow for specific environment:
-```bash
-gh workflow run drift-check.yml --ref main \
-  -f bicep_file='./infra/main.bicep' \
-  -f resource_group='rg-test'
+**Step 1** — Edit drift-agent `.github/lz-index.yml`:
+```yaml
+newteam:
+  repo: myorg/newteam-bicep
+  config_path: .github/drift-lz-config.yml
+  schedule: '0 10 * * *'
+  workflow: drift-lz-newteam.yml
 ```
+
+**Step 2** — Team creates `.github/drift-lz-config.yml` in their Bicep repo
+
+**Step 3** — Copy `.github/workflows/drift-lz-template.yml` to `drift-lz-newteam.yml`, update:
+
+- Workflow name
+- Schedule (cron)
+- `landing_zone` parameter
+
+---
+
+### Scenario 2: Team with Multiple Layers
+
+```yaml
+name: enterprise
+notifications:
+  slack: https://hooks.slack.com/services/XXX/enterprise
+
+checks:
+  - name: Compute Layer
+    repo: myorg/enterprise-compute
+    path: bicep/compute/main.bicep
+    resource_groups: [rg-compute, rg-compute-dr]
+  
+  - name: Networking Layer
+    repo: myorg/enterprise-network
+    path: bicep/network/main.bicep
+    resource_groups: [rg-network, rg-firewall]
+  
+  - name: Data Layer
+    repo: myorg/enterprise-data
+    path: bicep/databases/main.bicep
+    resource_groups: [rg-sql, rg-sql-dr, rg-cache]
+```
+
+All three layers run in parallel, results consolidated into one notification.
+
+---
+
+### Scenario 3: Multiple Teams, Different Notification Preferences
+
+**Frontend Team** (only config changes):
+```yaml
+# myorg/frontend-bicep/.github/drift-lz-config.yml
+name: frontend
+notifications:
+  slack: https://hooks.slack.com/services/XXX/frontend
+  filter: drift                    # Only notify on DRIFT, not EXTRA/MISSING
+```
+
+**Backend Team** (all issues):
+```yaml
+# myorg/backend-bicep/.github/drift-lz-config.yml
+name: backend
+notifications:
+  slack: https://hooks.slack.com/services/XXX/backend
+  filter: all                      # Notify on DRIFT, EXTRA, MISSING
+```
+
+**Database Team** (both Slack and Teams):
+```yaml
+# myorg/database-bicep/.github/drift-lz-config.yml
+name: database
+notifications:
+  slack: https://hooks.slack.com/services/XXX/database
+  teams: https://outlook.webhook.office.com/...
+  filter: extra,missing            # Only orphaned/missing, not config changes
+```
+
+---
+
+## Private Repository Access
+
+For private Bicep repos, set `BICEP_REPO_TOKEN`:
+
+```bash
+gh secret set BICEP_REPO_TOKEN --body "ghp_xxxxxxxxxxxx"
+```
+
+The token needs:
+
+- `repo` scope (full repo access)
+- Access to all team's Bicep repos
 
 ---
 
 ## Troubleshooting
 
-### Variables Not Being Used
-1. Verify variables are set: `gh variable list`
-2. Check workflow file uses correct variable names (e.g., `${{ vars.DRIFT_BICEP_FILE }}`)
-3. Variables must be set in the same repository as the workflow
+### "Landing Zone not found in lz-index.yml"
 
-### Path Issues
-- Use relative paths from repository root
-- `.../` goes up one directory
-- `./` refers to repository root
+**Check:**
 
-### Parameter Issues
-- ARM_PARAMETERS must be valid JSON
-- Common locations: `australiaeast`, `eastus`, `westeurope`, `uksouth`
-- Environment values: `dev`, `test`, `prod`
+```bash
+# Verify landing zone exists
+cat .github/lz-index.yml | grep -A3 "LANDING_ZONE_NAME:"
+
+# Check exact spelling matches workflow parameter
+```
+
+### "Config file not found"
+
+**Check:**
+
+```bash
+# Verify config exists in team's Bicep repo
+gh api repos/myorg/bicep-repo/contents/.github/drift-lz-config.yml
+
+# Update config_path in lz-index.yml if wrong
+```
+
+### "Repository not found" for Bicep repo
+
+**Check:**
+
+```bash
+# Verify Bicep repo is accessible
+gh repo view myorg/bicep-repo
+
+# For private repos, ensure BICEP_REPO_TOKEN is set
+gh secret list | grep BICEP_REPO_TOKEN
+```
+
+### "Notifications not sending"
+
+See [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md)
 
 ---
 
-## Example: Production Setup
+## Scheduling Tips
 
-```bash
-# Set production variables
-gh variable set DRIFT_BICEP_FILE \
-  --body '../../enterprise-templates/prod/main.bicep'
+**Avoid thundering herd** — stagger schedules:
 
-gh variable set DRIFT_RESOURCE_GROUP \
-  --body 'rg-prod-drift-check'
-
-gh variable set DRIFT_ARM_PARAMETERS \
-  --body '{"environment":"prod","location":"australiaeast"}'
-
-# Set secrets (one-time setup)
-gh secret set AZURE_CLIENT_ID --body "YOUR_CLIENT_ID"
-gh secret set AZURE_TENANT_ID --body "YOUR_TENANT_ID"
-gh secret set AZURE_SUBSCRIPTION_ID --body "YOUR_SUB_ID"
-gh secret set ANTHROPIC_API_KEY --body "YOUR_API_KEY"
-
-# Run workflow
-gh workflow run drift-check.yml
+```yaml
+landing_zones:
+  frontend:
+    schedule: '0 9 * * 1,3,5'      # Mon, Wed, Fri 9am
+  backend:
+    schedule: '0 14 * * 2,4'      # Tue, Thu 2pm
+  database:
+    schedule: '0 18 * * *'        # Daily 6pm
+  platform:
+    schedule: '0 3 * * *'         # Daily 3am
 ```
+
+**Off-peak Azure testing:**
+
+- 3am UTC: lowest API throttling
+- 6pm UTC: end of business for US teams
+- Avoid 9-5 UTC when Azure load is highest
 
 ---
 
 ## See Also
 
-- [Drift Detection Guide](docs/DRIFT_DETECTION_GUIDE.md)
-- [Multi-Environment Testing](MULTI_ENVIRONMENT.md)
-- [GitHub Secrets & Variables](https://docs.github.com/en/actions/learn-github-actions/variables)
+- [Landing Zones Guide](LANDING_ZONES.md) — Full hybrid architecture
+- [Team Notifications](TEAM_NOTIFICATIONS.md) — Notification configuration
+- [GitHub Actions Secrets & Variables](https://docs.github.com/en/actions/learn-github-actions/variables)

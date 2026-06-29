@@ -277,6 +277,56 @@ class NotificationRouter:
             return False
 
 
+def extract_recommendations_from_reports() -> Dict[str, List[Dict[str, str]]]:
+    """Extract recommendations from JSON drift reports in reports/ directory.
+
+    Returns:
+        Dict mapping resource names to their recommendations
+    """
+    recommendations = {}
+    try:
+        import pathlib
+        reports_dir = pathlib.Path("reports")
+
+        if not reports_dir.exists():
+            return recommendations
+
+        for json_file in reports_dir.glob("*-drift.json"):
+            try:
+                with open(json_file, "r") as f:
+                    report = json.load(f)
+
+                for drift in report.get("drifts", []):
+                    resource_key = f"{drift.get('type', 'Unknown')}/{drift.get('name', 'Unknown')}"
+                    if "recommendation" in drift and drift["recommendation"]:
+                        recommendations[resource_key] = drift["recommendation"]
+            except Exception as e:
+                print(f"  ⚠ Could not read {json_file}: {e}")
+
+    except Exception as e:
+        print(f"  ⚠ Error extracting recommendations: {e}")
+
+    return recommendations
+
+
+def get_html_report_url() -> str:
+    """Find the HTML report URL if available."""
+    try:
+        import pathlib
+        reports_dir = pathlib.Path("reports")
+
+        if not reports_dir.exists():
+            return ""
+
+        html_files = list(reports_dir.glob("*-drift.html"))
+        if html_files:
+            return f"See attached HTML report: {html_files[0].name}"
+    except:
+        pass
+
+    return ""
+
+
 def parse_drift_output(output_file: str) -> List[DriftEvent]:
     """Parse drift check output to extract events.
 
@@ -341,7 +391,21 @@ if __name__ == "__main__":
     output_file = sys.argv[1]
     report_url = sys.argv[2] if len(sys.argv) > 2 else "See GitHub Actions run"
 
+    print("📋 Parsing drift output...")
     events = parse_drift_output(output_file)
+
+    print("💡 Extracting AI recommendations from reports...")
+    recommendations = extract_recommendations_from_reports()
+    html_report_info = get_html_report_url()
+
+    # Enrich events with recommendations
+    if recommendations:
+        print(f"  ✓ Found {len(recommendations)} recommendation(s)")
+        for event in events:
+            resource_key = f"{event.resource_type}/{event.resource_name}"
+            if resource_key in recommendations:
+                event.details = f"{event.details}\n💡 Recommendation: {recommendations[resource_key]}"
+
     router = NotificationRouter()
 
     context = {
@@ -352,8 +416,13 @@ if __name__ == "__main__":
         "missing_count": str(len([e for e in events if e.event_type == "MISSING"])),
     }
 
+    if html_report_info:
+        context["html_report"] = html_report_info
+
     if events:
         print(f"\n📢 Sending notifications for {len(events)} event(s)...")
+        if recommendations:
+            print(f"   (including {len(recommendations)} AI-generated recommendations)")
         success = router.send_notifications(events, context)
         sys.exit(0 if success else 1)
     else:

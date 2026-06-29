@@ -1,4 +1,4 @@
-name: Landing Zone Drift Check (Reusable)
+name: Landing Zone Drift Check (Hybrid)
 
 on:
   workflow_call:
@@ -6,55 +6,128 @@ on:
       landing_zone:
         type: string
         required: true
-        description: 'Landing Zone name (must exist in DRIFT_LANDING_ZONES config)'
+        description: 'Landing Zone name from lz-index.yml'
 
 jobs:
-  parse-lz-config:
-    name: Parse Landing Zone Configuration
+  load-config:
+    name: Load LZ Config from External Repo
     runs-on: ubuntu-latest
     outputs:
-      checks-json: ${{ steps.parse.outputs.checks }}
-      notifications: ${{ steps.parse.outputs.notifications }}
-      lz-name: ${{ steps.parse.outputs.lz_name }}
+      lz-config: ${{ steps.load.outputs.config }}
+      lz-repo: ${{ steps.load.outputs.repo }}
+      lz-name: ${{ steps.load.outputs.name }}
     steps:
-      - name: Checkout code
+      - name: Checkout drift-agent (for index)
         uses: actions/checkout@v4
+        with:
+          path: drift-agent
 
-      - name: Parse Landing Zone Config
-        id: parse
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Parse LZ Index and Load Config
+        id: load
         run: |
-          CONFIG='${{ vars.DRIFT_LANDING_ZONES }}'
-          LZ='${{ inputs.landing_zone }}'
+          cd drift-agent
 
-          if [ -z "$CONFIG" ]; then
-            echo "❌ DRIFT_LANDING_ZONES variable not set"
+          # Install yaml parser
+          pip install -q pyyaml
+
+          python3 << 'PYTHON_SCRIPT'
+          import yaml
+          import sys
+          import json
+
+          LZ = '${{ inputs.landing_zone }}'
+
+          # Load index
+          with open('.github/lz-index.yml') as f:
+            index = yaml.safe_load(f)
+
+          if LZ not in index.get('landing_zones', {}):
+            print(f"❌ Landing Zone '{LZ}' not found in lz-index.yml")
+            sys.exit(1)
+
+          lz_index = index['landing_zones'][LZ]
+          repo = lz_index['repo']
+          config_path = lz_index['config_path']
+
+          print(f"✓ Found Landing Zone: {LZ}")
+          print(f"  Repo: {repo}")
+          print(f"  Config: {config_path}")
+
+          # Save for next step
+          with open('/tmp/lz_index.txt', 'w') as f:
+            f.write(f"{repo}|{config_path}")
+
+          PYTHON_SCRIPT
+
+          # Read saved values
+          IFS='|' read REPO CONFIG_PATH < /tmp/lz_index.txt
+          echo "repo=$REPO" >> $GITHUB_OUTPUT
+          echo "config_path=$CONFIG_PATH" >> $GITHUB_OUTPUT
+          echo "name=${{ inputs.landing_zone }}" >> $GITHUB_OUTPUT
+
+      - name: Checkout external Bicep repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.load.outputs.repo }}
+          path: lz-repo
+          fetch-depth: 1
+          token: ${{ secrets.BICEP_REPO_TOKEN }}
+
+      - name: Load LZ Config from External Repo
+        id: config
+        run: |
+          CONFIG_PATH="${{ steps.load.outputs.config_path }}"
+          CONFIG_FILE="lz-repo/$CONFIG_PATH"
+
+          if [ ! -f "$CONFIG_FILE" ]; then
+            echo "❌ Config file not found: $CONFIG_PATH in ${{ steps.load.outputs.repo }}"
             exit 1
           fi
 
-          # Extract this LZ's configuration
-          echo "Parsing configuration for Landing Zone: $LZ"
+          echo "✓ Loaded config from: $CONFIG_PATH"
 
-          CHECKS=$(echo "$CONFIG" | jq -c ".\"$LZ\".checks" 2>/dev/null)
-          if [ $? -ne 0 ] || [ "$CHECKS" = "null" ]; then
-            echo "❌ Landing Zone '$LZ' not found in DRIFT_LANDING_ZONES"
-            exit 1
-          fi
+          # Output config
+          {
+            echo "config<<EOF"
+            cat "$CONFIG_FILE"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
 
-          NOTIFS=$(echo "$CONFIG" | jq -c ".\"$LZ\".notifications" 2>/dev/null)
+      - name: Parse and Validate Config
+        run: |
+          python3 << 'PYTHON_SCRIPT'
+          import yaml
+          import sys
 
-          CHECK_COUNT=$(echo "$CHECKS" | jq 'length')
-          echo "✓ Found $CHECK_COUNT checks for landing zone: $LZ"
+          config_text = """${{ steps.config.outputs.config }}"""
 
-          echo "checks=$CHECKS" >> $GITHUB_OUTPUT
-          echo "notifications=$NOTIFS" >> $GITHUB_OUTPUT
-          echo "lz_name=$LZ" >> $GITHUB_OUTPUT
+          try:
+            config = yaml.safe_load(config_text)
+            checks = config.get('checks', [])
+            notif = config.get('notifications', {})
+
+            print(f"✓ Config valid")
+            print(f"  Name: {config.get('name', 'unknown')}")
+            print(f"  Checks: {len(checks)}")
+            print(f"  Notifications: {', '.join(notif.keys())}")
+
+          except Exception as e:
+            print(f"❌ Invalid config: {e}")
+            sys.exit(1)
+
+          PYTHON_SCRIPT
 
   drift-checks:
     name: Drift Check - ${{ matrix.check.name }}
-    needs: parse-lz-config
+    needs: load-config
     strategy:
       matrix:
-        check: ${{ fromJson(needs.parse-lz-config.outputs.checks-json) }}
+        check: ${{ fromJson(needs.load-config.outputs.lz-config).checks }}
       fail-fast: false
 
     runs-on: ubuntu-latest
@@ -69,7 +142,7 @@ jobs:
         with:
           repository: ${{ matrix.check.repo }}
           ref: ${{ matrix.check.branch || 'main' }}
-          path: bicep-repo-${{ matrix.check.name }}
+          path: bicep-${{ matrix.check.name }}
           fetch-depth: 1
           token: ${{ secrets.BICEP_REPO_TOKEN }}
 
@@ -86,7 +159,7 @@ jobs:
       - name: Run drift checks - ${{ matrix.check.name }}
         id: drift
         run: |
-          BICEP_PATH="bicep-repo-${{ matrix.check.name }}/${{ matrix.check.path }}"
+          BICEP_PATH="bicep-${{ matrix.check.name }}/${{ matrix.check.path }}"
           DRIFT_FILE="drift_${{ matrix.check.name }}.txt"
 
           echo "========================================" > "$DRIFT_FILE"
@@ -101,7 +174,6 @@ jobs:
           RG_COUNT=$(echo '${{ toJson(matrix.check.resource_groups) }}' | jq 'length')
           echo "Testing $RG_COUNT resource group(s)..."
 
-          TOTAL_ISSUES=0
           echo '${{ toJson(matrix.check.resource_groups) }}' | jq -r '.[]' | while read RG; do
             echo "Testing: $RG" | tee -a "$DRIFT_FILE"
             echo "---" >> "$DRIFT_FILE"
@@ -126,17 +198,19 @@ jobs:
 
           echo "Results: $DRIFT_COUNT drift(s), $EXTRA_COUNT extra, $MISSING_COUNT missing"
 
-      - name: Upload drift report
+      - name: Upload drift reports and analysis
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: drift-reports-${{ needs.parse-lz-config.outputs.lz-name }}
-          path: drift_*.txt
+          name: drift-reports-${{ needs.load-config.outputs.lz-name }}
+          path: |
+            drift_*.txt
+            reports/
           retention-days: 30
 
   consolidate-results:
     name: Consolidate and Notify
-    needs: [parse-lz-config, drift-checks]
+    needs: [load-config, drift-checks]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -146,7 +220,7 @@ jobs:
       - name: Download all drift reports
         uses: actions/download-artifact@v3
         with:
-          name: drift-reports-${{ needs.parse-lz-config.outputs.lz-name }}
+          name: drift-reports-${{ needs.load-config.outputs.lz-name }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -162,7 +236,6 @@ jobs:
         run: |
           echo "Consolidating drift reports..."
 
-          # Combine all individual reports
           > consolidated_drift_report.txt
 
           for file in drift_*.txt; do
@@ -190,15 +263,26 @@ jobs:
       - name: Send consolidated notifications
         if: always()
         env:
-          DRIFT_NOTIFICATIONS: ${{ needs.parse-lz-config.outputs.notifications }}
+          LZ_CONFIG: ${{ needs.load-config.outputs.lz-config }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           PYTHONUNBUFFERED: '1'
         run: |
-          if [ -z "$DRIFT_NOTIFICATIONS" ]; then
+          # Extract notifications from config
+          NOTIFICATIONS=$(echo "$LZ_CONFIG" | python3 -c "
+          import sys, yaml
+          config = yaml.safe_load(sys.stdin)
+          import json
+          print(json.dumps(config.get('notifications', {})))
+          ")
+
+          if [ -z "$NOTIFICATIONS" ] || [ "$NOTIFICATIONS" = "{}" ]; then
             echo "ℹ No notifications configured for this landing zone"
             exit 0
           fi
+
+          # Pass as env var for send_notifications.py
+          export DRIFT_NOTIFICATIONS="$NOTIFICATIONS"
 
           REPORT_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "Sending notifications to configured channels..."
@@ -207,7 +291,7 @@ jobs:
       - name: Publish summary to GitHub
         if: always()
         run: |
-          LZ="${{ needs.parse-lz-config.outputs.lz-name }}"
+          LZ="${{ needs.load-config.outputs.lz-name }}"
           TOTAL="${{ steps.consolidate.outputs.total_issues }}"
           DRIFT="${{ steps.consolidate.outputs.total_drift }}"
           EXTRA="${{ steps.consolidate.outputs.total_extra }}"

@@ -1,280 +1,287 @@
 # Team-Based Notifications
 
-Send drift detection reports to different Slack channels or Teams webhooks per team, with custom message templates and filtering.
+Send drift detection reports to Slack/Teams webhooks with filtering and custom templates.
 
 ## Quick Start
 
-Set repository variable `DRIFT_NOTIFICATIONS` with your team configuration:
+Add to your `.github/drift-lz-config.yml` (in your Bicep repo):
 
-```json
-{
-  "frontend": {
-    "slack": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
-    "filter": "extra,missing"
-  },
-  "backend": {
-    "teams": "https://outlook.webhook.office.com/webhookb2/...",
-    "filter": "drift"
-  },
-  "devops": {
-    "slack": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
-    "teams": "https://outlook.webhook.office.com/webhookb2/...",
-    "filter": "all"
-  }
-}
+```yaml
+name: myteam
+notifications:
+  slack: https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+  filter: all
+
+checks:
+  - name: MyServices
+    repo: myorg/my-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-prod, rg-dr]
 ```
+
+That's it! Notifications will be sent to your Slack channel on drift.
+
+---
 
 ## Configuration
 
-### Basic Team Setup
+### Basic Setup
 
-Each team can have:
-- **slack**: Slack webhook URL (optional)
-- **teams**: Teams/Office 365 webhook URL (optional)
-- **filter**: Drift event types to notify about (optional, default: all)
-- **template**: Custom message template (optional, uses platform default)
+```yaml
+notifications:
+  slack: https://hooks.slack.com/services/...     # Slack webhook (optional)
+  teams: https://outlook.webhook.office.com/...  # Teams webhook (optional)
+  filter: all|drift|extra|missing                # Event filter (optional)
+```
+
+**At least one webhook (Slack or Teams) is required for notifications.**
 
 ### Filtering Options
 
-Control what drift events trigger notifications:
+Control which events trigger notifications:
 
-| Filter | Description | Events Sent |
-|--------|-------------|-------------|
-| `all` | All drift events (default) | DRIFT + EXTRA + MISSING |
-| `drift` | Configuration changes only | DRIFT |
-| `extra` | Deployed but not in IaC | EXTRA |
-| `missing` | In IaC but not deployed | MISSING |
-| `extra,missing` | Only orphaned resources | EXTRA + MISSING |
-| `drift,extra` | Configuration or orphaned | DRIFT + EXTRA |
+| Filter | Events Sent | Use Case |
+| --- | --- | --- |
+| `all` | DRIFT + EXTRA + MISSING | Get all issues (default) |
+| `drift` | DRIFT only | Config changes only |
+| `extra` | EXTRA only | Orphaned resources only |
+| `missing` | MISSING only | Missing deployments only |
+| `drift,extra` | DRIFT + EXTRA | Config changes or orphaned |
+| `extra,missing` | EXTRA + MISSING | Resource issues only |
 
-### Default Behavior
-
-- **No filter specified**: All events (`drift`, `extra`, `missing`)
-- **No webhook specified**: Silent (no notification)
-- **Multiple webhooks**: Sends to both Slack and Teams
-
-## Setup by Scenario
-
-### Scenario 1: Single Team (Minimal)
-
-All drift events to one Slack channel:
-
-```bash
-gh variable set DRIFT_NOTIFICATIONS --body '{
-  "ops": {
-    "slack": "https://hooks.slack.com/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXX"
-  }
-}'
-```
-
-### Scenario 2: Multi-Team with Different Concerns
-
-```bash
-gh variable set DRIFT_NOTIFICATIONS --body '{
-  "frontend": {
-    "slack": "https://hooks.slack.com/services/XXX/frontend",
-    "filter": "drift"
-  },
-  "backend": {
-    "slack": "https://hooks.slack.com/services/XXX/backend",
-    "filter": "all"
-  },
-  "database": {
-    "teams": "https://outlook.webhook.office.com/...",
-    "filter": "missing"
-  }
-}'
-```
-
-**Frontend team** → Only notified of configuration changes (drift)
-**Backend team** → Notified of all drift events
-**Database team** → Only notified of missing resources (deployments)
-
-### Scenario 3: Environment-Specific Notifications
-
-Dev team gets all alerts, prod team only critical issues:
-
-```bash
-gh variable set DRIFT_NOTIFICATIONS --body '{
-  "dev": {
-    "slack": "https://hooks.slack.com/services/XXX/dev-alerts",
-    "filter": "all"
-  },
-  "prod": {
-    "slack": "https://hooks.slack.com/services/XXX/prod-alerts",
-    "filter": "extra"
-  }
-}'
-```
-
-### Scenario 4: Both Slack and Teams
-
-Notify both platforms per team:
-
-```bash
-gh variable set DRIFT_NOTIFICATIONS --body '{
-  "ops": {
-    "slack": "https://hooks.slack.com/services/XXX",
-    "teams": "https://outlook.webhook.office.com/...",
-    "filter": "all"
-  }
-}'
-```
-
-## Custom Message Templates
-
-Override default message format per team using `{{ variables }}`:
-
-### Slack Template
-
-```json
-{
-  "frontend": {
-    "slack": "https://hooks.slack.com/services/XXX",
-    "template": ":warning: *{{ event_type }}* in {{ resource_type }}\n`{{ resource_name }}`\n{{ details }}\n<{{ report_url }}|View Report>"
-  }
-}
-```
-
-**Available variables:**
-- `{{ event_type }}` → DRIFT, EXTRA, or MISSING
-- `{{ resource_type }}` → e.g., Microsoft.Storage/storageAccounts
-- `{{ resource_name }}` → Resource name
-- `{{ details }}` → Additional details
-- `{{ report_url }}` → Link to GitHub Actions run
-- `{{ total_events }}` → Total number of events
-- `{{ drift_count }}` → Number of DRIFT events
-- `{{ extra_count }}` → Number of EXTRA events
-- `{{ missing_count }}` → Number of MISSING events
-
-### Teams Template
-
-```json
-{
-  "database": {
-    "teams": "https://outlook.webhook.office.com/...",
-    "template": "{\"@type\":\"MessageCard\",\"@context\":\"https://schema.org/extensions\",\"summary\":\"{{ event_type }}\",\"themeColor\":\"ff0000\",\"sections\":[{\"activityTitle\":\"{{ resource_type }}\",\"facts\":[{\"name\":\"Resource\",\"value\":\"{{ resource_name }}\"},{\"name\":\"Type\",\"value\":\"{{ event_type }}\"}]}]}"
-  }
-}
-```
-
-## Backward Compatibility
-
-The old single-webhook approach still works:
-
-```bash
-gh secret set SLACK_WEBHOOK_URL --body "https://hooks.slack.com/services/..."
-gh secret set TEAMS_WEBHOOK_URL --body "https://outlook.webhook.office.com/..."
-```
-
-**Used when:** No `DRIFT_NOTIFICATIONS` variable is set
-
-**Priority:**
-1. Team-based `DRIFT_NOTIFICATIONS` (if set)
-2. Legacy `SLACK_WEBHOOK_URL` / `TEAMS_WEBHOOK_URL` secrets
-3. No notification
-
-## Event Parsing
-
-The system automatically parses drift output for:
-
-```
-[DRIFT] Microsoft.Storage/storageAccounts/myaccount — properties differ: accessTier
-[EXTRA] Microsoft.Web/serverFarms/asp-prod — deployed but not in Bicep
-[MISSING] Microsoft.KeyVault/vaults/kv-prod — in Bicep but not deployed
-```
+---
 
 ## Examples
 
-### Frontend Team: Only Config Changes
+### Example 1: Basic Slack Notification
 
-```json
-{
-  "frontend": {
-    "slack": "https://hooks.slack.com/services/T00/B00/XX",
-    "filter": "drift"
-  }
-}
+```yaml
+name: frontend
+notifications:
+  slack: https://hooks.slack.com/services/T00000000/B00000000/XXXX
+
+checks:
+  - name: Frontend Services
+    repo: myorg/frontend-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-frontend-prod, rg-frontend-dr]
 ```
 
-Gets notified when configuration drifts, not for orphaned resources.
+Sends all drift events to Slack.
 
-### DevOps Team: All Critical Issues
+---
 
-```json
-{
-  "devops": {
-    "slack": "https://hooks.slack.com/services/T00/B00/XX",
-    "teams": "https://outlook.webhook.office.com/...",
-    "filter": "all"
-  }
-}
+### Example 2: Teams Webhook
+
+```yaml
+name: backend
+notifications:
+  teams: https://outlook.webhook.office.com/webhookb2/...
+
+checks:
+  - name: Backend APIs
+    repo: myorg/backend-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-backend-prod, rg-backend-dr]
 ```
 
-Gets notified via both Slack and Teams for all drift events.
+Sends all drift events to Teams channel.
 
-### Database Team: Only Missing Resources
+---
 
-```json
-{
-  "database": {
-    "teams": "https://outlook.webhook.office.com/...",
-    "filter": "missing"
-  }
-}
+### Example 3: Both Slack and Teams
+
+```yaml
+name: critical
+notifications:
+  slack: https://hooks.slack.com/services/XXX
+  teams: https://outlook.webhook.office.com/...
+
+checks:
+  - name: Critical Infrastructure
+    repo: myorg/critical-infra
+    path: bicep/main.bicep
+    resource_groups: [rg-critical-prod, rg-critical-dr]
 ```
 
-Only gets notified when resources defined in Bicep are not deployed.
+Sends to both Slack and Teams simultaneously.
 
-### Custom Template Example
+---
 
-```json
-{
-  "security": {
-    "slack": "https://hooks.slack.com/services/T00/B00/XX",
-    "template": ":rotating_light: *SECURITY ALERT*\n*Type:* {{ event_type }}\n*Resource:* {{ resource_type }}/{{ resource_name }}\n:link: <{{ report_url }}|Review Report>"
-  }
-}
+### Example 4: Filtered Notifications
+
+```yaml
+name: backend
+notifications:
+  slack: https://hooks.slack.com/services/XXX/backend
+  filter: drift                                    # Only config changes
+
+checks:
+  - name: Backend Services
+    repo: myorg/backend-bicep
+    path: bicep/main.bicep
+    resource_groups: [rg-backend-prod, rg-backend-dr]
 ```
+
+Only notifies when resource configurations change, not for orphaned/missing resources.
+
+---
+
+### Example 5: Multiple Checks with Single Notification
+
+```yaml
+name: enterprise
+notifications:
+  slack: https://hooks.slack.com/services/XXX/enterprise
+  filter: all
+
+checks:
+  - name: Compute Layer
+    repo: myorg/enterprise-compute
+    path: bicep/compute/main.bicep
+    resource_groups: [rg-compute, rg-compute-dr]
+  
+  - name: Data Layer
+    repo: myorg/enterprise-data
+    path: bicep/data/main.bicep
+    resource_groups: [rg-data, rg-data-dr]
+  
+  - name: Networking Layer
+    repo: myorg/enterprise-network
+    path: bicep/network/main.bicep
+    resource_groups: [rg-network, rg-firewall]
+```
+
+All three layers run in parallel, results consolidated into **one notification** sent to Slack.
+
+---
+
+## Event Types
+
+The system sends three types of drift events:
+
+```text
+[DRIFT] Microsoft.Storage/storageAccounts/myaccount — properties differ: accessTier
+```
+
+→ Resource exists but configuration changed (sku, size, settings, etc.)
+
+```text
+[EXTRA] Microsoft.Web/serverFarms/asp-prod — deployed but not in Bicep
+```
+
+→ Resource deployed in Azure but not defined in Bicep (orphaned)
+
+```text
+[MISSING] Microsoft.KeyVault/vaults/kv-prod — in Bicep but not deployed
+```
+
+→ Resource defined in Bicep but not deployed to Azure (undeployed)
+
+---
+
+## Getting Webhook URLs
+
+### Slack
+
+1. Go to <https://api.slack.com/apps>
+2. Create new app → "From scratch"
+3. Name it, select workspace
+4. Go to **Incoming Webhooks** → Enable it
+5. Click **Add New Webhook to Workspace**
+6. Select channel, authorize
+7. Copy the webhook URL
+
+### Teams/Microsoft 365
+
+1. Go to your Teams channel
+2. Click **⋯** (More options) → **Connectors**
+3. Search for "Incoming Webhook"
+4. Configure → Give it a name
+5. Copy the webhook URL
+
+---
 
 ## Troubleshooting
 
 ### Notifications Not Sending
 
-1. **Check variable is set:**
-   ```bash
-   gh variable list | grep DRIFT_NOTIFICATIONS
-   ```
+**Check 1: Webhook URL is valid**
 
-2. **Check webhook URLs are valid:**
-   - Slack: Should start with `https://hooks.slack.com/services/`
-   - Teams: Should start with `https://outlook.webhook.office.com/`
+```bash
+# Test Slack webhook
+curl -X POST -H 'Content-type: application/json' \
+  --data '{"text":"Test"}' \
+  YOUR_SLACK_WEBHOOK_URL
 
-3. **Check JSON syntax:**
-   ```bash
-   echo 'YOUR_JSON' | python3 -m json.tool
-   ```
+# Should get response: 1
+```
 
-4. **Check filter configuration:**
-   - Valid values: `all`, `drift`, `extra`, `missing`
-   - Comma-separated: `drift,extra,missing`
+**Check 2: Filter configuration is correct**
+
+Valid values: `all`, `drift`, `extra`, `missing`, or comma-separated combinations
+
+```yaml
+notifications:
+  slack: https://...
+  filter: drift,extra              # ✓ Correct
+  # filter: drift, extra           # ✗ No spaces!
+```
+
+**Check 3: Webhook is in config file**
+
+```bash
+# Verify config file exists
+cat .github/drift-lz-config.yml | grep -A3 notifications
+```
+
+**Check 4: Landing zone is in index**
+
+```bash
+# Verify LZ is in drift-agent repo's lz-index.yml
+gh api repos/ORG/bicep-drift-agent/contents/.github/lz-index.yml
+```
 
 ### Messages Malformed
 
-- Verify template syntax (proper `{{ variable }}` format)
-- Check for unescaped quotes in template
-- Test with default template first
+- Verify Slack/Teams webhook URLs are current (can expire)
+- Check that the webhook still has permissions
+- Ensure the channel/team still exists
 
-### Webhook Failing
+### No Output in Channel
 
-- Verify webhook URLs are current (webhooks can expire)
-- Check webhook has permission in Slack/Teams
-- Ensure team/channel still exists
+- Webhook may be failing silently
+- Test webhook independently (see above)
+- Check GitHub Actions logs: workflow step "Send consolidated notifications"
+
+---
+
+## Advanced: Custom Templates
+
+To use custom message templates, add `template` to notifications:
+
+```yaml
+notifications:
+  slack: https://hooks.slack.com/services/XXX
+  template: "⚠️ *{{ event_type }}* in {{ resource_type }}\n`{{ resource_name }}`\n{{ details }}\n<{{ report_url }}|View Report>"
+```
+
+**Available variables:**
+
+- `{{ event_type }}` → DRIFT, EXTRA, or MISSING
+- `{{ resource_type }}` → e.g., Microsoft.Storage/storageAccounts
+- `{{ resource_name }}` → Resource name
+- `{{ details }}` → Additional details
+- `{{ report_url }}` → Link to GitHub Actions run
+- `{{ drift_count }}` → Number of DRIFT events
+- `{{ extra_count }}` → Number of EXTRA events
+- `{{ missing_count }}` → Number of MISSING events
+
+---
 
 ## See Also
 
-- [Enterprise Configuration](ENTERPRISE_CONFIGURATION.md)
-- [Drift Detection Guide](docs/DRIFT_DETECTION_GUIDE.md)
-- [GitHub Actions Secrets & Variables](https://docs.github.com/en/actions/learn-github-actions/variables)
+- [Landing Zones Guide](LANDING_ZONES.md) — Full hybrid architecture
+- [Enterprise Configuration](ENTERPRISE_CONFIGURATION.md) — Setup for organizations
 - [Slack Incoming Webhooks](https://api.slack.com/messaging/webhooks)
 - [Teams Webhooks](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/connectors-using)

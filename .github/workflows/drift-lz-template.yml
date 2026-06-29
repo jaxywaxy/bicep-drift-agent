@@ -1,0 +1,18 @@
+# TEMPLATE: Copy this file to drift-lz-<TEAM_NAME>.yml and update:
+# 1. name: your team name
+# 2. schedule cron: your preferred schedule
+# 3. landing_zone: your landing zone name (from lz-index.yml)
+
+name: Landing Zone Drift Check - TEMPLATE (customize me)
+
+on:
+  schedule:
+    - cron: '0 9 * * *'  # Example: daily at 9am UTC - change as needed
+  workflow_dispatch:
+
+jobs:
+  drift-check:
+    uses: ./.github/workflows/drift-check-lz-hybrid.yml
+    with:
+      landing_zone: myteam  # Change to your landing zone name from lz-index.yml
+    secrets: inherit
