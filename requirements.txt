@@ -1,8 +1,8 @@
-anthropic>=0.25.0
-azure-identity>=1.15.0
-azure-mgmt-resource>=23.0.0
-azure-mgmt-compute>=30.0.0
-azure-mgmt-network>=25.0.0
-azure-mgmt-storage>=21.0.0
-python-dotenv>=1.0.0
-pyyaml>=6.0
+anthropic==0.25.5
+azure-identity==1.15.0
+azure-mgmt-resource==23.1.1
+azure-mgmt-compute==30.6.0
+azure-mgmt-network==25.3.0
+azure-mgmt-storage==21.1.0
+python-dotenv==1.0.1
+pyyaml==6.0.1

@@ -11,7 +11,20 @@ import json
 import subprocess
 import tempfile
 import os
+import re
 from pathlib import Path
+
+
+def _sanitize_error_message(error_text: str) -> str:
+    """Remove potential secrets from error messages."""
+    sanitized = error_text
+    # Redact API keys (various formats)
+    sanitized = re.sub(r'sk-[a-zA-Z0-9_\-]{40,}', '***API_KEY_REDACTED***', sanitized)
+    # Redact Azure connection strings
+    sanitized = re.sub(r'DefaultEndpointsProtocol=[^;]+;[^"]*', '***CONNECTION_STRING_REDACTED***', sanitized)
+    # Redact environment variable values
+    sanitized = re.sub(r'(AZURE_[A-Z_]+)=([^\s\'"]+)', r'\1=***REDACTED***', sanitized)
+    return sanitized
 
 
 def compile_bicep(bicep_file_path: str) -> dict:
@@ -50,8 +63,10 @@ def compile_bicep(bicep_file_path: str) -> dict:
         )
 
         if result.returncode != 0:
+            safe_stdout = _sanitize_error_message(result.stdout)
+            safe_stderr = _sanitize_error_message(result.stderr)
             raise RuntimeError(
-                f"az bicep build failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}"
+                f"az bicep build failed:\nSTDOUT: {safe_stdout}\nSTDERR: {safe_stderr}"
             )
 
         with open(output_path) as f:

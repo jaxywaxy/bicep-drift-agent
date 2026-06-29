@@ -48,59 +48,41 @@ def get_live_state(
 
     resources = []
 
-    if scope == "subscription" and resource_group:
-        # Query subscription scope but filter to specific resource group
-        # This handles subscription-scoped templates while only reporting on target RG
-        for resource in client.resources.list(expand="properties"):
-            # Extract resource group from resource ID: /subscriptions/.../resourceGroups/RG_NAME/...
-            rg_from_id = _extract_resource_group_from_id(resource.id)
-            if rg_from_id and rg_from_id.lower() == resource_group.lower():
-                resource_dict = {
-                    "type": resource.type,
-                    "name": resource.name,
-                    "location": resource.location,
-                    "tags": resource.tags or {},
-                    "sku": _extract_sku(resource),
-                    "kind": resource.kind,
-                    "properties": _safe_properties(resource),
-                    "id": resource.id,
-                    "resource_group": rg_from_id,
-                }
-                resources.append(resource_dict)
-    elif scope == "subscription":
-        # List all resources in subscription (no RG filtering)
-        for resource in client.resources.list(expand="properties"):
-            rg_from_id = _extract_resource_group_from_id(resource.id)
-            resource_dict = {
-                "type": resource.type,
-                "name": resource.name,
-                "location": resource.location,
-                "tags": resource.tags or {},
-                "sku": _extract_sku(resource),
-                "kind": resource.kind,
-                "properties": _safe_properties(resource),
-                "id": resource.id,
-                "resource_group": rg_from_id,
-            }
-            resources.append(resource_dict)
-    else:
-        # List all resources in the specific resource group
+    # Determine which resources to query
+    if scope == "resource_group":
         if not resource_group:
             raise ValueError("resource_group required for resource_group scope")
+        resource_iterator = client.resources.list_by_resource_group(resource_group, expand="properties")
+        target_rg = resource_group
+    else:  # subscription scope
+        resource_iterator = client.resources.list(expand="properties")
+        target_rg = resource_group  # May be None if not filtering
 
-        for resource in client.resources.list_by_resource_group(resource_group, expand="properties"):
-            resource_dict = {
-                "type": resource.type,
-                "name": resource.name,
-                "location": resource.location,
-                "tags": resource.tags or {},
-                "sku": _extract_sku(resource),
-                "kind": resource.kind,
-                "properties": _safe_properties(resource),
-                "id": resource.id,
-                "resource_group": resource_group,
-            }
-            resources.append(resource_dict)
+    # Process resources with unified logic
+    for resource in resource_iterator:
+        # Extract resource group if needed (for subscription scope queries)
+        if scope == "subscription":
+            rg_from_id = _extract_resource_group_from_id(resource.id)
+            # Filter to target RG if specified
+            if target_rg and rg_from_id and rg_from_id.lower() != target_rg.lower():
+                continue
+            res_rg = rg_from_id
+        else:
+            res_rg = target_rg
+
+        # Build resource dict
+        resource_dict = {
+            "type": resource.type,
+            "name": resource.name,
+            "location": resource.location,
+            "tags": resource.tags or {},
+            "sku": _extract_sku(resource),
+            "kind": resource.kind,
+            "properties": _safe_properties(resource),
+            "id": resource.id,
+            "resource_group": res_rg,
+        }
+        resources.append(resource_dict)
 
     return resources
 
