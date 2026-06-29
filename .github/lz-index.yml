@@ -3,13 +3,18 @@
 # This file maps Landing Zones to their configuration files in external Bicep repos.
 # Each team manages their own LZ config in their Bicep repository.
 #
+# To add a new landing zone:
+# 1. Copy .github/workflows/drift-lz-template.yml to drift-lz-<TEAM_NAME>.yml
+# 2. Update the schedule, landing_zone parameter, and workflow name
+# 3. Add an entry below in this file
+#
 # Format:
 #   landing_zones:
 #     lz-name:
-#       repo: org/repo-name                    # GitHub repo with Bicep
-#       config_path: .github/drift-lz-config.yml  # Path to LZ config in that repo
-#       schedule: 'cron expression'           # When to run drift checks
-#       workflow: drift-lz-{name}.yml         # Workflow file name
+#       repo: org/repo-name                          # GitHub repo with Bicep
+#       config_path: .github/drift-lz-config.yml     # Path to LZ config in that repo
+#       schedule: '0 9 * * *'                        # Cron: when to run (UTC)
+#       workflow: drift-lz-lz-name.yml               # Workflow file to run
 
 landing_zones:
   frontend:

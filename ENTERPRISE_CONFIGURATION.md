@@ -19,9 +19,10 @@ bicep-drift-agent/ (central tool)
 │   ├── lz-index.yml                    ← Maps landing zones to external repos
 │   └── workflows/
 │       ├── drift-check-lz-hybrid.yml   ← Orchestrator (reusable)
-│       ├── drift-lz-frontend.yml       ← Frontend team trigger
-│       ├── drift-lz-backend.yml        ← Backend team trigger
-│       └── drift-lz-database.yml       ← Database team trigger
+│       ├── drift-lz-template.yml       ← Template to copy for each team
+│       ├── drift-lz-frontend.yml       ← Copy of template (one per team)
+│       ├── drift-lz-backend.yml        ← Copy of template (one per team)
+│       └── drift-lz-database.yml       ← Copy of template (one per team)
 
 myorg/frontend-bicep/ (team A's Bicep repo)
 ├── bicep/
@@ -207,7 +208,11 @@ newteam:
 
 **Step 2** — Team creates `.github/drift-lz-config.yml` in their Bicep repo
 
-**Step 3** — Copy `drift-lz-frontend.yml` to `drift-lz-newteam.yml`, update the landing_zone parameter and schedule
+**Step 3** — Copy `.github/workflows/drift-lz-template.yml` to `drift-lz-newteam.yml`, update:
+
+- Workflow name
+- Schedule (cron)
+- `landing_zone` parameter
 
 ---
 

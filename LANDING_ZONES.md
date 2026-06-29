@@ -10,9 +10,10 @@ bicep-drift-agent/  (Central drift detection tool)
 │   ├── lz-index.yml                    ← Maps LZs to external repos
 │   └── workflows/
 │       ├── drift-check-lz-hybrid.yml   ← Orchestrator workflow
-│       ├── drift-lz-frontend.yml       ← Team 1 trigger
-│       ├── drift-lz-backend.yml        ← Team 2 trigger
-│       └── drift-lz-database.yml       ← Team 3 trigger
+│       ├── drift-lz-template.yml       ← Template to copy
+│       ├── drift-lz-frontend.yml       ← Copy for team 1
+│       ├── drift-lz-backend.yml        ← Copy for team 2
+│       └── drift-lz-database.yml       ← Copy for team 3
 └── tools/
 
 myorg/frontend-compute/  (Team's Bicep repo)
@@ -130,7 +131,7 @@ checks:
 
 ### Step 3: Create Team Workflow
 
-Copy `drift-lz-frontend.yml`, update the schedule:
+Copy `.github/workflows/drift-lz-template.yml` to `drift-lz-myteam.yml`, update the name, schedule, and landing_zone:
 
 ```yaml
 name: My Team Landing Zone Drift
