@@ -109,20 +109,19 @@ jobs:
 
           echo "✓ Loaded config from: $CONFIG_PATH"
 
-          # Output config
-          {
-            echo "config<<EOF"
-            cat "$CONFIG_FILE"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
+          # Output config (base64 encoded to handle multiline)
+          CONFIG_B64=$(cat "$CONFIG_FILE" | base64 -w0)
+          echo "config=$CONFIG_B64" >> $GITHUB_OUTPUT
 
       - name: Parse and Validate Config
         run: |
           python3 << 'PYTHON_SCRIPT'
           import yaml
           import sys
+          import base64
 
-          config_text = """${{ steps.config.outputs.config }}"""
+          config_b64 = "${{ steps.config.outputs.config }}"
+          config_text = base64.b64decode(config_b64).decode('utf-8')
 
           try:
             config = yaml.safe_load(config_text)
@@ -281,18 +280,29 @@ jobs:
       - name: Send consolidated notifications
         if: always()
         env:
-          LZ_CONFIG: ${{ needs.load-config.outputs.lz-config }}
+          LZ_CONFIG_B64: ${{ needs.load-config.outputs.lz-config }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           PYTHONUNBUFFERED: '1'
         run: |
           # Extract notifications from config
-          NOTIFICATIONS=$(echo "$LZ_CONFIG" | python3 -c "
-          import sys, yaml
-          config = yaml.safe_load(sys.stdin)
-          import json
-          print(json.dumps(config.get('notifications', {})))
-          ")
+          NOTIFICATIONS=$(python3 << 'PYTHON_SCRIPT'
+          import sys, yaml, base64, json, os
+
+          config_b64 = os.environ.get('LZ_CONFIG_B64', '')
+          if not config_b64:
+            print("{}")
+            sys.exit(0)
+
+          try:
+            config_text = base64.b64decode(config_b64).decode('utf-8')
+            config = yaml.safe_load(config_text)
+            print(json.dumps(config.get('notifications', {})))
+          except Exception as e:
+            print(f"❌ Error decoding config: {e}", file=sys.stderr)
+            print("{}")
+          PYTHON_SCRIPT
+          )
 
           if [ -z "$NOTIFICATIONS" ] || [ "$NOTIFICATIONS" = "{}" ]; then
             echo "ℹ No notifications configured for this landing zone"
