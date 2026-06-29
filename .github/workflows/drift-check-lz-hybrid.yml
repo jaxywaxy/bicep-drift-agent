@@ -230,7 +230,7 @@ jobs:
             echo "---" >> "$DRIFT_FILE"
 
             cd drift-tools
-            python3 analyze_drift.py "../$BICEP_PATH" "$RG" >> "../$DRIFT_FILE" 2>&1 || true
+            python3 ../analyze_drift.py "../$BICEP_PATH" "$RG" >> "../$DRIFT_FILE" 2>&1 || true
             cd ..
 
             echo "" >> "$DRIFT_FILE"
