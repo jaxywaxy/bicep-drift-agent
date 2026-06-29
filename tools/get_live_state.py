@@ -16,6 +16,7 @@ from azure.mgmt.web import WebSiteManagementClient
 from azure.mgmt.keyvault import KeyVaultManagementClient
 from azure.mgmt.logic import LogicManagementClient
 from azure.mgmt.loganalytics import LogAnalyticsManagementClient
+from azure.mgmt.eventhub import EventHubManagementClient
 
 
 def get_live_state(
@@ -97,6 +98,7 @@ def get_live_state(
         _enrich_key_vaults(credential, sub_id, resource_group, resources)
         _enrich_logic_apps(credential, sub_id, resource_group, resources)
         _enrich_log_analytics(credential, sub_id, resource_group, resources)
+        _enrich_event_hub_namespaces(credential, sub_id, resource_group, resources)
         _enrich_vm_properties(credential, sub_id, resource_group, resources)
 
     return resources
@@ -286,6 +288,43 @@ def _enrich_log_analytics(credential, subscription_id: str, resource_group: str,
                         "publicNetworkAccessForIngestion": workspace_props.get("publicNetworkAccessForIngestion"),
                         "publicNetworkAccessForQuery": workspace_props.get("publicNetworkAccessForQuery"),
                     })
+            except Exception:
+                pass
+
+
+def _enrich_event_hub_namespaces(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
+    """Enrich Event Hub Namespace properties using EventHubManagementClient."""
+    try:
+        eventhub_client = EventHubManagementClient(credential, subscription_id)
+    except Exception:
+        return
+
+    for resource in resources:
+        if resource["type"] == "Microsoft.EventHub/namespaces":
+            namespace_name = resource["name"]
+            try:
+                namespace = eventhub_client.namespaces.get(resource_group, namespace_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+
+                data = namespace._data if hasattr(namespace, "_data") else namespace
+                ns_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
+                if ns_props:
+                    resource["properties"].update({
+                        "capacity": ns_props.get("capacity"),
+                        "isAutoInflateEnabled": ns_props.get("isAutoInflateEnabled"),
+                        "maximumThroughputUnits": ns_props.get("maximumThroughputUnits"),
+                        "kafkaEnabled": ns_props.get("kafkaEnabled"),
+                        "zoneRedundant": ns_props.get("zoneRedundant"),
+                    })
+                    sku = ns_props.get("sku", {})
+                    if sku:
+                        resource["properties"]["sku"] = {
+                            "name": sku.get("name"),
+                            "tier": sku.get("tier"),
+                            "capacity": sku.get("capacity"),
+                        }
             except Exception:
                 pass
 
