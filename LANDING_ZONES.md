@@ -161,6 +161,7 @@ gh workflow run drift-lz-myteam.yml
 
 ```yaml
 name: team-name                              # Required: display name
+subscription_id: "12345678-abcd-..."        # Required: Azure subscription ID for resources
 notifications:
   slack: https://hooks.slack.com/...       # Optional: Slack webhook
   teams: https://outlook.webhook.office.com/... # Optional: Teams webhook
@@ -185,6 +186,7 @@ checks:
 ```yaml
 # This example shows every available parameter and option
 name: backend                                          # Display name for this LZ
+subscription_id: "12345678-abcd-1234-abcd-123456789012" # Azure subscription ID (required)
 
 notifications:
   slack: https://hooks.slack.com/services/AAA/BBB/CCC # Slack webhook (optional)
@@ -226,6 +228,7 @@ checks:
 | Parameter | Required | Description | Example |
 | --- | --- | --- | --- |
 | `name` | Yes | Display name for the landing zone | `backend` |
+| `subscription_id` | Yes | Azure subscription ID where resources are deployed | `12345678-abcd-1234-abcd-123456789012` |
 | `notifications.slack` | No | Slack webhook for notifications | `https://hooks.slack.com/...` |
 | `notifications.teams` | No | Teams webhook for notifications | `https://outlook.webhook.office.com/...` |
 | `notifications.filter` | No | Which events to send: `all`, `drift`, `extra`, `missing` | `all` |
@@ -241,6 +244,7 @@ checks:
 
 ```yaml
 name: platform
+subscription_id: "12345678-abcd-1234-abcd-123456789012"
 notifications:
   slack: https://hooks.slack.com/services/XXX/platform
 
@@ -257,6 +261,7 @@ checks:
 
 ```yaml
 name: enterprise
+subscription_id: "87654321-dcba-4321-dcba-987654321098"
 notifications:
   slack: https://hooks.slack.com/services/XXX/enterprise
   teams: https://outlook.webhook.office.com/...
