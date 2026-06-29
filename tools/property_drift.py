@@ -294,6 +294,27 @@ class PropertyComparator:
         "properties.workerSize",
     }
 
+    WRITE_ONLY_PROPERTIES = {
+        # VM OS profile (not returned by Azure API for security/privacy)
+        "properties.osprofile.adminusername",
+        "properties.osprofile.adminpassword",
+        "properties.osprofile.computername",
+        "properties.osprofile.linuxconfiguration.disablepasswordauthentication",
+        "properties.osprofile.linuxconfiguration.ssh",
+        "properties.osprofile.windowsconfiguration.enableautomaticupdates",
+        "properties.osprofile.windowsconfiguration.provisionvmagent",
+        # Storage profile (image reference is immutable post-deployment)
+        "properties.storageprofile.imagereference.publisher",
+        "properties.storageprofile.imagereference.offer",
+        "properties.storageprofile.imagereference.sku",
+        "properties.storageprofile.imagereference.version",
+        # OS disk properties (immutable post-deployment)
+        "properties.storageprofile.osdisk.createoption",
+        "properties.storageprofile.osdisk.manageddisk.storageaccounttype",
+        # Network interfaces (Bicep uses expressions, Azure returns resolved IDs - functionally equivalent)
+        "properties.networkprofile.networkinterfaces",
+    }
+
     @staticmethod
     def compare_properties(
         bicep_properties: Dict[str, Any],
@@ -314,6 +335,10 @@ class PropertyComparator:
         # Check for modified properties
         for key, bicep_value in bicep_flat.items():
             if key in deployed_flat:
+                # Skip write-only properties (Azure doesn't return these in API responses)
+                if PropertyComparator._is_write_only_property(key):
+                    continue
+
                 deployed_value = deployed_flat[key]
                 if bicep_value != deployed_value:
                     severity = PropertyComparator._get_severity(key)
@@ -330,6 +355,10 @@ class PropertyComparator:
         # Check for removed properties (in Bicep but not deployed)
         for key, bicep_value in bicep_flat.items():
             if key not in deployed_flat:
+                # Skip write-only properties (Azure doesn't return these in API responses)
+                if PropertyComparator._is_write_only_property(key):
+                    continue
+
                 diffs.append(
                     PropertyDiff(
                         property_path=key,
@@ -371,6 +400,21 @@ class PropertyComparator:
             if critical in property_path.lower():
                 return "critical"
         return "warning"
+
+    @staticmethod
+    def _is_write_only_property(property_path: str) -> bool:
+        """Check if property is write-only (not returned by Azure API).
+
+        Write-only properties include:
+        - Credentials (admin passwords, SSH keys)
+        - OS profile settings (Azure returns null)
+        - Immutable properties (image reference, disk creation options)
+        """
+        path_lower = property_path.lower()
+        for write_only in PropertyComparator.WRITE_ONLY_PROPERTIES:
+            if write_only == path_lower or path_lower.startswith(write_only + "."):
+                return True
+        return False
 
     @staticmethod
     def _is_system_property(key: str) -> bool:
@@ -514,6 +558,120 @@ class ConfigurationValidator:
 
         return drifts
 
+    @staticmethod
+    def check_data_disk_changes(
+        bicep_resources: List[Dict],
+        deployed_resources: List[Dict],
+    ) -> List[ResourceDrift]:
+        """
+        Detect data disk additions, removals, and modifications on VMs.
+
+        Data disk changes are important configuration drifts because they affect
+        storage capacity and performance. Reports when:
+        - Data disks are added to deployed VMs (not in Bicep)
+        - Data disks are removed from deployed VMs (in Bicep but not deployed)
+        - Data disk properties change (size, caching, etc.)
+        """
+        drifts = []
+
+        # Create lookup maps
+        bicep_vms = {r.get("name", ""): r for r in bicep_resources
+                     if r.get("type") == "Microsoft.Compute/virtualMachines"}
+        deployed_vms = {r.get("name", ""): r for r in deployed_resources
+                        if r.get("type") == "Microsoft.Compute/virtualMachines"}
+
+        # Check VMs that exist in both (matched resources)
+        for vm_name in set(bicep_vms.keys()) & set(deployed_vms.keys()):
+            bicep_vm = bicep_vms[vm_name]
+            deployed_vm = deployed_vms[vm_name]
+
+            bicep_disks = bicep_vm.get("properties", {}).get("storageProfile", {}).get("dataDisks", [])
+            deployed_disks = deployed_vm.get("properties", {}).get("storageProfile", {}).get("dataDisks", [])
+
+            # Convert to dicts keyed by LUN for comparison
+            bicep_by_lun = {d.get("lun"): d for d in bicep_disks if isinstance(d, dict)}
+            deployed_by_lun = {d.get("lun"): d for d in deployed_disks if isinstance(d, dict)}
+
+            # Check for added disks (deployed but not in Bicep)
+            for lun, deployed_disk in deployed_by_lun.items():
+                if lun not in bicep_by_lun:
+                    disk_name = deployed_disk.get("name", f"DataDisk-LUN{lun}")
+                    disk_size = deployed_disk.get("diskSizeGB", "unknown")
+                    drifts.append(
+                        ResourceDrift(
+                            resource_type="Microsoft.Compute/virtualMachines",
+                            resource_name=vm_name,
+                            bicep_name=vm_name,
+                            deployed_name=vm_name,
+                            drift_type="modified",
+                            property_diffs=[
+                                PropertyDiff(
+                                    property_path=f"properties.storageProfile.dataDisks[{lun}]",
+                                    desired_value="(not defined in Bicep)",
+                                    actual_value=f"{disk_name} ({disk_size}GB, LUN {lun})",
+                                    change_type="added",
+                                    severity="warning",
+                                )
+                            ],
+                            match_confidence=1.0,
+                        )
+                    )
+
+            # Check for removed disks (in Bicep but not deployed)
+            for lun, bicep_disk in bicep_by_lun.items():
+                if lun not in deployed_by_lun:
+                    disk_name = bicep_disk.get("name", f"DataDisk-LUN{lun}")
+                    drifts.append(
+                        ResourceDrift(
+                            resource_type="Microsoft.Compute/virtualMachines",
+                            resource_name=vm_name,
+                            bicep_name=vm_name,
+                            deployed_name=vm_name,
+                            drift_type="modified",
+                            property_diffs=[
+                                PropertyDiff(
+                                    property_path=f"properties.storageProfile.dataDisks[{lun}]",
+                                    desired_value=f"{disk_name} (in Bicep)",
+                                    actual_value="(not attached)",
+                                    change_type="removed",
+                                    severity="warning",
+                                )
+                            ],
+                            match_confidence=1.0,
+                        )
+                    )
+
+            # Check for modified disk properties
+            for lun in set(bicep_by_lun.keys()) & set(deployed_by_lun.keys()):
+                bicep_disk = bicep_by_lun[lun]
+                deployed_disk = deployed_by_lun[lun]
+
+                # Check disk size
+                bicep_size = bicep_disk.get("diskSizeGB")
+                deployed_size = deployed_disk.get("diskSizeGB")
+                if bicep_size and deployed_size and bicep_size != deployed_size:
+                    drifts.append(
+                        ResourceDrift(
+                            resource_type="Microsoft.Compute/virtualMachines",
+                            resource_name=vm_name,
+                            bicep_name=vm_name,
+                            deployed_name=vm_name,
+                            drift_type="modified",
+                            property_diffs=[
+                                PropertyDiff(
+                                    property_path=f"properties.storageProfile.dataDisks[{lun}].diskSizeGB",
+                                    desired_value=bicep_size,
+                                    actual_value=deployed_size,
+                                    change_type="modified",
+                                    severity="warning",
+                                )
+                            ],
+                            match_confidence=1.0,
+                        )
+                    )
+
+        return drifts
+
 
 class DriftDetector:
     """Detect all types of drift."""
@@ -557,6 +715,7 @@ class DriftDetector:
         validator = ConfigurationValidator()
         drifts.extend(validator.check_orphaned_disks(deployed_resources))
         drifts.extend(validator.check_vms_without_nics(deployed_resources))
+        drifts.extend(validator.check_data_disk_changes(bicep_resources, deployed_resources))
 
         matches = ResourceMatcher.match_resources(bicep_resources, deployed_resources)
         comparator = PropertyComparator()

@@ -392,6 +392,7 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
         "tags": _resolve_value(resource.get("tags") or {}, parameters, variables),
         "sku": _resolve_value(resource.get("sku"), parameters, variables),
         "kind": resource.get("kind"),
+        "properties": _resolve_value(resource.get("properties"), parameters, variables),
     }
 
     # Keep original resource for debugging if needed
@@ -456,6 +457,7 @@ def normalize_live_resources(live_resources: list[dict]) -> list[dict]:
             "sku": resource.get("sku"),
             "kind": resource.get("kind"),
             "apiVersion": "",  # Not available in live state
+            "properties": resource.get("properties"),
             "_raw": resource,
         }
         normalized.append(normalized_res)
