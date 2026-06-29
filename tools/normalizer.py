@@ -77,9 +77,22 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
             if not arg:
                 continue
 
-            # Try to resolve if it's an expression
+            # Try to resolve if it's an expression with brackets
             if arg.startswith("[") and arg.endswith("]"):
                 arg = resolve_expression(arg, parameters, variables)
+            # Handle bare parameters() or variables() calls (no brackets)
+            elif arg.startswith("parameters("):
+                param_match = re.match(r"parameters\s*\(\s*'([^']+)'\s*\)", arg)
+                if param_match:
+                    param_name = param_match.group(1)
+                    if param_name in parameters:
+                        arg = str(parameters[param_name])
+            elif arg.startswith("variables("):
+                var_match = re.match(r"variables\s*\(\s*'([^']+)'\s*\)", arg)
+                if var_match:
+                    var_name = var_match.group(1)
+                    if var_name in variables:
+                        arg = str(variables[var_name])
             elif "(" in arg and ")" in arg:
                 # It's a function call - try to resolve it
                 arg = _resolve_function_call(arg, parameters, variables)
@@ -146,6 +159,45 @@ def _split_function_arguments(args_str: str) -> list:
     return args
 
 
+def _resolve_concat(concat_expr: str, parameters: dict, variables: dict) -> str:
+    """
+    Resolve [concat(...)] expressions from Bicep string interpolation.
+
+    Example: [concat('st', parameters('environment'), 'drift', variables('uniqueSuffix'))]
+    """
+    # Extract arguments from concat(arg1, arg2, ...)
+    match = re.match(r"concat\s*\((.*)\)", concat_expr)
+    if not match:
+        return concat_expr
+
+    args_str = match.group(1)
+    args = _split_function_arguments(args_str)
+
+    result = ""
+    for arg in args:
+        arg = arg.strip().strip("'\"")
+        # Check if it's a parameter reference
+        if arg.startswith("parameters("):
+            param_match = re.match(r"parameters\s*\(\s*'([^']+)'\s*\)", arg)
+            if param_match:
+                param_name = param_match.group(1)
+                if param_name in parameters:
+                    result += str(parameters[param_name])
+                    continue
+        # Check if it's a variable reference
+        elif arg.startswith("variables("):
+            var_match = re.match(r"variables\s*\(\s*'([^']+)'\s*\)", arg)
+            if var_match:
+                var_name = var_match.group(1)
+                if var_name in variables:
+                    result += str(variables[var_name])
+                    continue
+        # Plain string literal
+        result += arg
+
+    return result if result else concat_expr
+
+
 def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     """
     Resolve simple function calls like uniqueString(), copyIndex(), etc.
@@ -201,23 +253,32 @@ def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     return call
 
 
-def extract_variables(arm_template: dict) -> dict:
+def extract_variables(arm_template: dict, parameters: dict = None) -> dict:
     """
     Extract variables and their values from an ARM template.
 
+    Recursively resolves variable expressions that reference parameters.
+
     Args:
         arm_template: Parsed ARM template dict
+        parameters: Optional parameters dict for resolving variable expressions
 
     Returns:
         Dict mapping variable name -> value
     """
+    if parameters is None:
+        parameters = extract_parameters(arm_template)
+
     variables = {}
     template_vars = arm_template.get("variables", {})
 
     if isinstance(template_vars, dict):
         for var_name, var_value in template_vars.items():
-            # Recursively resolve variable values
-            variables[var_name] = var_value
+            # If the variable value is an expression string, resolve it
+            if isinstance(var_value, str) and (var_value.startswith("[") and var_value.endswith("]")):
+                variables[var_name] = resolve_expression(var_value, parameters, {})
+            else:
+                variables[var_name] = var_value
 
     return variables
 
@@ -278,6 +339,10 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
                 return str(val)
         return var_name
 
+    # Handle [concat(...)] expressions (from Bicep string interpolation)
+    if inner.startswith("concat"):
+        return _resolve_concat(inner, parameters, variables)
+
     # Handle [format('template', arg1, arg2, ...)]
     if inner.startswith("format"):
         # Extract template string and arguments
@@ -336,11 +401,14 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
         if not isinstance(resource, dict):
             continue
 
-        normalized = _normalize_resource(resource, parameters, variables)
-        flattened.append(normalized)
+        resource_type = resource.get("type", "")
 
-        # If this is a nested deployment, extract its resources
-        if resource.get("type") == "Microsoft.Resources/deployments":
+        # Skip infrastructure resources (not drift-checked)
+        if resource_type == "Microsoft.Resources/resourceGroups":
+            continue
+
+        # Handle nested deployments separately — extract their resources, don't add the deployment itself
+        if resource_type == "Microsoft.Resources/deployments":
             nested_template = resource.get("properties", {}).get("template", {})
             if nested_template:
                 nested_params = _extract_nested_parameters(
@@ -349,6 +417,10 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
                 nested_vars = extract_variables(nested_template)
                 nested_resources = flatten_resources(nested_template, nested_params, nested_vars)
                 flattened.extend(nested_resources)
+        else:
+            # Regular resource — normalize and add
+            normalized = _normalize_resource(resource, parameters, variables)
+            flattened.append(normalized)
 
     return flattened
 
