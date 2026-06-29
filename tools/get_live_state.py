@@ -10,6 +10,7 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 import os
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.resource.resources import ResourceManagementClient
+from azure.mgmt.compute import ComputeManagementClient
 
 
 def get_live_state(
@@ -84,6 +85,10 @@ def get_live_state(
         }
         resources.append(resource_dict)
 
+    # Enrich VM properties with detailed compute information
+    if resource_group:
+        _enrich_vm_properties(credential, sub_id, resource_group, resources)
+
     return resources
 
 
@@ -100,6 +105,38 @@ def _extract_resource_group_from_id(resource_id: str) -> str | None:
     except (ValueError, IndexError):
         pass
     return None
+
+
+def _enrich_vm_properties(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
+    """Enrich VM resources with detailed hardware properties via ComputeManagementClient.
+
+    The generic ResourceManagementClient doesn't return detailed VM properties like
+    hardwareProfile.vmSize. This function fetches those details separately.
+
+    Modifies resources list in place.
+    """
+    try:
+        compute_client = ComputeManagementClient(credential, subscription_id)
+
+        for resource in resources:
+            if resource["type"] == "Microsoft.Compute/virtualMachines":
+                try:
+                    vm_name = resource["name"]
+                    vm = compute_client.virtual_machines.get(resource_group, vm_name, expand="instanceView")
+
+                    # Merge detailed properties into resource
+                    if vm.hardware_profile:
+                        if "properties" not in resource:
+                            resource["properties"] = {}
+                        resource["properties"]["hardwareProfile"] = {
+                            "vmSize": vm.hardware_profile.vm_size
+                        }
+                except Exception:
+                    # If enrichment fails for a specific VM, continue without it
+                    pass
+    except Exception:
+        # If ComputeManagementClient initialization fails, continue without VM enrichment
+        pass
 
 
 def _extract_sku(resource) -> dict | None:

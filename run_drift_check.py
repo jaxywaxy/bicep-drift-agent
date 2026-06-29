@@ -100,7 +100,7 @@ def run(bicep_file: str, resource_group: str):
     try:
         if deployment_scope == "subscription":
             print(f"  ℹ Querying at subscription scope...")
-            live_resources = get_live_state(scope="subscription")
+            live_resources = get_live_state(resource_group=resource_group, scope="subscription")
         else:
             live_resources = get_live_state(resource_group=resource_group, scope="resource_group")
     except ValueError as e:
