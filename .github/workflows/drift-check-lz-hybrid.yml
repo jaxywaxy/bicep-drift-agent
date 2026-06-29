@@ -38,7 +38,7 @@ jobs:
           python3 << 'PYTHON_SCRIPT'
           import yaml
           import sys
-          import json
+          import os
 
           LZ = '${{ inputs.landing_zone }}'
 
@@ -58,17 +58,13 @@ jobs:
           print(f"  Repo: {repo}")
           print(f"  Config: {config_path}")
 
-          # Save for next step
-          with open('/tmp/lz_index.txt', 'w') as f:
-            f.write(f"{repo}|{config_path}\n")
+          # Write directly to GitHub Actions output
+          with open(os.environ.get('GITHUB_OUTPUT', '/dev/null'), 'a') as f:
+            f.write(f"repo={repo}\n")
+            f.write(f"config_path={config_path}\n")
+            f.write(f"name={LZ}\n")
 
           PYTHON_SCRIPT
-
-          # Read saved values
-          IFS='|' read REPO CONFIG_PATH < /tmp/lz_index.txt
-          echo "repo=$REPO" >> $GITHUB_OUTPUT
-          echo "config_path=$CONFIG_PATH" >> $GITHUB_OUTPUT
-          echo "name=${{ inputs.landing_zone }}" >> $GITHUB_OUTPUT
 
       - name: Checkout external Bicep repo
         uses: actions/checkout@v4
