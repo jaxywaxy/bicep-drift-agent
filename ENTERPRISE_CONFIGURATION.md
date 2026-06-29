@@ -2,6 +2,16 @@
 
 For enterprise deployments with **multiple teams**, **multiple infrastructure layers**, and **multiple resource groups per team**.
 
+## Prerequisites
+
+- ✅ **Azure Authentication** - OIDC with Workload Identity Federation set up
+  - See [AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md) for complete setup
+  - Uses GitHub OIDC tokens (no secrets in GitHub)
+  - Reader access to your Azure management group
+- ✅ **GitHub Repository** - bicep-drift-agent
+
+---
+
 ## Quick Answer
 
 **Where is the configuration?**
