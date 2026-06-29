@@ -11,6 +11,9 @@ import os
 from azure.identity import DefaultAzureCredential
 from azure.mgmt.resource.resources import ResourceManagementClient
 from azure.mgmt.compute import ComputeManagementClient
+from azure.mgmt.storage import StorageManagementClient
+from azure.mgmt.web import WebSiteManagementClient
+from azure.mgmt.keyvault import KeyVaultManagementClient
 
 
 def get_live_state(
@@ -85,8 +88,11 @@ def get_live_state(
         }
         resources.append(resource_dict)
 
-    # Enrich VM properties with detailed compute information
+    # Enrich resource properties with type-specific clients
     if resource_group:
+        _enrich_storage_accounts(credential, sub_id, resource_group, resources)
+        _enrich_app_services(credential, sub_id, resource_group, resources)
+        _enrich_key_vaults(credential, sub_id, resource_group, resources)
         _enrich_vm_properties(credential, sub_id, resource_group, resources)
 
     return resources
@@ -107,73 +113,175 @@ def _extract_resource_group_from_id(resource_id: str) -> str | None:
     return None
 
 
+def _enrich_storage_accounts(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
+    """Enrich Storage Account properties using StorageManagementClient."""
+    try:
+        storage_client = StorageManagementClient(credential, subscription_id)
+    except Exception:
+        return
+
+    for resource in resources:
+        if resource["type"] == "Microsoft.Storage/storageAccounts":
+            account_name = resource["name"]
+            try:
+                account = storage_client.storage_accounts.get_properties(resource_group, account_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+                # Handle both dict and object responses
+                props = account.get("properties", {}) if isinstance(account, dict) else getattr(account, "properties", {})
+                if props:
+                    resource["properties"].update({
+                        "accessTier": str(props.get("accessTier", "")).split(".")[-1],
+                        "minimumTlsVersion": str(props.get("minimumTlsVersion", "")).split(".")[-1],
+                        "supportsHttpsTrafficOnly": props.get("supportsHttpsTrafficOnly"),
+                        "publicNetworkAccess": props.get("publicNetworkAccess"),
+                    })
+            except Exception:
+                pass
+
+
+def _enrich_app_services(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
+    """Enrich App Service properties using WebSiteManagementClient."""
+    try:
+        web_client = WebSiteManagementClient(credential, subscription_id)
+    except Exception:
+        return
+
+    for resource in resources:
+        if resource["type"] == "Microsoft.Web/sites":
+            site_name = resource["name"]
+            try:
+                site = web_client.web_apps.get(resource_group, site_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+                site_props = site.get("properties", {}) if isinstance(site, dict) else getattr(site, "properties", {})
+                if site_props:
+                    resource["properties"].update({
+                        "serverFarmId": site_props.get("appServicePlanId"),
+                        "httpsOnly": site_props.get("httpsOnly"),
+                    })
+                # Get site config separately
+                try:
+                    config = web_client.web_apps.get_configuration(resource_group, site_name)
+                    config_props = config.get("properties", {}) if isinstance(config, dict) else getattr(config, "properties", {})
+                    if config_props:
+                        resource["properties"]["siteConfig"] = {
+                            "linuxFxVersion": config_props.get("linuxFxVersion"),
+                            "alwaysOn": config_props.get("alwaysOn"),
+                            "minTlsVersion": config_props.get("minTlsVersion"),
+                            "http20Enabled": config_props.get("http20Enabled"),
+                        }
+                except Exception:
+                    pass
+            except Exception:
+                pass
+
+
+def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
+    """Enrich Key Vault properties using KeyVaultManagementClient."""
+    try:
+        kv_client = KeyVaultManagementClient(credential, subscription_id)
+    except Exception:
+        return
+
+    for resource in resources:
+        if resource["type"] == "Microsoft.KeyVault/vaults":
+            vault_name = resource["name"]
+            try:
+                vault = kv_client.vaults.get(resource_group, vault_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+                vault_props = vault.get("properties", {}) if isinstance(vault, dict) else getattr(vault, "properties", {})
+                if vault_props:
+                    resource["properties"].update({
+                        "tenantId": str(vault_props.get("tenantId", "")),
+                        "enableRbacAuthorization": vault_props.get("enableRbacAuthorization"),
+                        "enableSoftDelete": vault_props.get("enableSoftDelete"),
+                        "softDeleteRetentionInDays": vault_props.get("softDeleteRetentionInDays"),
+                        "publicNetworkAccess": vault_props.get("publicNetworkAccess"),
+                    })
+                    sku = vault_props.get("sku", {})
+                    if sku:
+                        resource["properties"]["sku"] = {
+                            "family": sku.get("family"),
+                            "name": sku.get("name"),
+                        }
+                    acls = vault_props.get("networkAcls", {})
+                    if acls:
+                        resource["properties"]["networkAcls"] = {
+                            "defaultAction": acls.get("defaultAction"),
+                            "bypass": acls.get("bypass"),
+                        }
+            except Exception:
+                pass
+
+
 def _enrich_vm_properties(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich VM resources with detailed properties via ComputeManagementClient.
 
     The generic ResourceManagementClient doesn't return detailed VM properties.
     This function fetches hardware profile, storage profile (data disks), and network profile.
 
-    Modifies resources list in place.
+    Modifies resources list in place. Errors are logged but don't block enrichment for other VMs.
     """
     try:
         compute_client = ComputeManagementClient(credential, subscription_id)
+    except Exception as e:
+        print(f"  ⚠ ComputeManagementClient initialization failed: {type(e).__name__}. Skipping VM property enrichment.")
+        return
 
-        for resource in resources:
-            if resource["type"] == "Microsoft.Compute/virtualMachines":
-                try:
-                    vm_name = resource["name"]
-                    vm = compute_client.virtual_machines.get(resource_group, vm_name, expand="instanceView")
+    for resource in resources:
+        if resource["type"] == "Microsoft.Compute/virtualMachines":
+            vm_name = resource["name"]
+            try:
+                vm = compute_client.virtual_machines.get(resource_group, vm_name, expand="instanceView")
 
-                    if "properties" not in resource:
-                        resource["properties"] = {}
+                if "properties" not in resource:
+                    resource["properties"] = {}
 
-                    # Hardware profile (vmSize)
-                    if vm.hardware_profile:
-                        resource["properties"]["hardwareProfile"] = {
-                            "vmSize": vm.hardware_profile.vm_size
-                        }
+                # Hardware profile (vmSize)
+                if vm.hardware_profile:
+                    resource["properties"]["hardwareProfile"] = {
+                        "vmSize": vm.hardware_profile.vm_size
+                    }
 
-                    # Storage profile (data disks, OS disk)
-                    if vm.storage_profile:
-                        storage = {}
-                        if vm.storage_profile.data_disks:
-                            storage["dataDisks"] = [
-                                {
-                                    "lun": disk.lun,
-                                    "name": disk.name,
-                                    "caching": disk.caching,
-                                    "diskSizeGB": disk.disk_size_gb,
-                                    "managedDisk": {
-                                        "id": disk.managed_disk.id if disk.managed_disk else None
-                                    } if disk.managed_disk else None,
-                                }
-                                for disk in vm.storage_profile.data_disks
-                            ]
-                        if vm.storage_profile.os_disk:
-                            storage["osDisk"] = {
-                                "name": vm.storage_profile.os_disk.name,
-                                "caching": vm.storage_profile.os_disk.caching,
-                                "diskSizeGB": vm.storage_profile.os_disk.disk_size_gb,
+                # Storage profile (data disks, OS disk)
+                if vm.storage_profile:
+                    storage = {}
+                    if vm.storage_profile.data_disks:
+                        storage["dataDisks"] = [
+                            {
+                                "lun": disk.lun,
+                                "name": disk.name,
+                                "caching": disk.caching,
+                                "diskSizeGB": disk.disk_size_gb,
                                 "managedDisk": {
-                                    "id": vm.storage_profile.os_disk.managed_disk.id
-                                } if vm.storage_profile.os_disk.managed_disk else None,
+                                    "id": disk.managed_disk.id if disk.managed_disk else None
+                                } if disk.managed_disk else None,
                             }
-                        if storage:
-                            resource["properties"]["storageProfile"] = storage
-
-                    # Network profile (NICs)
-                    if vm.network_profile and vm.network_profile.network_interfaces:
-                        resource["properties"]["networkProfile"] = {
-                            "networkInterfaces": [
-                                {"id": nic.id} for nic in vm.network_profile.network_interfaces
-                            ]
+                            for disk in vm.storage_profile.data_disks
+                        ]
+                    if vm.storage_profile.os_disk:
+                        storage["osDisk"] = {
+                            "name": vm.storage_profile.os_disk.name,
+                            "caching": vm.storage_profile.os_disk.caching,
+                            "diskSizeGB": vm.storage_profile.os_disk.disk_size_gb,
+                            "managedDisk": {
+                                "id": vm.storage_profile.os_disk.managed_disk.id
+                            } if vm.storage_profile.os_disk.managed_disk else None,
                         }
-                except Exception:
-                    # If enrichment fails for a specific VM, continue without it
-                    pass
-    except Exception:
-        # If ComputeManagementClient initialization fails, continue without VM enrichment
-        pass
+                    if storage:
+                        resource["properties"]["storageProfile"] = storage
+
+                # Network profile (NICs)
+                if vm.network_profile and vm.network_profile.network_interfaces:
+                    resource["properties"]["networkProfile"] = {
+                        "networkInterfaces": [
+                            {"id": nic.id} for nic in vm.network_profile.network_interfaces
+                        ]
+                    }
+            except Exception as e:
+                print(f"  ⚠ Failed to enrich VM {vm_name}: {type(e).__name__}. Continuing with partial properties.")
 
 
 def _extract_sku(resource) -> dict | None:
