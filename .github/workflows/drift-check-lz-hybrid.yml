@@ -138,12 +138,14 @@ jobs:
             print(f"  Checks: {len(checks)}")
             print(f"  Notifications: {', '.join(notif.keys())}")
 
-            # Output checks array as JSON for matrix
+            # Output checks array as JSON for matrix (use heredoc for multiline)
             github_output = os.environ.get('GITHUB_OUTPUT')
             if github_output:
+              checks_json = json.dumps(checks)
+              notif_json = json.dumps(notif)
               with open(github_output, 'a') as f:
-                f.write(f"checks={json.dumps(checks)}\n")
-                f.write(f"notifications={json.dumps(notif)}\n")
+                f.write(f"checks<<EOF\n{checks_json}\nEOF\n")
+                f.write(f"notifications<<EOF\n{notif_json}\nEOF\n")
               print(f"✓ Checks array written to GitHub outputs")
 
           except Exception as e:
