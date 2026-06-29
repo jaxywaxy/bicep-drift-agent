@@ -11,6 +11,7 @@ Example:
     python run_drift_check.py ./infra/main.bicep my-resource-group
 """
 
+import os
 import sys
 import json
 from pathlib import Path
@@ -33,7 +34,6 @@ def run(bicep_file: str, resource_group: str):
     print()
 
     # Load parameter overrides from environment or bicepparam file
-    import os
     param_overrides = {}
     arm_params_env = os.environ.get("ARM_PARAMETERS")
     if arm_params_env:

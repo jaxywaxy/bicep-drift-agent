@@ -4,7 +4,7 @@ Data models for drift analysis.
 These define the structures that Phase 1 generates and Phase 2's agent consumes.
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
 
 

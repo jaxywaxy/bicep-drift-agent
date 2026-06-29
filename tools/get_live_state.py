@@ -113,67 +113,66 @@ def _enrich_vm_properties(credential, subscription_id: str, resource_group: str,
     The generic ResourceManagementClient doesn't return detailed VM properties.
     This function fetches hardware profile, storage profile (data disks), and network profile.
 
-    Modifies resources list in place.
+    Modifies resources list in place. Errors are logged but don't block enrichment for other VMs.
     """
     try:
         compute_client = ComputeManagementClient(credential, subscription_id)
+    except Exception as e:
+        print(f"  ⚠ ComputeManagementClient initialization failed: {type(e).__name__}. Skipping VM property enrichment.")
+        return
 
-        for resource in resources:
-            if resource["type"] == "Microsoft.Compute/virtualMachines":
-                try:
-                    vm_name = resource["name"]
-                    vm = compute_client.virtual_machines.get(resource_group, vm_name, expand="instanceView")
+    for resource in resources:
+        if resource["type"] == "Microsoft.Compute/virtualMachines":
+            vm_name = resource["name"]
+            try:
+                vm = compute_client.virtual_machines.get(resource_group, vm_name, expand="instanceView")
 
-                    if "properties" not in resource:
-                        resource["properties"] = {}
+                if "properties" not in resource:
+                    resource["properties"] = {}
 
-                    # Hardware profile (vmSize)
-                    if vm.hardware_profile:
-                        resource["properties"]["hardwareProfile"] = {
-                            "vmSize": vm.hardware_profile.vm_size
-                        }
+                # Hardware profile (vmSize)
+                if vm.hardware_profile:
+                    resource["properties"]["hardwareProfile"] = {
+                        "vmSize": vm.hardware_profile.vm_size
+                    }
 
-                    # Storage profile (data disks, OS disk)
-                    if vm.storage_profile:
-                        storage = {}
-                        if vm.storage_profile.data_disks:
-                            storage["dataDisks"] = [
-                                {
-                                    "lun": disk.lun,
-                                    "name": disk.name,
-                                    "caching": disk.caching,
-                                    "diskSizeGB": disk.disk_size_gb,
-                                    "managedDisk": {
-                                        "id": disk.managed_disk.id if disk.managed_disk else None
-                                    } if disk.managed_disk else None,
-                                }
-                                for disk in vm.storage_profile.data_disks
-                            ]
-                        if vm.storage_profile.os_disk:
-                            storage["osDisk"] = {
-                                "name": vm.storage_profile.os_disk.name,
-                                "caching": vm.storage_profile.os_disk.caching,
-                                "diskSizeGB": vm.storage_profile.os_disk.disk_size_gb,
+                # Storage profile (data disks, OS disk)
+                if vm.storage_profile:
+                    storage = {}
+                    if vm.storage_profile.data_disks:
+                        storage["dataDisks"] = [
+                            {
+                                "lun": disk.lun,
+                                "name": disk.name,
+                                "caching": disk.caching,
+                                "diskSizeGB": disk.disk_size_gb,
                                 "managedDisk": {
-                                    "id": vm.storage_profile.os_disk.managed_disk.id
-                                } if vm.storage_profile.os_disk.managed_disk else None,
+                                    "id": disk.managed_disk.id if disk.managed_disk else None
+                                } if disk.managed_disk else None,
                             }
-                        if storage:
-                            resource["properties"]["storageProfile"] = storage
-
-                    # Network profile (NICs)
-                    if vm.network_profile and vm.network_profile.network_interfaces:
-                        resource["properties"]["networkProfile"] = {
-                            "networkInterfaces": [
-                                {"id": nic.id} for nic in vm.network_profile.network_interfaces
-                            ]
+                            for disk in vm.storage_profile.data_disks
+                        ]
+                    if vm.storage_profile.os_disk:
+                        storage["osDisk"] = {
+                            "name": vm.storage_profile.os_disk.name,
+                            "caching": vm.storage_profile.os_disk.caching,
+                            "diskSizeGB": vm.storage_profile.os_disk.disk_size_gb,
+                            "managedDisk": {
+                                "id": vm.storage_profile.os_disk.managed_disk.id
+                            } if vm.storage_profile.os_disk.managed_disk else None,
                         }
-                except Exception:
-                    # If enrichment fails for a specific VM, continue without it
-                    pass
-    except Exception:
-        # If ComputeManagementClient initialization fails, continue without VM enrichment
-        pass
+                    if storage:
+                        resource["properties"]["storageProfile"] = storage
+
+                # Network profile (NICs)
+                if vm.network_profile and vm.network_profile.network_interfaces:
+                    resource["properties"]["networkProfile"] = {
+                        "networkInterfaces": [
+                            {"id": nic.id} for nic in vm.network_profile.network_interfaces
+                        ]
+                    }
+            except Exception as e:
+                print(f"  ⚠ Failed to enrich VM {vm_name}: {type(e).__name__}. Continuing with partial properties.")
 
 
 def _extract_sku(resource) -> dict | None:
