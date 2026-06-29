@@ -18,6 +18,7 @@ jobs:
       lz-name: ${{ steps.load.outputs.name }}
       lz-checks: ${{ steps.validate.outputs.checks }}
       lz-notifications: ${{ steps.validate.outputs.notifications }}
+      lz-subscription-id: ${{ steps.validate.outputs.subscription_id }}
     steps:
       - name: Checkout drift-agent (for index)
         uses: actions/checkout@v4
@@ -132,9 +133,11 @@ jobs:
             config = yaml.safe_load(config_text)
             checks = config.get('checks', [])
             notif = config.get('notifications', {})
+            subscription_id = config.get('subscription_id', '')
 
             print(f"✓ Config valid")
             print(f"  Name: {config.get('name', 'unknown')}")
+            print(f"  Subscription ID: {subscription_id if subscription_id else '(not specified)'}")
             print(f"  Checks: {len(checks)}")
             print(f"  Notifications: {', '.join(notif.keys())}")
 
@@ -146,7 +149,8 @@ jobs:
               with open(github_output, 'a') as f:
                 f.write(f"checks={checks_json}\n")
                 f.write(f"notifications={notif_json}\n")
-              print(f"✓ Checks array written to GitHub outputs")
+                f.write(f"subscription_id={subscription_id}\n")
+              print(f"✓ Config outputs written to GitHub")
 
           except Exception as e:
             print(f"❌ Invalid config: {e}")
@@ -163,6 +167,8 @@ jobs:
       fail-fast: false
 
     runs-on: ubuntu-latest
+    env:
+      AZURE_SUBSCRIPTION_ID: ${{ needs.load-config.outputs.lz-subscription-id }}
     steps:
       - name: Checkout drift detection tools
         uses: actions/checkout@v4
@@ -285,10 +291,20 @@ jobs:
             [ -f "$file" ] && echo "" >> consolidated_drift_report.txt
           done
 
-          # Count totals
-          TOTAL_DRIFT=$(grep -c "^\[DRIFT\]" consolidated_drift_report.txt || echo "0")
-          TOTAL_EXTRA=$(grep -c "^\[EXTRA\]" consolidated_drift_report.txt || echo "0")
-          TOTAL_MISSING=$(grep -c "^\[MISSING\]" consolidated_drift_report.txt || echo "0")
+          # Count totals (handle empty file and grep edge cases)
+          if [ -f consolidated_drift_report.txt ] && [ -s consolidated_drift_report.txt ]; then
+            TOTAL_DRIFT=$(grep -c "^\[DRIFT\]" consolidated_drift_report.txt 2>/dev/null || true)
+            TOTAL_EXTRA=$(grep -c "^\[EXTRA\]" consolidated_drift_report.txt 2>/dev/null || true)
+            TOTAL_MISSING=$(grep -c "^\[MISSING\]" consolidated_drift_report.txt 2>/dev/null || true)
+            TOTAL_DRIFT=${TOTAL_DRIFT:-0}
+            TOTAL_EXTRA=${TOTAL_EXTRA:-0}
+            TOTAL_MISSING=${TOTAL_MISSING:-0}
+          else
+            TOTAL_DRIFT=0
+            TOTAL_EXTRA=0
+            TOTAL_MISSING=0
+          fi
+
           TOTAL_ISSUES=$((TOTAL_DRIFT + TOTAL_EXTRA + TOTAL_MISSING))
 
           echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
