@@ -17,6 +17,12 @@
 #       workflow: drift-lz-lz-name.yml               # Workflow file to run
 
 landing_zones:
+  test-resources:
+    repo: jaxywaxy/drift-test-resources
+    config_path: .github/drift-lz-config.yml
+    schedule: '0 * * * *'
+    workflow: drift-lz-test.yml
+
   frontend:
     repo: myorg/frontend-bicep
     config_path: .github/drift-lz-config.yml

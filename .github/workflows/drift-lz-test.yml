@@ -1,0 +1,13 @@
+name: Test Landing Zone Drift Check
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour for testing
+  workflow_dispatch:
+
+jobs:
+  drift-check:
+    uses: ./.github/workflows/drift-check-lz-hybrid.yml
+    with:
+      landing_zone: test-resources
+    secrets: inherit
