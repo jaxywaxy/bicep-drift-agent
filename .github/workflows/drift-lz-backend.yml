@@ -1,0 +1,13 @@
+name: Backend Landing Zone Drift Check
+
+on:
+  schedule:
+    - cron: '0 14 * * 2,4'  # Tuesday, Thursday at 2pm UTC
+  workflow_dispatch:
+
+jobs:
+  drift-backend:
+    uses: ./.github/workflows/drift-check-lz-reusable.yml@main
+    with:
+      landing_zone: backend
+    secrets: inherit

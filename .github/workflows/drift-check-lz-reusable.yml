@@ -1,0 +1,240 @@
+name: Landing Zone Drift Check (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      landing_zone:
+        type: string
+        required: true
+        description: 'Landing Zone name (must exist in DRIFT_LANDING_ZONES config)'
+
+jobs:
+  parse-lz-config:
+    name: Parse Landing Zone Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      checks-json: ${{ steps.parse.outputs.checks }}
+      notifications: ${{ steps.parse.outputs.notifications }}
+      lz-name: ${{ steps.parse.outputs.lz_name }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Parse Landing Zone Config
+        id: parse
+        run: |
+          CONFIG='${{ vars.DRIFT_LANDING_ZONES }}'
+          LZ='${{ inputs.landing_zone }}'
+
+          if [ -z "$CONFIG" ]; then
+            echo "❌ DRIFT_LANDING_ZONES variable not set"
+            exit 1
+          fi
+
+          # Extract this LZ's configuration
+          echo "Parsing configuration for Landing Zone: $LZ"
+
+          CHECKS=$(echo "$CONFIG" | jq -c ".\"$LZ\".checks" 2>/dev/null)
+          if [ $? -ne 0 ] || [ "$CHECKS" = "null" ]; then
+            echo "❌ Landing Zone '$LZ' not found in DRIFT_LANDING_ZONES"
+            exit 1
+          fi
+
+          NOTIFS=$(echo "$CONFIG" | jq -c ".\"$LZ\".notifications" 2>/dev/null)
+
+          CHECK_COUNT=$(echo "$CHECKS" | jq 'length')
+          echo "✓ Found $CHECK_COUNT checks for landing zone: $LZ"
+
+          echo "checks=$CHECKS" >> $GITHUB_OUTPUT
+          echo "notifications=$NOTIFS" >> $GITHUB_OUTPUT
+          echo "lz_name=$LZ" >> $GITHUB_OUTPUT
+
+  drift-checks:
+    name: Drift Check - ${{ matrix.check.name }}
+    needs: parse-lz-config
+    strategy:
+      matrix:
+        check: ${{ fromJson(needs.parse-lz-config.outputs.checks-json) }}
+      fail-fast: false
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout drift detection tools
+        uses: actions/checkout@v4
+        with:
+          path: drift-tools
+
+      - name: Checkout Bicep repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.check.repo }}
+          ref: ${{ matrix.check.branch || 'main' }}
+          path: bicep-repo-${{ matrix.check.name }}
+          fetch-depth: 1
+          token: ${{ secrets.BICEP_REPO_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd drift-tools
+          python -m pip install -q -r requirements.txt
+
+      - name: Run drift checks - ${{ matrix.check.name }}
+        id: drift
+        run: |
+          BICEP_PATH="bicep-repo-${{ matrix.check.name }}/${{ matrix.check.path }}"
+          DRIFT_FILE="drift_${{ matrix.check.name }}.txt"
+
+          echo "========================================" > "$DRIFT_FILE"
+          echo "Layer: ${{ matrix.check.name }}" >> "$DRIFT_FILE"
+          echo "Repository: ${{ matrix.check.repo }}" >> "$DRIFT_FILE"
+          echo "Branch: ${{ matrix.check.branch || 'main' }}" >> "$DRIFT_FILE"
+          echo "Bicep File: ${{ matrix.check.path }}" >> "$DRIFT_FILE"
+          echo "========================================" >> "$DRIFT_FILE"
+          echo "" >> "$DRIFT_FILE"
+
+          # Test each resource group
+          RG_COUNT=$(echo '${{ toJson(matrix.check.resource_groups) }}' | jq 'length')
+          echo "Testing $RG_COUNT resource group(s)..."
+
+          TOTAL_ISSUES=0
+          echo '${{ toJson(matrix.check.resource_groups) }}' | jq -r '.[]' | while read RG; do
+            echo "Testing: $RG" | tee -a "$DRIFT_FILE"
+            echo "---" >> "$DRIFT_FILE"
+
+            cd drift-tools
+            python3 analyze_drift.py "../$BICEP_PATH" "$RG" >> "../$DRIFT_FILE" 2>&1 || true
+            cd ..
+
+            echo "" >> "$DRIFT_FILE"
+          done
+
+          # Count issues
+          DRIFT_COUNT=$(grep -c "^\[DRIFT\]" "$DRIFT_FILE" || echo "0")
+          EXTRA_COUNT=$(grep -c "^\[EXTRA\]" "$DRIFT_FILE" || echo "0")
+          MISSING_COUNT=$(grep -c "^\[MISSING\]" "$DRIFT_FILE" || echo "0")
+          TOTAL_ISSUES=$((DRIFT_COUNT + EXTRA_COUNT + MISSING_COUNT))
+
+          echo "drift_count=$DRIFT_COUNT" >> $GITHUB_OUTPUT
+          echo "extra_count=$EXTRA_COUNT" >> $GITHUB_OUTPUT
+          echo "missing_count=$MISSING_COUNT" >> $GITHUB_OUTPUT
+          echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
+
+          echo "Results: $DRIFT_COUNT drift(s), $EXTRA_COUNT extra, $MISSING_COUNT missing"
+
+      - name: Upload drift report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: drift-reports-${{ needs.parse-lz-config.outputs.lz-name }}
+          path: drift_*.txt
+          retention-days: 30
+
+  consolidate-results:
+    name: Consolidate and Notify
+    needs: [parse-lz-config, drift-checks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout drift detection tools
+        uses: actions/checkout@v4
+
+      - name: Download all drift reports
+        uses: actions/download-artifact@v3
+        with:
+          name: drift-reports-${{ needs.parse-lz-config.outputs.lz-name }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -q -r requirements.txt
+
+      - name: Consolidate reports
+        id: consolidate
+        run: |
+          echo "Consolidating drift reports..."
+
+          # Combine all individual reports
+          > consolidated_drift_report.txt
+
+          for file in drift_*.txt; do
+            [ -f "$file" ] && cat "$file" >> consolidated_drift_report.txt
+            [ -f "$file" ] && echo "" >> consolidated_drift_report.txt
+          done
+
+          # Count totals
+          TOTAL_DRIFT=$(grep -c "^\[DRIFT\]" consolidated_drift_report.txt || echo "0")
+          TOTAL_EXTRA=$(grep -c "^\[EXTRA\]" consolidated_drift_report.txt || echo "0")
+          TOTAL_MISSING=$(grep -c "^\[MISSING\]" consolidated_drift_report.txt || echo "0")
+          TOTAL_ISSUES=$((TOTAL_DRIFT + TOTAL_EXTRA + TOTAL_MISSING))
+
+          echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
+          echo "total_drift=$TOTAL_DRIFT" >> $GITHUB_OUTPUT
+          echo "total_extra=$TOTAL_EXTRA" >> $GITHUB_OUTPUT
+          echo "total_missing=$TOTAL_MISSING" >> $GITHUB_OUTPUT
+
+          echo "✓ Consolidated Results:"
+          echo "  - DRIFT (configuration changes): $TOTAL_DRIFT"
+          echo "  - EXTRA (orphaned resources): $TOTAL_EXTRA"
+          echo "  - MISSING (undeployed resources): $TOTAL_MISSING"
+          echo "  - TOTAL ISSUES: $TOTAL_ISSUES"
+
+      - name: Send consolidated notifications
+        if: always()
+        env:
+          DRIFT_NOTIFICATIONS: ${{ needs.parse-lz-config.outputs.notifications }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          if [ -z "$DRIFT_NOTIFICATIONS" ]; then
+            echo "ℹ No notifications configured for this landing zone"
+            exit 0
+          fi
+
+          REPORT_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "Sending notifications to configured channels..."
+          python3 tools/send_notifications.py consolidated_drift_report.txt "$REPORT_URL"
+
+      - name: Publish summary to GitHub
+        if: always()
+        run: |
+          LZ="${{ needs.parse-lz-config.outputs.lz-name }}"
+          TOTAL="${{ steps.consolidate.outputs.total_issues }}"
+          DRIFT="${{ steps.consolidate.outputs.total_drift }}"
+          EXTRA="${{ steps.consolidate.outputs.total_extra }}"
+          MISSING="${{ steps.consolidate.outputs.total_missing }}"
+
+          {
+            echo "## 🏗️ Landing Zone: $LZ"
+            echo ""
+            if [ "$TOTAL" = "0" ]; then
+              echo "### ✅ No drift detected"
+            else
+              echo "### ⚠️ Drift Detected"
+            fi
+            echo ""
+            echo "| Metric | Count |"
+            echo "|--------|-------|"
+            echo "| Configuration Changes (DRIFT) | $DRIFT |"
+            echo "| Orphaned Resources (EXTRA) | $EXTRA |"
+            echo "| Undeployed Resources (MISSING) | $MISSING |"
+            echo "| **TOTAL** | **$TOTAL** |"
+            echo ""
+            echo "### Details"
+            if [ -f consolidated_drift_report.txt ]; then
+              echo "\`\`\`"
+              grep "^\[DRIFT\]\|^\[EXTRA\]\|^\[MISSING\]" consolidated_drift_report.txt | head -30 || echo "No issues found"
+              echo "\`\`\`"
+            fi
+            echo ""
+            echo "[View Full Report](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"
+          } >> $GITHUB_STEP_SUMMARY
