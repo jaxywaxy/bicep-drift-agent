@@ -390,6 +390,7 @@ platform:  '0 3 * * *'       # Daily 3am
 
 ## See Also
 
+- [AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md) — Azure OIDC setup (enterprise way)
 - [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) — General setup
 - [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) — Notification configuration
 - [CROSS_REPO_SETUP.md](CROSS_REPO_SETUP.md) — Multi-repo testing guide
