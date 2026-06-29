@@ -84,6 +84,14 @@ jobs:
           CONFIG_PATH="${{ steps.load.outputs.config_path }}"
           CONFIG_FILE="lz-repo/$CONFIG_PATH"
 
+          echo "📂 Debugging: Checking for config file"
+          echo "  CONFIG_PATH: '$CONFIG_PATH'"
+          echo "  CONFIG_FILE: '$CONFIG_FILE'"
+          echo "  Files in lz-repo/.github/:"
+          ls -la lz-repo/.github/ 2>&1 || echo "  ⚠️ .github directory not found"
+          echo "  All files in lz-repo:"
+          find lz-repo -type f -name "*.yml" -o -name "*.yaml" | head -20
+
           if [ ! -f "$CONFIG_FILE" ]; then
             echo "❌ Config file not found: $CONFIG_PATH in ${{ steps.load.outputs.repo }}"
             exit 1
