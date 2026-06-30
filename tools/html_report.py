@@ -39,9 +39,6 @@ def generate_html_report(
         raise
 
     drifts = data.get("drifts", [])
-    recs_found = sum(1 for d in drifts if d.get("recommendation"))
-    matched_found = len(data.get("smart_matched", []))
-    logger.debug(f"Found {recs_found}/{len(drifts)} recommendations and {matched_found} smart-matched resources")
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])
