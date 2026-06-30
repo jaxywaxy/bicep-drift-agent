@@ -118,8 +118,12 @@ class IgnorePatternList:
                     # If pattern has drift_type, check if it matches property names
                     if pattern.drift_type:
                         for prop_name in prop_names:
-                            if pattern.resource_type_regex.match(resource_type) if pattern.resource_type_regex else True:
-                                if pattern.drift_type_regex.match(prop_name):
+                            resource_matches = (
+                                fnmatch.fnmatch(resource_type.lower(), pattern.resource_type_regex)
+                                if pattern.resource_type_regex else True
+                            )
+                            if resource_matches:
+                                if fnmatch.fnmatch(prop_name.lower(), pattern.drift_type_regex):
                                     drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
                                     ignored.append(drift)
                                     is_ignored = True
