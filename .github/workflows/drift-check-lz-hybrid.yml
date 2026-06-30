@@ -255,10 +255,15 @@ jobs:
         if: always()
         run: |
           # Copy reports to top-level for clean artifact structure
+          mkdir -p reports
+
+          # Copy JSON and HTML reports from drift-tools
           if [ -d "drift-tools/reports" ]; then
-            mkdir -p reports
-            cp -r drift-tools/reports/* reports/
+            cp -r drift-tools/reports/* reports/ 2>/dev/null || true
           fi
+
+          # Copy drift text files for consolidation
+          cp drift_*.txt reports/ 2>/dev/null || true
 
       - name: Upload drift reports and analysis
         if: always()
@@ -300,7 +305,8 @@ jobs:
 
           > consolidated_drift_report.txt
 
-          for file in drift_*.txt; do
+          # Look for drift files in downloaded artifacts (reports directory)
+          for file in reports/drift_*.txt; do
             [ -f "$file" ] && cat "$file" >> consolidated_drift_report.txt
             [ -f "$file" ] && echo "" >> consolidated_drift_report.txt
           done
