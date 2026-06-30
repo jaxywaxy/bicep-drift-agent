@@ -9,8 +9,11 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 
 import os
 import logging
-from typing import Optional, List, Dict
+import time
+from typing import Optional, List, Dict, Callable, TypeVar, Any
+from functools import wraps
 from azure.identity import DefaultAzureCredential
+from azure.core.exceptions import HttpResponseError
 
 logger = logging.getLogger(__name__)
 from azure.mgmt.resource.resources import ResourceManagementClient
@@ -21,6 +24,56 @@ from azure.mgmt.keyvault import KeyVaultManagementClient
 from azure.mgmt.logic import LogicManagementClient
 from azure.mgmt.loganalytics import LogAnalyticsManagementClient
 from azure.mgmt.eventhub import EventHubManagementClient
+
+T = TypeVar('T')
+
+
+def retry_with_backoff(max_retries: int = 3, initial_delay: float = 1.0) -> Callable:
+    """Decorator to retry Azure SDK calls with exponential backoff.
+
+    Retries on transient HTTP errors (5xx, 429 rate limiting).
+    Logs each retry attempt and final failure.
+
+    Args:
+        max_retries: Maximum number of retry attempts (default 3)
+        initial_delay: Initial delay in seconds (default 1.0, doubles each retry)
+    """
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args, **kwargs) -> T:
+            delay = initial_delay
+            last_error = None
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except HttpResponseError as e:
+                    last_error = e
+                    # Only retry on transient errors (5xx, 429)
+                    if e.status_code not in (429, 500, 502, 503, 504):
+                        raise
+                    if attempt < max_retries:
+                        logger.debug(
+                            f"Transient error in {func.__name__} (attempt {attempt + 1}/{max_retries}): "
+                            f"HTTP {e.status_code}, retrying in {delay}s..."
+                        )
+                        time.sleep(delay)
+                        delay *= 2  # Exponential backoff
+                    else:
+                        logger.warning(
+                            f"Failed after {max_retries + 1} attempts in {func.__name__}: {e}"
+                        )
+                except Exception as e:
+                    # Non-transient errors, fail immediately
+                    raise
+
+            # Should not reach here, but just in case
+            if last_error:
+                raise last_error
+            return func(*args, **kwargs)
+
+        return wrapper
+    return decorator
 
 
 def get_live_state(
@@ -126,6 +179,7 @@ def _extract_resource_group_from_id(resource_id: str) -> Optional[str]:
     return None
 
 
+@retry_with_backoff(max_retries=3, initial_delay=1.0)
 def _enrich_storage_accounts(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich Storage Account properties using StorageManagementClient."""
     try:
@@ -158,6 +212,7 @@ def _enrich_storage_accounts(credential, subscription_id: str, resource_group: s
                 pass
 
 
+@retry_with_backoff(max_retries=3, initial_delay=1.0)
 def _enrich_app_services(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich App Service and App Service Plan properties using WebSiteManagementClient."""
     try:
@@ -235,6 +290,7 @@ def _enrich_app_services(credential, subscription_id: str, resource_group: str, 
                 logger.debug("Exception during property enrichment.", exc_info=True)
 
 
+@retry_with_backoff(max_retries=3, initial_delay=1.0)
 def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich Key Vault properties using KeyVaultManagementClient."""
     try:
@@ -280,6 +336,7 @@ def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, re
                 pass
 
 
+@retry_with_backoff(max_retries=3, initial_delay=1.0)
 def _enrich_logic_apps(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich Logic App properties using LogicManagementClient."""
     try:
@@ -309,6 +366,7 @@ def _enrich_logic_apps(credential, subscription_id: str, resource_group: str, re
                 pass
 
 
+@retry_with_backoff(max_retries=3, initial_delay=1.0)
 def _enrich_log_analytics(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich Log Analytics Workspace properties using LogAnalyticsManagementClient."""
     try:
@@ -339,6 +397,7 @@ def _enrich_log_analytics(credential, subscription_id: str, resource_group: str,
                 pass
 
 
+@retry_with_backoff(max_retries=3, initial_delay=1.0)
 def _enrich_event_hub_namespaces(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich Event Hub Namespace properties using EventHubManagementClient."""
     try:
@@ -377,6 +436,7 @@ def _enrich_event_hub_namespaces(credential, subscription_id: str, resource_grou
                 pass
 
 
+@retry_with_backoff(max_retries=3, initial_delay=1.0)
 def _enrich_vm_properties(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich VM resources with detailed properties via ComputeManagementClient.
 
