@@ -88,10 +88,12 @@ def main():
     # Phase 2: Analyze with Claude (optional)
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        logger.warning("ANTHROPIC_API_KEY not set in environment")
+        logger.warning("⚠️  ANTHROPIC_API_KEY not set in environment")
         logger.info("Skipping Claude analysis. HTML report will be generated with available drift data.")
+        # Output marker to drift file so it's visible in consolidation
+        print("[WARNING] Claude analysis skipped - ANTHROPIC_API_KEY not configured")
     else:
-        logger.info("Phase 2: Analyzing drift with Claude...")
+        logger.info("✓ Phase 2: Analyzing drift with Claude...")
 
     try:
         if not api_key:
@@ -249,10 +251,16 @@ def main():
         )
 
         # Get analysis from Claude
-        analysis = agent.analyze_drift(drift_report)
-
-        logger.info("DRIFT ANALYSIS")
-        logger.info(analysis)
+        logger.info("Calling Claude API for drift analysis...")
+        try:
+            analysis = agent.analyze_drift(drift_report)
+            logger.info("✓ Claude analysis completed")
+            logger.info("DRIFT ANALYSIS")
+            logger.info(analysis)
+        except Exception as e:
+            logger.error(f"✗ Claude analysis failed: {type(e).__name__}: {str(e)[:200]}", exc_info=True)
+            print(f"[ERROR] Claude API call failed: {type(e).__name__}")
+            raise
 
         # Generate per-drift recommendations
         drifts_to_analyze = report_data.get("drifts", [])
