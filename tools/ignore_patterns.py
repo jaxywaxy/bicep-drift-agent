@@ -4,6 +4,7 @@ Parse and apply .drift-ignore patterns to filter drift results.
 
 import re
 import logging
+import fnmatch
 from pathlib import Path
 from typing import List, Optional
 import yaml
@@ -32,38 +33,37 @@ class IgnorePattern:
         )
 
     @staticmethod
-    def _compile_pattern(pattern: str) -> Optional[re.Pattern]:
-        """Compile a string into a regex pattern."""
+    def _compile_pattern(pattern: str) -> Optional[str]:
+        """Store pattern for fnmatch-based matching (avoids ReDoS vulnerability).
+
+        Uses fnmatch instead of regex to avoid catastrophic backtracking issues.
+        fnmatch is safe for glob patterns and provides the same wildcard semantics.
+
+        Args:
+            pattern: Glob pattern (e.g., "*.txt", "vm-*-prod")
+
+        Returns:
+            Normalized pattern for fnmatch or None if invalid
+        """
         if not pattern:
             return None
 
-        try:
-            # If it looks like a glob pattern, convert to regex
-            if "*" in pattern or "?" in pattern:
-                # Escape regex special chars first, then apply glob replacements
-                pattern = re.escape(pattern)
-                pattern = pattern.replace("\\*", ".*").replace("\\?", ".")
-            else:
-                # No wildcards, just escape regex special chars
-                pattern = re.escape(pattern)
-            return re.compile(f"^{pattern}$", re.IGNORECASE)
-        except re.error:
-            return None
+        # fnmatch handles glob patterns safely without ReDoS risk
+        return pattern.lower()
 
     def matches(self, resource_type: str, resource_name: str, drift_type: str) -> bool:
-        """Check if this pattern matches a drift."""
-        if self.resource_type_regex and not self.resource_type_regex.match(
-            resource_type
-        ):
-            return False
+        """Check if this pattern matches a drift using fnmatch."""
+        if self.resource_type_regex:
+            if not fnmatch.fnmatch(resource_type.lower(), self.resource_type_regex):
+                return False
 
-        if self.resource_name_regex and not self.resource_name_regex.match(
-            resource_name
-        ):
-            return False
+        if self.resource_name_regex:
+            if not fnmatch.fnmatch(resource_name.lower(), self.resource_name_regex):
+                return False
 
-        if self.drift_type_regex and not self.drift_type_regex.match(drift_type):
-            return False
+        if self.drift_type_regex:
+            if not fnmatch.fnmatch(drift_type.lower(), self.drift_type_regex):
+                return False
 
         return True
 
