@@ -170,10 +170,13 @@ class NotificationRouter:
             True if all sends succeeded, False if any failed
         """
         all_success = True
+        failed_teams = []
 
         # Send to team-based webhooks
         for team_name, team_config in self.teams.items():
             success = self._send_to_team(team_name, team_config, events, context)
+            if not success:
+                failed_teams.append(team_name)
             all_success = all_success and success
 
         # Fallback to legacy webhooks if no team config
@@ -182,13 +185,21 @@ class NotificationRouter:
                 success = self._send_to_slack(
                     self.legacy_slack_url, events[0] if events else None, context
                 )
+                if not success:
+                    failed_teams.append("legacy-slack")
                 all_success = all_success and success
 
             if self.legacy_teams_url:
                 success = self._send_to_teams(
                     self.legacy_teams_url, events[0] if events else None, context
                 )
+                if not success:
+                    failed_teams.append("legacy-teams")
                 all_success = all_success and success
+
+        # Aggregate and log failures
+        if failed_teams:
+            logger.warning(f"Notification failures for {len(failed_teams)} team(s): {', '.join(failed_teams)}")
 
         return all_success
 

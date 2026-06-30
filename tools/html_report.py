@@ -18,10 +18,25 @@ def generate_html_report(
     resource_group: str,
     bicep_file: str,
 ) -> None:
-    """Generate an HTML report from a drift JSON file."""
+    """Generate an HTML report from a drift JSON file.
 
-    with open(drift_json_file) as f:
-        data = json.load(f)
+    Raises:
+        FileNotFoundError: If the drift JSON file doesn't exist
+        json.JSONDecodeError: If the JSON file is invalid
+        IOError: If there are permission issues reading/writing files
+    """
+    try:
+        with open(drift_json_file) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        logger.error(f"Drift JSON file not found: {drift_json_file}")
+        raise
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in drift report {drift_json_file}: {e}")
+        raise
+    except IOError as e:
+        logger.error(f"Failed to read drift report {drift_json_file}: {e}")
+        raise
 
     drifts = data.get("drifts", [])
     recs_found = sum(1 for d in drifts if d.get("recommendation"))

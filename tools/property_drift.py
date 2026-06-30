@@ -571,15 +571,21 @@ class PropertyComparator:
 
     @staticmethod
     def _flatten_dict(d: Dict, parent_key: str = "", sep: str = ".") -> Dict:
-        """Flatten nested dictionary."""
+        """Flatten nested dictionary.
+
+        Arrays are serialized as JSON for semantic comparison (not string comparison).
+        This prevents false positives from whitespace differences or element reordering.
+        Example: [1,2,3] vs [1, 2, 3] will compare equal.
+        """
         items = []
         for k, v in d.items():
             new_key = f"{parent_key}{sep}{k}" if parent_key else k
             if isinstance(v, dict):
                 items.extend(PropertyComparator._flatten_dict(v, new_key, sep=sep).items())
             elif isinstance(v, (list, tuple)):
-                # Skip complex nested structures for now
-                items.append((new_key, str(v)))
+                # Serialize arrays as JSON for semantic comparison
+                # This preserves element order and type while avoiding string conversion issues
+                items.append((new_key, json.dumps(v, sort_keys=True, default=str)))
             else:
                 items.append((new_key, v))
         return dict(items)
