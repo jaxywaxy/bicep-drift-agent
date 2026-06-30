@@ -39,7 +39,8 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
     Parse a format() function call and extract template + resolved arguments.
 
     Handles: format('template', arg1, arg2, ...)
-    where arguments can be nested function calls.
+    where arguments can be nested function calls. Properly handles escaped quotes
+    in template strings (e.g., format('it\'s a name', arg)).
 
     Args:
         call_str: The function call string without outer brackets
@@ -53,13 +54,38 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
     if not call_str.startswith("format"):
         return None, []
 
-    # Find the opening paren and extract content
-    match = re.match(r"format\s*\(\s*'([^']*)'(.*)", call_str)
-    if not match:
+    # Find opening paren
+    paren_idx = call_str.find("(")
+    if paren_idx == -1 or paren_idx + 1 >= len(call_str):
         return None, []
 
-    template = match.group(1)
-    args_part = match.group(2).strip()
+    # Extract content after 'format('
+    content = call_str[paren_idx + 1:].strip()
+
+    # Parse the template string, handling escaped quotes
+    if not content.startswith("'"):
+        return None, []
+
+    template = ""
+    i = 1  # Skip opening quote
+    while i < len(content):
+        char = content[i]
+        if char == "\\" and i + 1 < len(content):
+            # Escape sequence - include both backslash and next char
+            template += char + content[i + 1]
+            i += 2
+        elif char == "'":
+            # Found closing quote of template
+            break
+        else:
+            template += char
+            i += 1
+    else:
+        # Didn't find closing quote
+        return None, []
+
+    # Extract arguments part (everything after closing quote)
+    args_part = content[i + 1:].strip()
 
     # Remove trailing closing paren
     if args_part.endswith(")"):
