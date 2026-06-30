@@ -232,6 +232,38 @@ def _enrich_app_services(credential, subscription_id: str, resource_group: str, 
                 logger.debug("Exception during property enrichment.", exc_info=True)
                 pass
 
+        elif resource["type"] == "Microsoft.Web/serverfarms":
+            plan_name = resource["name"]
+            try:
+                plan = web_client.app_service_plans.get(resource_group, plan_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+
+                # Extract SKU info (name, tier, family, size, capacity)
+                if hasattr(plan, "sku") and plan.sku:
+                    resource["sku"] = {
+                        "name": getattr(plan.sku, "name", None),
+                        "tier": getattr(plan.sku, "tier", None),
+                        "family": getattr(plan.sku, "family", None),
+                        "size": getattr(plan.sku, "size", None),
+                        "capacity": getattr(plan.sku, "capacity", None),
+                    }
+
+                # Extract plan properties
+                if hasattr(plan, "properties"):
+                    data = plan._data if hasattr(plan, "_data") else plan
+                    plan_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
+                    if plan_props:
+                        resource["properties"].update({
+                            "reserved": plan_props.get("reserved"),
+                            "workerSize": plan_props.get("workerSize"),
+                            "numberOfWorkers": plan_props.get("numberOfWorkers"),
+                            "isPremiumApp": plan_props.get("isPremiumApp"),
+                        })
+            except Exception:
+                pass
+
 
 def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
     """Enrich Key Vault properties using KeyVaultManagementClient."""
