@@ -134,33 +134,6 @@ def diff_states(
     return drifts
 
 
-def _diff_properties(arm_resource: dict, live_resource: dict) -> dict:
-    """
-    Compare properties between desired and live state.
-
-    Only compares the fields ARM cares about — skips Azure-managed fields
-    like provisioningState, createdTime, etc.
-
-    Returns a dict of {property: {desired: x, actual: y}} for anything that differs.
-    """
-    # Fields ARM defines that we want to compare
-    comparable_fields = ["location", "sku", "tags", "kind"]
-
-    diffs = {}
-
-    for field in comparable_fields:
-        arm_val = arm_resource.get(field)
-        live_val = live_resource.get(field)
-
-        if arm_val is None and live_val is None:
-            continue
-
-        if arm_val != live_val:
-            diffs[field] = {"desired": arm_val, "actual": live_val}
-
-    return diffs
-
-
 def _should_compare_resource(resource: dict) -> bool:
     """
     Determine if a resource should be included in drift comparison.
