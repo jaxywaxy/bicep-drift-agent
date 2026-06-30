@@ -8,6 +8,8 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 """
 
 import os
+import json
+import subprocess
 import logging
 import time
 from typing import Optional, List, Dict, Callable, TypeVar, Any
@@ -74,6 +76,46 @@ def retry_with_backoff(max_retries: int = 3, initial_delay: float = 1.0) -> Call
 
         return wrapper
     return decorator
+
+
+def export_deployed_arm_template(resource_group: str) -> Dict[str, Any]:
+    """Export deployed ARM template from resource group.
+
+    Exports all resources in the resource group to an ARM template format,
+    showing exactly what's deployed with resolved names and properties.
+
+    Args:
+        resource_group: Name of the resource group
+
+    Returns:
+        Parsed ARM template JSON as dict
+
+    Raises:
+        RuntimeError: If export fails
+    """
+    try:
+        logger.info(f"Exporting deployed ARM template from {resource_group}...")
+        result = subprocess.run(
+            ["az", "group", "export", "--resource-group", resource_group],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60
+        )
+
+        deployed_arm = json.loads(result.stdout)
+        logger.info(f"✓ Exported ARM template with {len(deployed_arm.get('resources', []))} resource(s)")
+        return deployed_arm
+
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to export ARM template: {e.stderr}")
+        raise RuntimeError(f"ARM export failed: {e.stderr}")
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse exported ARM template: {e}")
+        raise RuntimeError(f"Invalid ARM template JSON: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error exporting ARM template: {e}")
+        raise RuntimeError(f"ARM export error: {e}")
 
 
 def get_live_state(
