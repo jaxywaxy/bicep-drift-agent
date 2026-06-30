@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from tools.logger import setup_logging, get_logger
 from agent.drift_agent import DriftAgent
 from tools.models import DriftReport, Drift
 from tools.ignore_patterns import IgnorePatternList
@@ -33,10 +34,14 @@ from tools.property_drift import DriftDetector, PropertyExtractor
 from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 
+logger = get_logger(__name__)
+
 
 def main():
+    setup_logging(level="INFO")
+
     if len(sys.argv) < 3:
-        print("Usage: python analyze_drift.py <bicep-file> <resource-group>")
+        logger.error("Usage: python analyze_drift.py <bicep-file> <resource-group>")
         sys.exit(1)
 
     bicep_file = sys.argv[1]
@@ -44,29 +49,28 @@ def main():
 
     # Validate inputs
     if not Path(bicep_file).exists():
-        print(f"Error: Bicep file not found: {bicep_file}")
+        logger.error(f"Bicep file not found: {bicep_file}")
         sys.exit(1)
 
-    print(f"\n{'=' * 60}")
-    print(f"Bicep Drift Agent - Phase 1 + Phase 2")
-    print(f"{'=' * 60}\n")
+    logger.info("Bicep Drift Agent - Phase 1 + Phase 2")
+    logger.info(f"Processing: {bicep_file} (resource group: {resource_group})")
 
     # Phase 1: Run drift check
-    print("📊 Phase 1: Detecting drift...")
+    logger.info("Phase 1: Detecting drift...")
     try:
         run_phase1(bicep_file, resource_group)
     except Exception as e:
-        print(f"Error in Phase 1: {e}")
+        logger.error(f"Error in Phase 1: {e}", exc_info=True)
         sys.exit(1)
 
     # Phase 2: Analyze with Claude
-    print("\n🤖 Phase 2: Analyzing drift with Claude...\n")
+    logger.info("Phase 2: Analyzing drift with Claude...")
 
     try:
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            print("Error: ANTHROPIC_API_KEY not set in environment")
-            print("Set it with: export ANTHROPIC_API_KEY='your-key'")
+            logger.error("ANTHROPIC_API_KEY not set in environment")
+            logger.info("Set it with: export ANTHROPIC_API_KEY='your-key'")
             sys.exit(1)
 
         agent = DriftAgent(api_key=api_key)
@@ -74,24 +78,25 @@ def main():
         # Load the drift report from Phase 1
         report_file = Path(f"reports/{resource_group}-drift.json")
         if not report_file.exists():
-            print(f"Error: Report file not found: {report_file}")
+            logger.error(f"Report file not found: {report_file}")
             sys.exit(1)
 
         with open(report_file) as f:
             report_data = json.load(f)
 
         # Detect unresolvable expressions in Bicep
-        print("\n🔍 Detecting unresolvable expressions in Bicep template...")
+        logger.info("Detecting unresolvable expressions in Bicep template...")
         arm_template = report_data.get("arm_template", {})
         unresolvable = detect_unresolvable_expressions(arm_template)
         if unresolvable:
-            print(f"Found {sum(len(v) for v in unresolvable.values())} resource(s) with unresolvable names:")
+            unresolvable_count = sum(len(v) for v in unresolvable.values())
+            logger.info(f"Found {unresolvable_count} resource(s) with unresolvable names")
             for resource_type, names in unresolvable.items():
                 for name in names:
-                    print(f"  - {resource_type}: {name}")
+                    logger.debug(f"  {resource_type}: {name}")
 
             # Attempt smart matching
-            print("\n🔗 Attempting smart resource matching...")
+            logger.info("Attempting smart resource matching...")
             bicep_resources = report_data.get("arm_resources", [])
             azure_resources = report_data.get("live_resources", [])
             matched, _, _ = smart_match_resources(
@@ -99,25 +104,25 @@ def main():
             )
 
             if matched:
-                print(f"✓ Matched {len(matched)} resource(s):")
+                logger.info(f"✓ Matched {len(matched)} resource(s)")
                 for m in matched:
-                    print(f"  - {m.get('type')}: {m.get('name')} → {m.get('matched_to')}")
+                    logger.debug(f"  {m.get('type')}: {m.get('name')} → {m.get('matched_to')}")
                 report_data["smart_matched"] = matched
             else:
-                print("⊘ No successful smart matches")
+                logger.info("No successful smart matches")
 
         # Load and apply ignore patterns
         ignore_list = IgnorePatternList.from_file(Path(".drift-ignore"))
         if ignore_list.patterns:
-            print(f"\n📋 Loading ignore patterns...")
-            ignore_list.print_summary()
+            logger.info("Loading ignore patterns...")
+            ignore_list.log_summary()
             raw_drifts = report_data.get("drifts", [])
             filtered_drifts, ignored_drifts = ignore_list.filter_drifts(raw_drifts)
 
             if ignored_drifts:
-                print(f"\n⊘ Ignoring {len(ignored_drifts)} drift(s) per ignore patterns")
+                logger.info(f"Ignoring {len(ignored_drifts)} drift(s) per ignore patterns")
                 for d in ignored_drifts:
-                    print(f"  - {d['type']} '{d['name']}': {d.get('ignored_reason', 'Matched pattern')}")
+                    logger.debug(f"  {d['type']} '{d['name']}': {d.get('ignored_reason', 'Matched pattern')}")
 
             report_data["drifts"] = filtered_drifts
             report_data["ignored_drifts"] = ignored_drifts
@@ -130,7 +135,7 @@ def main():
             )
 
         # Perform property-level drift detection
-        print("\n🔎 Detecting property-level drift (comparing configurations)...")
+        logger.info("Detecting property-level drift (comparing configurations)...")
         bicep_resources = report_data.get("arm_resources", [])
         deployed_resources = report_data.get("live_resources", [])
 
@@ -139,7 +144,7 @@ def main():
             filtered_bicep_resources = [r for r in bicep_resources if _should_compare_resource(r)]
             unresolvable_count = len(bicep_resources) - len(filtered_bicep_resources)
             if unresolvable_count > 0:
-                print(f"  ℹ Filtered {unresolvable_count} resource(s) with unresolvable expressions")
+                logger.debug(f"Filtered {unresolvable_count} resource(s) with unresolvable expressions")
 
             # Detect property-level drift
             property_drifts = DriftDetector.detect_drift(filtered_bicep_resources, deployed_resources)
@@ -159,11 +164,11 @@ def main():
 
             summary = DriftDetector.generate_summary(property_drifts)
 
-            print(f"✓ Drift detection complete:")
-            print(f"  - Total drifts: {summary['total']}")
-            print(f"  - Missing resources: {summary['missing']}")
-            print(f"  - Extra resources: {summary['extra']}")
-            print(f"  - Modified (config changed): {summary['modified']}")
+            logger.info("Drift detection complete:")
+            logger.info(f"  - Total drifts: {summary['total']}")
+            logger.info(f"  - Missing resources: {summary['missing']}")
+            logger.info(f"  - Extra resources: {summary['extra']}")
+            logger.info(f"  - Modified (config changed): {summary['modified']}")
 
             # Store property drifts in report
             report_data["property_drifts"] = [
@@ -211,24 +216,21 @@ def main():
         # Get analysis from Claude
         analysis = agent.analyze_drift(drift_report)
 
-        print("\n" + "=" * 60)
-        print("📋 DRIFT ANALYSIS")
-        print("=" * 60 + "\n")
-        print(analysis)
-        print("\n" + "=" * 60 + "\n")
+        logger.info("DRIFT ANALYSIS")
+        logger.info(analysis)
 
         # Generate per-drift recommendations
         drifts_to_analyze = report_data.get("drifts", [])
-        print(f"\n💡 Found {len(drifts_to_analyze)} drift(s) to generate recommendations for")
+        logger.info(f"Found {len(drifts_to_analyze)} drift(s) to generate recommendations for")
 
         if len(drifts_to_analyze) > 0:
-            print("🤖 Generating recommendations via Claude...")
+            logger.info("Generating recommendations via Claude...")
             recommendations_count = 0
 
             for i, drift in enumerate(drifts_to_analyze, 1):
                 try:
                     drift_name = drift.get("name", "unknown")
-                    print(f"  [{i}/{len(drifts_to_analyze)}] {drift_name}...", end=" ", flush=True)
+                    logger.debug(f"[{i}/{len(drifts_to_analyze)}] {drift_name}...")
 
                     recommendation = agent.get_drift_recommendation(
                         resource_type=drift.get("type", ""),
@@ -239,29 +241,28 @@ def main():
 
                     drift["recommendation"] = recommendation.strip() if recommendation else "No recommendation generated"
                     recommendations_count += 1
-                    print("✓")
 
                 except Exception as e:
-                    print(f"✗ ({str(e)[:50]})")
+                    logger.warning(f"Failed to generate recommendation for {drift_name}: {str(e)[:50]}")
                     drift["recommendation"] = f"Could not generate recommendation: {str(e)[:100]}"
 
-            print(f"\n✓ Generated recommendations for {recommendations_count}/{len(drifts_to_analyze)} drifts")
+            logger.info(f"Generated recommendations for {recommendations_count}/{len(drifts_to_analyze)} drifts")
 
             # Update JSON report with recommendations
             try:
                 with open(report_file, "w") as f:
                     json.dump(report_data, f, indent=2, default=str)
-                print(f"✓ Saved recommendations to JSON: {report_file}")
+                logger.info(f"Saved recommendations to JSON: {report_file}")
 
                 # Verify recommendations are in the file
                 with open(report_file) as f:
                     verify_data = json.load(f)
                 recs_verified = sum(1 for d in verify_data.get("drifts", []) if d.get("recommendation"))
-                print(f"✓ Verified {recs_verified} recommendations in saved JSON file")
+                logger.info(f"Verified {recs_verified} recommendations in saved JSON file")
             except Exception as e:
-                print(f"✗ Failed to save recommendations: {e}")
+                logger.warning(f"Failed to save recommendations: {e}")
         else:
-            print("⊘ No drifts to analyze for recommendations")
+            logger.info("No drifts to analyze for recommendations")
 
         # Save analysis
         analysis_file = Path(f"reports/{resource_group}-analysis.md")
@@ -270,7 +271,7 @@ def main():
             f.write(f"**Bicep File:** {bicep_file}\n\n")
             f.write(analysis)
 
-        print(f"✓ Analysis saved to: {analysis_file}")
+        logger.info(f"Analysis saved to: {analysis_file}")
 
         # Generate HTML report
         html_file = Path(f"reports/{resource_group}-drift.html")
@@ -280,11 +281,11 @@ def main():
             resource_group=resource_group,
             bicep_file=bicep_file,
         )
-        print(f"✓ HTML report saved to: {html_file}")
+        logger.info(f"HTML report saved to: {html_file}")
 
         # Interactive follow-up (only in interactive mode)
         if os.isatty(0):
-            print("\n💬 Ask Claude follow-up questions (or 'quit' to exit):\n")
+            logger.info("Interactive mode: Ask Claude follow-up questions (or 'quit' to exit)")
             while True:
                 question = input("You: ").strip()
                 if question.lower() in ("quit", "exit", "q"):
@@ -296,12 +297,10 @@ def main():
                 print(f"\nClaude: {response}\n")
 
     except KeyboardInterrupt:
-        print("\n\nAnalysis interrupted by user.")
+        logger.info("Analysis interrupted by user")
         sys.exit(0)
     except Exception as e:
-        print(f"Error in Phase 2: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error in Phase 2: {e}", exc_info=True)
         sys.exit(1)
 
 
