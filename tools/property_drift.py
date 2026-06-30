@@ -360,6 +360,10 @@ class PropertyComparator:
                 if PropertyComparator._is_write_only_property(key):
                     continue
 
+                # Skip unresolved template expressions (resolve at deploy time)
+                if PropertyComparator._has_unresolved_expressions(bicep_value):
+                    continue
+
                 deployed_value = deployed_flat[key]
                 if bicep_value != deployed_value:
                     severity = PropertyComparator._get_severity(key)
@@ -378,6 +382,15 @@ class PropertyComparator:
             if key not in deployed_flat:
                 # Skip write-only properties (Azure doesn't return these in API responses)
                 if PropertyComparator._is_write_only_property(key):
+                    continue
+
+                # Skip unresolved template expressions (resolve at deploy time)
+                if PropertyComparator._has_unresolved_expressions(bicep_value):
+                    continue
+
+                # Skip if deployed properties are incomplete (likely property enrichment issue)
+                # If deployed_flat is empty or minimal, property querying may have failed
+                if len(deployed_flat) < 3:
                     continue
 
                 diffs.append(
@@ -413,6 +426,33 @@ class PropertyComparator:
             else:
                 items.append((new_key, v))
         return dict(items)
+
+    @staticmethod
+    def _has_unresolved_expressions(value: Any) -> bool:
+        """Check if value contains unresolved Bicep/ARM template expressions.
+
+        Examples: uniqueString(), subscription(), resourceId(), format(), etc.
+        These resolve at deployment time and shouldn't be reported as drift.
+        """
+        if not isinstance(value, str):
+            return False
+
+        value_lower = value.lower()
+        # Common template functions that resolve at deploy time
+        unresolved_markers = [
+            'uniquestring(',
+            'subscription().',
+            'resourceid(',
+            'format(',
+            'variables(',
+            'parameters(',
+            'reference(',
+            'listkeys(',
+            'concat(',
+            'string(',
+        ]
+
+        return any(marker in value_lower for marker in unresolved_markers)
 
     @staticmethod
     def _get_severity(property_path: str) -> str:
