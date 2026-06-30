@@ -286,26 +286,6 @@ def main():
 
         logger.info(f"Analysis saved to: {analysis_file}")
 
-        # Generate HTML report
-        html_file = Path(f"reports/{resource_group}-drift.html")
-        logger.info(f"Starting HTML report generation to {html_file}...")
-        try:
-            generate_html_report(
-                drift_json_file=Path(f"reports/{resource_group}-drift.json"),
-                output_file=html_file,
-                resource_group=resource_group,
-                bicep_file=bicep_file,
-            )
-            logger.info(f"HTML report saved to: {html_file}")
-            if html_file.exists():
-                file_size = html_file.stat().st_size
-                logger.info(f"HTML file verified: {file_size} bytes")
-            else:
-                logger.warning(f"HTML file was not created at {html_file}")
-        except Exception as e:
-            logger.error(f"Failed to generate HTML report: {e}", exc_info=True)
-            raise
-
         # Interactive follow-up (only in interactive mode)
         if os.isatty(0):
             logger.info("Interactive mode: Ask Claude follow-up questions (or 'quit' to exit)")
@@ -324,6 +304,26 @@ def main():
         sys.exit(0)
     except Exception as e:
         logger.error(f"Error in Phase 2: {e}", exc_info=True)
+        logger.warning("Phase 2 failed, but will still generate HTML report with Phase 1 data")
+
+    # Always generate HTML report, even if Phase 2 fails
+    html_file = Path(f"reports/{resource_group}-drift.html")
+    logger.info(f"Generating HTML report to {html_file}...")
+    try:
+        generate_html_report(
+            drift_json_file=Path(f"reports/{resource_group}-drift.json"),
+            output_file=html_file,
+            resource_group=resource_group,
+            bicep_file=bicep_file,
+        )
+        logger.info(f"HTML report saved to: {html_file}")
+        if html_file.exists():
+            file_size = html_file.stat().st_size
+            logger.info(f"HTML file verified: {file_size} bytes")
+        else:
+            logger.warning(f"HTML file was not created at {html_file}")
+    except Exception as e:
+        logger.error(f"Failed to generate HTML report: {e}", exc_info=True)
         sys.exit(1)
 
 
