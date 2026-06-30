@@ -11,6 +11,41 @@ from dataclasses import dataclass
 from collections import defaultdict
 
 
+class ResourceIndexer:
+    """Helper for indexing and grouping resources by type and properties."""
+
+    @staticmethod
+    def by_name(resources: List[Dict], resource_type: str) -> Dict[str, Dict]:
+        """Index resources by name for a specific type."""
+        return {
+            r.get("name", ""): r
+            for r in resources
+            if r.get("type") == resource_type
+        }
+
+    @staticmethod
+    def by_id(resources: List[Dict], resource_type: str) -> Dict[str, str]:
+        """Index resource names by ID for a specific type."""
+        return {
+            r.get("id", ""): r.get("name", "")
+            for r in resources
+            if r.get("type") == resource_type
+        }
+
+    @staticmethod
+    def filter_by_type(resources: List[Dict], resource_type: str) -> List[Dict]:
+        """Filter resources by type."""
+        return [r for r in resources if r.get("type") == resource_type]
+
+    @staticmethod
+    def group_by_type(resources: List[Dict]) -> Dict[str, List[Dict]]:
+        """Group all resources by type."""
+        grouped = defaultdict(list)
+        for r in resources:
+            grouped[r.get("type", "unknown")].append(r)
+        return dict(grouped)
+
+
 @dataclass
 class PropertyDiff:
     """A single property difference."""
@@ -538,10 +573,8 @@ class ConfigurationValidator:
         drifts = []
 
         # Get all VMs and disks
-        vms = {r.get("name", ""): r for r in deployed_resources
-               if r.get("type") == "Microsoft.Compute/virtualMachines"}
-        disks = [r for r in deployed_resources
-                if r.get("type") == "Microsoft.Compute/disks"]
+        vms = ResourceIndexer.by_name(deployed_resources, "Microsoft.Compute/virtualMachines")
+        disks = ResourceIndexer.filter_by_type(deployed_resources, "Microsoft.Compute/disks")
 
         for disk in disks:
             disk_name = disk.get("name", "")
@@ -610,8 +643,7 @@ class ConfigurationValidator:
         # Get all VMs and NICs
         vms = [r for r in deployed_resources
                if r.get("type") == "Microsoft.Compute/virtualMachines"]
-        nic_ids = {r.get("id", ""): r.get("name", "") for r in deployed_resources
-                   if r.get("type") == "Microsoft.Network/networkInterfaces"}
+        nic_ids = ResourceIndexer.by_id(deployed_resources, "Microsoft.Network/networkInterfaces")
 
         for vm in vms:
             vm_name = vm.get("name", "")
@@ -669,8 +701,7 @@ class ConfigurationValidator:
         # Create lookup maps
         bicep_vms = {r.get("name", ""): r for r in bicep_resources
                      if r.get("type") == "Microsoft.Compute/virtualMachines"}
-        deployed_vms = {r.get("name", ""): r for r in deployed_resources
-                        if r.get("type") == "Microsoft.Compute/virtualMachines"}
+        deployed_vms = ResourceIndexer.by_name(deployed_resources, "Microsoft.Compute/virtualMachines")
 
         # Check VMs that exist in both (matched resources)
         for vm_name in set(bicep_vms.keys()) & set(deployed_vms.keys()):
