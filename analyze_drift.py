@@ -243,7 +243,7 @@ def main():
                     recommendations_count += 1
 
                 except Exception as e:
-                    logger.warning(f"Failed to generate recommendation for {drift_name}: {str(e)[:50]}")
+                    logger.warning(f"Failed to generate recommendation for {drift_name}: {str(e)[:50]}", exc_info=True)
                     drift["recommendation"] = f"Could not generate recommendation: {str(e)[:100]}"
 
             logger.info(f"Generated recommendations for {recommendations_count}/{len(drifts_to_analyze)} drifts")
@@ -260,7 +260,7 @@ def main():
                 recs_verified = sum(1 for d in verify_data.get("drifts", []) if d.get("recommendation"))
                 logger.info(f"Verified {recs_verified} recommendations in saved JSON file")
             except Exception as e:
-                logger.warning(f"Failed to save recommendations: {e}")
+                logger.warning(f"Failed to save recommendations: {e}", exc_info=True)
         else:
             logger.info("No drifts to analyze for recommendations")
 
@@ -294,7 +294,7 @@ def main():
                     continue
 
                 response = agent.ask_followup(question)
-                print(f"\nClaude: {response}\n")
+                logger.info(f"Claude: {response}")
 
     except KeyboardInterrupt:
         logger.info("Analysis interrupted by user")

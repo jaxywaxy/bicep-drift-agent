@@ -133,7 +133,13 @@ def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = N
 if __name__ == "__main__":
     # Quick smoke test — point at any .bicep file you have handy
     import sys
-    from .logger import setup_logging
+    from pathlib import Path
+    try:
+        from .logger import setup_logging
+    except ImportError:
+        # When run as standalone script, add parent directory to path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from logger import setup_logging
 
     setup_logging(level="INFO")
 

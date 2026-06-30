@@ -253,7 +253,7 @@ class NotificationRouter:
             with urllib.request.urlopen(req, timeout=10) as response:
                 return response.status == 200
         except Exception as e:
-            logger.error(f"Slack error: {type(e).__name__}: {e}")
+            logger.error(f"Slack error: {type(e).__name__}: {e}", exc_info=True)
             return False
 
     def _send_to_teams(self, webhook_url: str, message: str) -> bool:
@@ -276,7 +276,7 @@ class NotificationRouter:
             with urllib.request.urlopen(req, timeout=10) as response:
                 return response.status in (200, 201)
         except Exception as e:
-            logger.error(f"Teams error: {type(e).__name__}: {e}")
+            logger.error(f"Teams error: {type(e).__name__}: {e}", exc_info=True)
             return False
 
 
@@ -304,10 +304,10 @@ def extract_recommendations_from_reports() -> Dict[str, List[Dict[str, str]]]:
                     if "recommendation" in drift and drift["recommendation"]:
                         recommendations[resource_key] = drift["recommendation"]
             except Exception as e:
-                logger.warning(f"Could not read {json_file}: {e}")
+                logger.warning(f"Could not read {json_file}: {e}", exc_info=True)
 
     except Exception as e:
-        logger.warning(f"Error extracting recommendations: {e}")
+        logger.warning(f"Error extracting recommendations: {e}", exc_info=True)
 
     return recommendations
 
@@ -386,7 +386,15 @@ def parse_drift_output(output_file: str) -> List[DriftEvent]:
 
 
 if __name__ == "__main__":
-    from .logger import setup_logging
+    # Handle both relative import (when run as module) and absolute import (when run as script)
+    try:
+        from .logger import setup_logging
+    except ImportError:
+        # When run as standalone script, add parent directory to path
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from logger import setup_logging
 
     setup_logging(level="INFO")
 

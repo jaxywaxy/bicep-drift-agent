@@ -82,7 +82,7 @@ def run(bicep_file: str, resource_group: str):
     try:
         arm_resources = extract_resources_from_arm(arm_template, param_overrides)
     except Exception as e:
-        logger.error(f"Failed to extract resources: {e}")
+        logger.error(f"Failed to extract resources: {e}", exc_info=True)
         raise
 
     logger.info(f"✓ {len(arm_resources)} resource(s) defined in Bicep (scope: {deployment_scope})")
@@ -103,7 +103,7 @@ def run(bicep_file: str, resource_group: str):
         logger.error(f"Missing subscription ID: {e}")
         raise
     except Exception as e:
-        logger.error(f"Failed to query Azure: {e}")
+        logger.error(f"Failed to query Azure: {e}", exc_info=True)
         logger.info("Ensure you're logged in: az login")
         raise
 
@@ -126,7 +126,7 @@ def run(bicep_file: str, resource_group: str):
     try:
         drifts = diff_states(arm_resources, live_resources, ignore_patterns=ignore_patterns)
     except Exception as e:
-        logger.error(f"Failed to diff states: {e}")
+        logger.error(f"Failed to diff states: {e}", exc_info=True)
         raise
 
     # Step 5: Report
