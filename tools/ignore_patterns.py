@@ -152,7 +152,6 @@ class IgnorePatternList:
     def log_summary(self):
         """Log a summary of loaded patterns."""
         if not self.patterns:
-            logger.debug("No ignore patterns loaded")
             return
 
         logger.info(f"Loaded {len(self.patterns)} ignore pattern(s):")
@@ -169,7 +168,3 @@ class IgnorePatternList:
             logger.info(f"  {i}. {', '.join(parts)}")
             if pattern.reason:
                 logger.debug(f"     Reason: {pattern.reason}")
-
-    def print_summary(self):
-        """Deprecated: Use log_summary() instead. Print a summary of loaded patterns."""
-        self.log_summary()

@@ -10,10 +10,8 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 import json
 import subprocess
 import tempfile
-import os
 import re
 import logging
-import shlex
 from pathlib import Path
 from typing import List, Dict
 
@@ -166,10 +164,4 @@ if __name__ == "__main__":
 
     template = compile_bicep(sys.argv[1])
     resources = extract_resources_from_arm(template)
-
     logger.info(f"Compiled OK. Found {len(resources)} resource(s)")
-    for r in resources:
-        logger.info(f"  {r.get('type')} — {r.get('name')}")
-
-    logger.debug("Full ARM JSON:")
-    logger.debug(json.dumps(template, indent=2))

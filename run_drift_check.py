@@ -86,10 +86,6 @@ def run(bicep_file: str, resource_group: str):
         raise
 
     logger.info(f"✓ {len(arm_resources)} resource(s) defined in Bicep (scope: {deployment_scope})")
-    for r in arm_resources[:10]:  # Show first 10
-        logger.debug(f"  {r.get('type')} — {r.get('name')}")
-    if len(arm_resources) > 10:
-        logger.debug(f"  ... and {len(arm_resources) - 10} more")
 
     # Step 2: Query live Azure state via Resource Graph
     logger.info("Step 2: Querying live Azure state via Resource Graph...")
@@ -108,10 +104,6 @@ def run(bicep_file: str, resource_group: str):
         raise
 
     logger.info(f"✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
-    for r in live_resources[:10]:  # Show first 10
-        logger.debug(f"  {r.get('type')} — {r.get('name')}")
-    if len(live_resources) > 10:
-        logger.debug(f"  ... and {len(live_resources) - 10} more")
 
     # Step 3: Load ignore patterns
     logger.info("Step 3: Loading ignore patterns...")
