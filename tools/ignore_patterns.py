@@ -19,6 +19,7 @@ class IgnorePattern:
         self.resource_type: Optional[str] = pattern_dict.get("resource_type")
         self.resource_name: Optional[str] = pattern_dict.get("resource_name")
         self.drift_type: Optional[str] = pattern_dict.get("drift_type")
+        self.property: Optional[str] = pattern_dict.get("property")
         self.reason: Optional[str] = pattern_dict.get("reason")
 
         # Compile regex patterns if they look like regex
@@ -30,6 +31,9 @@ class IgnorePattern:
         )
         self.drift_type_regex = (
             self._compile_pattern(self.drift_type) if self.drift_type else None
+        )
+        self.property_regex = (
+            self._compile_pattern(self.property) if self.property else None
         )
 
     @staticmethod
@@ -115,15 +119,15 @@ class IgnorePatternList:
 
                 # Check if any pattern matches resource + property combination
                 for pattern in self.patterns:
-                    # If pattern has drift_type, check if it matches property names
-                    if pattern.drift_type:
+                    # If pattern has property field, check if it matches property names
+                    if pattern.property_regex:
                         for prop_name in prop_names:
                             resource_matches = (
                                 fnmatch.fnmatch(resource_type.lower(), pattern.resource_type_regex)
                                 if pattern.resource_type_regex else True
                             )
                             if resource_matches:
-                                if fnmatch.fnmatch(prop_name.lower(), pattern.drift_type_regex):
+                                if fnmatch.fnmatch(prop_name.lower(), pattern.property_regex):
                                     drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
                                     ignored.append(drift)
                                     is_ignored = True
@@ -160,6 +164,8 @@ class IgnorePatternList:
                 parts.append(f"name={pattern.resource_name}")
             if pattern.drift_type:
                 parts.append(f"drift={pattern.drift_type}")
+            if pattern.property:
+                parts.append(f"property={pattern.property}")
             logger.info(f"  {i}. {', '.join(parts)}")
             if pattern.reason:
                 logger.debug(f"     Reason: {pattern.reason}")
