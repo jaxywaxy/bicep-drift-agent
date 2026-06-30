@@ -8,7 +8,10 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 """
 
 import os
+import logging
 from azure.identity import DefaultAzureCredential
+
+logger = logging.getLogger(__name__)
 from azure.mgmt.resource.resources import ResourceManagementClient
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.storage import StorageManagementClient
@@ -372,7 +375,7 @@ def _enrich_vm_properties(credential, subscription_id: str, resource_group: str,
     try:
         compute_client = ComputeManagementClient(credential, subscription_id)
     except Exception as e:
-        print(f"  ⚠ ComputeManagementClient initialization failed: {type(e).__name__}. Skipping VM property enrichment.")
+        logger.warning(f"ComputeManagementClient initialization failed: {type(e).__name__}. Skipping VM property enrichment.")
         return
 
     for resource in resources:
@@ -426,7 +429,7 @@ def _enrich_vm_properties(credential, subscription_id: str, resource_group: str,
                         ]
                     }
             except Exception as e:
-                print(f"  ⚠ Failed to enrich VM {vm_name}: {type(e).__name__}. Continuing with partial properties.")
+                logger.warning(f"Failed to enrich VM {vm_name}: {type(e).__name__}. Continuing with partial properties.")
 
 
 def _extract_sku(resource) -> dict | None:
@@ -471,23 +474,25 @@ if __name__ == "__main__":
     import sys
     import json
     from dotenv import load_dotenv
+    from .logger import setup_logging
 
     load_dotenv()
+    setup_logging(level="INFO")
 
     if len(sys.argv) < 2:
-        print("Usage: python get_live_state.py <resource-group-name>")
+        logger.error("Usage: python get_live_state.py <resource-group-name>")
         sys.exit(1)
 
     rg = sys.argv[1]
-    print(f"\nQuerying live state for resource group: {rg}\n")
+    logger.info(f"Querying live state for resource group: {rg}")
 
     resources = get_live_state(rg)
 
-    print(f"Found {len(resources)} resource(s):\n")
+    logger.info(f"Found {len(resources)} resource(s)")
     for r in resources:
         sku_info = f" [{r['sku']['name']}]" if r.get("sku") else ""
-        print(f"  {r['type']} — {r['name']}{sku_info}")
+        logger.info(f"  {r['type']} — {r['name']}{sku_info}")
 
-    print("\nFull live state (first resource):")
+    logger.debug("Full live state (first resource):")
     if resources:
-        print(json.dumps(resources[0], indent=2, default=str))
+        logger.debug(json.dumps(resources[0], indent=2, default=str))
