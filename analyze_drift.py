@@ -63,15 +63,28 @@ def main():
         logger.error(f"Error in Phase 1: {e}", exc_info=True)
         sys.exit(1)
 
-    # Phase 2: Analyze with Claude
-    logger.info("Phase 2: Analyzing drift with Claude...")
+    # Phase 2: Analyze with Claude (optional)
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.warning("ANTHROPIC_API_KEY not set in environment")
+        logger.info("Skipping Claude analysis. HTML report will be generated with available drift data.")
+    else:
+        logger.info("Phase 2: Analyzing drift with Claude...")
 
     try:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            logger.error("ANTHROPIC_API_KEY not set in environment")
-            logger.info("Set it with: export ANTHROPIC_API_KEY='your-key'")
-            sys.exit(1)
+            logger.info("Skipping Phase 2 - no API key available")
+            # Still generate HTML report with Phase 1 results
+            html_file = Path(f"reports/{resource_group}-drift.html")
+            logger.info(f"Generating HTML report with Phase 1 data to {html_file}...")
+            generate_html_report(
+                drift_json_file=Path(f"reports/{resource_group}-drift.json"),
+                output_file=html_file,
+                resource_group=resource_group,
+                bicep_file=bicep_file,
+            )
+            logger.info(f"HTML report saved to: {html_file}")
+            return
 
         agent = DriftAgent(api_key=api_key)
 
