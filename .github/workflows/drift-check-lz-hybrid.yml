@@ -305,8 +305,8 @@ jobs:
 
           > consolidated_drift_report.txt
 
-          # Look for drift files in downloaded artifacts (reports directory)
-          for file in reports/drift_*.txt; do
+          # Look for drift files in current directory (artifact downloads files directly)
+          for file in drift_*.txt; do
             [ -f "$file" ] && cat "$file" >> consolidated_drift_report.txt
             [ -f "$file" ] && echo "" >> consolidated_drift_report.txt
           done
