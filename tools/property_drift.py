@@ -354,13 +354,13 @@ class PropertyComparator:
         deployed_flat = PropertyComparator._flatten_dict(deployed_properties)
 
         # Skip detailed comparison if property enrichment failed
-        # (deployed_properties are too sparse - likely a query timeout or permission issue)
-        has_detailed_deployed_properties = len(deployed_flat) > 5 or any(
+        # (deployed_properties have no nested "properties.*" keys - likely API returned empty)
+        has_detailed_deployed_properties = any(
             k.startswith("properties.") for k in deployed_flat.keys()
         )
         if not has_detailed_deployed_properties:
             # Property enrichment didn't work for this resource - return empty diffs
-            # to avoid false positives from incomplete data
+            # to avoid false positives from incomplete data (empty properties object)
             return diffs
 
         # Check for modified properties
