@@ -3,9 +3,12 @@ Parse and apply .drift-ignore patterns to filter drift results.
 """
 
 import re
+import logging
 from pathlib import Path
 from typing import List, Optional
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 class IgnorePattern:
@@ -138,13 +141,13 @@ class IgnorePatternList:
 
         return filtered, ignored
 
-    def print_summary(self):
-        """Print a summary of loaded patterns."""
+    def log_summary(self):
+        """Log a summary of loaded patterns."""
         if not self.patterns:
-            print("No ignore patterns loaded")
+            logger.debug("No ignore patterns loaded")
             return
 
-        print(f"Loaded {len(self.patterns)} ignore pattern(s):")
+        logger.info(f"Loaded {len(self.patterns)} ignore pattern(s):")
         for i, pattern in enumerate(self.patterns, 1):
             parts = []
             if pattern.resource_type:
@@ -153,6 +156,10 @@ class IgnorePatternList:
                 parts.append(f"name={pattern.resource_name}")
             if pattern.drift_type:
                 parts.append(f"drift={pattern.drift_type}")
-            print(f"  {i}. {', '.join(parts)}")
+            logger.info(f"  {i}. {', '.join(parts)}")
             if pattern.reason:
-                print(f"     Reason: {pattern.reason}")
+                logger.debug(f"     Reason: {pattern.reason}")
+
+    def print_summary(self):
+        """Deprecated: Use log_summary() instead. Print a summary of loaded patterns."""
+        self.log_summary()
