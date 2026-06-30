@@ -572,6 +572,7 @@ def generate_html_report(
     </html>
     """
 
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     with open(output_file, "w") as f:
         f.write(html_content)
 

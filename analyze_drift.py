@@ -63,15 +63,28 @@ def main():
         logger.error(f"Error in Phase 1: {e}", exc_info=True)
         sys.exit(1)
 
-    # Phase 2: Analyze with Claude
-    logger.info("Phase 2: Analyzing drift with Claude...")
+    # Phase 2: Analyze with Claude (optional)
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.warning("ANTHROPIC_API_KEY not set in environment")
+        logger.info("Skipping Claude analysis. HTML report will be generated with available drift data.")
+    else:
+        logger.info("Phase 2: Analyzing drift with Claude...")
 
     try:
-        api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
-            logger.error("ANTHROPIC_API_KEY not set in environment")
-            logger.info("Set it with: export ANTHROPIC_API_KEY='your-key'")
-            sys.exit(1)
+            logger.info("Skipping Phase 2 - no API key available")
+            # Still generate HTML report with Phase 1 results
+            html_file = Path(f"reports/{resource_group}-drift.html")
+            logger.info(f"Generating HTML report with Phase 1 data to {html_file}...")
+            generate_html_report(
+                drift_json_file=Path(f"reports/{resource_group}-drift.json"),
+                output_file=html_file,
+                resource_group=resource_group,
+                bicep_file=bicep_file,
+            )
+            logger.info(f"HTML report saved to: {html_file}")
+            return
 
         agent = DriftAgent(api_key=api_key)
 
@@ -273,16 +286,6 @@ def main():
 
         logger.info(f"Analysis saved to: {analysis_file}")
 
-        # Generate HTML report
-        html_file = Path(f"reports/{resource_group}-drift.html")
-        generate_html_report(
-            drift_json_file=Path(f"reports/{resource_group}-drift.json"),
-            output_file=html_file,
-            resource_group=resource_group,
-            bicep_file=bicep_file,
-        )
-        logger.info(f"HTML report saved to: {html_file}")
-
         # Interactive follow-up (only in interactive mode)
         if os.isatty(0):
             logger.info("Interactive mode: Ask Claude follow-up questions (or 'quit' to exit)")
@@ -301,6 +304,26 @@ def main():
         sys.exit(0)
     except Exception as e:
         logger.error(f"Error in Phase 2: {e}", exc_info=True)
+        logger.warning("Phase 2 failed, but will still generate HTML report with Phase 1 data")
+
+    # Always generate HTML report, even if Phase 2 fails
+    html_file = Path(f"reports/{resource_group}-drift.html")
+    logger.info(f"Generating HTML report to {html_file}...")
+    try:
+        generate_html_report(
+            drift_json_file=Path(f"reports/{resource_group}-drift.json"),
+            output_file=html_file,
+            resource_group=resource_group,
+            bicep_file=bicep_file,
+        )
+        logger.info(f"HTML report saved to: {html_file}")
+        if html_file.exists():
+            file_size = html_file.stat().st_size
+            logger.info(f"HTML file verified: {file_size} bytes")
+        else:
+            logger.warning(f"HTML file was not created at {html_file}")
+    except Exception as e:
+        logger.error(f"Failed to generate HTML report: {e}", exc_info=True)
         sys.exit(1)
 
 
