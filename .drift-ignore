@@ -74,8 +74,8 @@ ignore:
     reason: "Site extensions auto-managed by App Service"
 
   # System/Compliance resources
-  - resource_type: "Microsoft.Authorization/locks"
-    reason: "Resource locks auto-created by policies, not IaC-managed"
+  # Note: Locks defined in IaC (Bicep) are now managed and should be detected
+  # Lock removal is a critical security event that must trigger drift alerts
 
   - resource_type: "Microsoft.Authorization/roleAssignments"
     reason: "Role assignments auto-created by policies or RBAC automation"
