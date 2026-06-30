@@ -129,7 +129,14 @@ def _build_arm_template_from_resources(resource_group: str) -> Dict[str, Any]:
     and builds an ARM-like template structure.
     """
     logger.info(f"Querying resources individually for {resource_group}...")
-    live_resources = get_live_state(resource_group=resource_group, scope="resource_group")
+    try:
+        live_resources = get_live_state(resource_group=resource_group, scope="resource_group")
+    except Exception as e:
+        logger.error(f"Failed to query individual resources: {e}")
+        # Return empty resources list so drift check can at least complete
+        live_resources = []
+
+    logger.info(f"Got {len(live_resources)} resource(s) from individual queries")
 
     # Build a minimal ARM template structure
     return {

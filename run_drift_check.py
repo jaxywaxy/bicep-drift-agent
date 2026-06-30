@@ -21,7 +21,7 @@ load_dotenv()
 
 from tools.logger import setup_logging, get_logger
 from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detect_deployment_scope
-from tools.get_live_state import get_live_state, export_deployed_arm_template
+from tools.get_live_state import get_live_state
 from tools.diff_states import diff_states, format_drift_report
 from tools.ignore_patterns import IgnorePatternList
 
@@ -91,13 +91,19 @@ def run(bicep_file: str, resource_group: str):
     if len(arm_resources) > 10:
         logger.debug(f"  ... and {len(arm_resources) - 10} more")
 
-    # Step 2: Export deployed ARM template from Azure
-    logger.info("Step 2: Exporting deployed ARM template from Azure...")
+    # Step 2: Query live Azure state
+    logger.info("Step 2: Querying live Azure state...")
     try:
-        deployed_arm_template = export_deployed_arm_template(resource_group)
-        live_resources = extract_resources_from_arm(deployed_arm_template, {})
+        if deployment_scope == "subscription":
+            logger.debug("Querying at subscription scope...")
+            live_resources = get_live_state(resource_group=resource_group, scope="subscription")
+        else:
+            live_resources = get_live_state(resource_group=resource_group, scope="resource_group")
+    except ValueError as e:
+        logger.error(f"Missing subscription ID: {e}")
+        raise
     except Exception as e:
-        logger.error(f"Failed to export deployed ARM template: {e}", exc_info=True)
+        logger.error(f"Failed to query Azure: {e}", exc_info=True)
         logger.info("Ensure you're logged in: az login")
         raise
 
