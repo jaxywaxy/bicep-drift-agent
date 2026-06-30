@@ -251,14 +251,21 @@ jobs:
 
           echo "Results: $DRIFT_COUNT drift(s), $EXTRA_COUNT extra, $MISSING_COUNT missing"
 
+      - name: Prepare reports for upload
+        if: always()
+        run: |
+          # Copy reports to top-level for clean artifact structure
+          if [ -d "drift-tools/reports" ]; then
+            mkdir -p reports
+            cp -r drift-tools/reports/* reports/
+          fi
+
       - name: Upload drift reports and analysis
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: drift-reports-${{ needs.load-config.outputs.lz-name }}
-          path: |
-            drift_*.txt
-            drift-tools/reports/
+          path: reports/
           retention-days: 30
 
   consolidate-results:
