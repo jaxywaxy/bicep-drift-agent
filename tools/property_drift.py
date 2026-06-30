@@ -170,6 +170,93 @@ class ResourceMatcher:
         return None
 
     @staticmethod
+    def _match_disks_by_parent_vm(
+        bicep_resource: Dict, bicep_resources: List[Dict], candidates: List[Dict], current_best_score: float
+    ) -> Tuple[Dict, float]:
+        """Match a disk to its parent VM's disk.
+
+        Returns:
+            Tuple of (matched_resource, confidence_score) or None if no match found
+        """
+        disk_name = bicep_resource.get("name", "")
+        parent_vm = ResourceMatcher._find_parent_vm(disk_name, bicep_resources)
+        if not parent_vm:
+            return None
+
+        for candidate in candidates:
+            cand_name = candidate.get("name", "")
+            vm_name_from_disk = cand_name.split('_')[0] if '_' in cand_name else None
+            if vm_name_from_disk and vm_name_from_disk.lower() == parent_vm.get("name", "").lower():
+                return candidate, 0.95  # High confidence: matched via parent VM
+
+        return None
+
+    @staticmethod
+    def _match_nics_by_associated_vm(
+        bicep_resource: Dict, bicep_resources: List[Dict], candidates: List[Dict],
+        matches: List[Tuple[Dict, Dict, float]], current_best_score: float
+    ) -> Tuple[Dict, float]:
+        """Match a NIC to its associated VM's NIC.
+
+        Returns:
+            Tuple of (matched_resource, confidence_score) or None if no match found
+        """
+        associated_vm = ResourceMatcher._find_associated_resource(
+            bicep_resource, bicep_resources, "Microsoft.Compute/virtualMachines"
+        )
+        if not associated_vm:
+            return None
+
+        # Find the deployed VM this bicep VM matches to
+        for matched_bicep, matched_deployed, _ in matches:
+            if matched_bicep.get("name") == associated_vm.get("name"):
+                vm_name = matched_deployed.get("name", "")
+                for candidate in candidates:
+                    cand_name = candidate.get("name", "")
+                    if vm_name in cand_name:
+                        return candidate, 0.90
+
+        return None
+
+    @staticmethod
+    def _match_by_fuzzy_tokens(
+        bicep_name: str, candidates: List[Dict], current_best_score: float
+    ) -> Tuple[Dict, float]:
+        """Match using fuzzy token-based matching (for parameter-based names).
+
+        Returns:
+            Tuple of (matched_resource, confidence_score) or None if no match found
+        """
+        best_match = None
+        best_score = current_best_score
+
+        for candidate in candidates:
+            deployed_name = candidate.get("name", "")
+            bicep_clean = bicep_name.replace('[', '').replace(']', '').replace("'", '').replace('parameters(', '').replace(')', '')
+
+            bicep_tokens = [t for t in bicep_clean.split('-') if len(t) > 1 and t not in ('vmName', 'vaultName', 'name')]
+            deployed_tokens = [t for t in deployed_name.split('-') if len(t) > 1]
+
+            if bicep_tokens and deployed_tokens:
+                # Optimize fuzzy matching: use set intersection for O(n+m) instead of O(n*m)
+                bicep_set = set(bicep_tokens)
+                deployed_set = set(deployed_tokens)
+                # Exact token matches (e.g., 'prod' in both 'vm-prod-001')
+                exact_matches = len(bicep_set & deployed_set)
+                # Prefix/substring matches for tokens not found exactly
+                prefix_matches = sum(
+                    1 for bt in bicep_tokens
+                    if bt not in deployed_set and any(dt.startswith(bt) or bt in dt for dt in deployed_tokens)
+                )
+                matches_count = exact_matches + prefix_matches
+                score = matches_count / max(len(bicep_tokens), len(deployed_tokens))
+                if score > best_score:
+                    best_score = score
+                    best_match = candidate
+
+        return (best_match, best_score) if best_match else None
+
+    @staticmethod
     def match_resources(
         bicep_resources: List[Dict],
         deployed_resources: List[Dict],
@@ -249,83 +336,43 @@ class ResourceMatcher:
                 bicep_name = bicep_resource.get("name", "")
                 best_match = None
                 best_score = 0.25
-                best_match_idx = -1
 
-                # For identical-named resources, try contextual matching via related resources
+                # Try contextual matching strategies
                 if resource_type == "Microsoft.Compute/disks":
-                    # For disks, try to match via parent VM
-                    # Extract VM name from disk name (e.g., vm-prod-002_OsDisk_1_<hash> → vm-prod-002)
-                    disk_name = bicep_resource.get("name", "")
-                    parent_vm = ResourceMatcher._find_parent_vm(disk_name, bicep_resources)
-                    if parent_vm:
-                        # Find which deployed disk matches this parent VM
-                        for cand_idx, candidate in enumerate(candidates):
-                            cand_name = candidate.get("name", "")
-                            # Check if candidate disk belongs to parent VM
-                            vm_name_from_disk = cand_name.split('_')[0] if '_' in cand_name else None
-                            if vm_name_from_disk and vm_name_from_disk.lower() == parent_vm.get("name", "").lower():
-                                best_match = candidate
-                                best_match_idx = cand_idx
-                                best_score = 0.95  # High confidence: matched via parent VM
-                                break
+                    result = ResourceMatcher._match_disks_by_parent_vm(
+                        bicep_resource, bicep_resources, candidates, best_score
+                    )
+                    if result:
+                        best_match, best_score = result
 
-                if all_identical and resource_type == "Microsoft.Network/networkInterfaces":
-                    # Try to match NIC via its associated VM
-                    associated_vm = ResourceMatcher._find_associated_resource(bicep_resource, bicep_resources, "Microsoft.Compute/virtualMachines")
-                    if associated_vm:
-                        # Find the deployed VM this bicep VM matches to
-                        for matched_bicep, matched_deployed, _ in matches:
-                            if matched_bicep.get("name") == associated_vm.get("name"):
-                                # Now find the NIC that matches this deployed VM
-                                vm_name = matched_deployed.get("name", "")
-                                for cand_idx, candidate in enumerate(candidates):
-                                    cand_name = candidate.get("name", "")
-                                    if vm_name in cand_name:
-                                        best_match = candidate
-                                        best_match_idx = cand_idx
-                                        best_score = 0.90
-                                        break
-                                if best_match:
-                                    break
+                elif all_identical and resource_type == "Microsoft.Network/networkInterfaces":
+                    result = ResourceMatcher._match_nics_by_associated_vm(
+                        bicep_resource, bicep_resources, candidates, matches, best_score
+                    )
+                    if result:
+                        best_match, best_score = result
 
-                # If contextual matching didn't work, try fuzzy matching
+                # Try fuzzy matching if contextual matching failed
                 if not best_match:
-                    for cand_idx, deployed in enumerate(candidates):
-                        deployed_name = deployed.get("name", "")
-                        bicep_clean = bicep_name.replace('[', '').replace(']', '').replace("'", '').replace('parameters(', '').replace(')', '')
-                        deployed_clean = deployed_name
-
-                        bicep_tokens = [t for t in bicep_clean.split('-') if len(t) > 1 and t not in ('vmName', 'vaultName', 'name')]
-                        deployed_tokens = [t for t in deployed_clean.split('-') if len(t) > 1]
-
-                        if bicep_tokens and deployed_tokens:
-                            # Optimize fuzzy matching: use set intersection for O(n+m) instead of O(n*m)
-                            bicep_set = set(bicep_tokens)
-                            deployed_set = set(deployed_tokens)
-                            # Exact token matches (e.g., 'prod' in both 'vm-prod-001')
-                            exact_matches = len(bicep_set & deployed_set)
-                            # Prefix/substring matches for tokens not found exactly
-                            prefix_matches = sum(1 for bt in bicep_tokens if bt not in deployed_set and any(dt.startswith(bt) or bt in dt for dt in deployed_tokens))
-                            matches_count = exact_matches + prefix_matches
-                            score = matches_count / max(len(bicep_tokens), len(deployed_tokens))
-                            if score > best_score:
-                                best_score = score
-                                best_match = deployed
-                                best_match_idx = cand_idx
+                    result = ResourceMatcher._match_by_fuzzy_tokens(
+                        bicep_name, candidates, best_score
+                    )
+                    if result:
+                        best_match, best_score = result
 
                 # Fallback: positional matching for identical-named resources
                 if not best_match and all_identical and len(candidates) >= len(bicep_res_list):
-                    # Match by position in list
                     best_match = candidates[bicep_idx]
-                    best_match_idx = bicep_idx
                     best_score = 0.60
+
+                # Single candidate fallback
+                if not best_match and len(candidates) == 1:
+                    best_match = candidates[0]
+                    best_score = 0.70
 
                 if best_match:
                     matches.append((bicep_resource, best_match, best_score))
                     used_deployed.add(id(best_match))
-                elif len(candidates) == 1:
-                    matches.append((bicep_resource, candidates[0], 0.70))
-                    used_deployed.add(id(candidates[0]))
 
         return matches
 
