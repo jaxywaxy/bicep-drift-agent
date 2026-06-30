@@ -9,6 +9,7 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 
 import os
 import logging
+from typing import Optional, List, Dict
 from azure.identity import DefaultAzureCredential
 
 logger = logging.getLogger(__name__)
@@ -24,9 +25,9 @@ from azure.mgmt.eventhub import EventHubManagementClient
 
 def get_live_state(
     resource_group: str = None,
-    subscription_id: str | None = None,
+    subscription_id: Optional[str] = None,
     scope: str = "resource_group"
-) -> list[dict]:
+) -> List[Dict]:
     """
     Query resources and return their live state.
 
@@ -107,7 +108,7 @@ def get_live_state(
     return resources
 
 
-def _extract_resource_group_from_id(resource_id: str) -> str | None:
+def _extract_resource_group_from_id(resource_id: str) -> Optional[str]:
     """Extract resource group name from Azure resource ID.
 
     Example: /subscriptions/SUB_ID/resourceGroups/MY_RG/providers/... → MY_RG
@@ -159,6 +160,7 @@ def _enrich_app_services(credential, subscription_id: str, resource_group: str, 
     try:
         web_client = WebSiteManagementClient(credential, subscription_id)
     except Exception:
+        logger.debug("WebSiteManagementClient initialization failed. Skipping App Service enrichment.", exc_info=True)
         return
 
     for resource in resources:
@@ -230,39 +232,6 @@ def _enrich_app_services(credential, subscription_id: str, resource_group: str, 
                         })
             except Exception:
                 logger.debug("Exception during property enrichment.", exc_info=True)
-                pass
-
-        elif resource["type"] == "Microsoft.Web/serverfarms":
-            plan_name = resource["name"]
-            try:
-                plan = web_client.app_service_plans.get(resource_group, plan_name)
-                if "properties" not in resource:
-                    resource["properties"] = {}
-
-                # Extract SKU info (name, tier, family, size, capacity)
-                if hasattr(plan, "sku") and plan.sku:
-                    resource["sku"] = {
-                        "name": getattr(plan.sku, "name", None),
-                        "tier": getattr(plan.sku, "tier", None),
-                        "family": getattr(plan.sku, "family", None),
-                        "size": getattr(plan.sku, "size", None),
-                        "capacity": getattr(plan.sku, "capacity", None),
-                    }
-
-                # Extract plan properties
-                if hasattr(plan, "properties"):
-                    data = plan._data if hasattr(plan, "_data") else plan
-                    plan_props = data.get("properties", {}) if isinstance(data, dict) else {}
-
-                    if plan_props:
-                        resource["properties"].update({
-                            "reserved": plan_props.get("reserved"),
-                            "workerSize": plan_props.get("workerSize"),
-                            "numberOfWorkers": plan_props.get("numberOfWorkers"),
-                            "isPremiumApp": plan_props.get("isPremiumApp"),
-                        })
-            except Exception:
-                pass
 
 
 def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
@@ -270,6 +239,7 @@ def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, re
     try:
         kv_client = KeyVaultManagementClient(credential, subscription_id)
     except Exception:
+        logger.debug("KeyVaultManagementClient initialization failed. Skipping Key Vault enrichment.", exc_info=True)
         return
 
     for resource in resources:
@@ -314,6 +284,7 @@ def _enrich_logic_apps(credential, subscription_id: str, resource_group: str, re
     try:
         logic_client = LogicManagementClient(credential, subscription_id)
     except Exception:
+        logger.debug("LogicManagementClient initialization failed. Skipping Logic App enrichment.", exc_info=True)
         return
 
     for resource in resources:
