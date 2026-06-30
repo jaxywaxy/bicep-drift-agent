@@ -264,7 +264,14 @@ class ResourceMatcher:
                         deployed_tokens = [t for t in deployed_clean.split('-') if len(t) > 1]
 
                         if bicep_tokens and deployed_tokens:
-                            matches_count = sum(1 for bt in bicep_tokens if any(dt.startswith(bt) or bt in dt for dt in deployed_tokens))
+                            # Optimize fuzzy matching: use set intersection for O(n+m) instead of O(n*m)
+                            bicep_set = set(bicep_tokens)
+                            deployed_set = set(deployed_tokens)
+                            # Exact token matches (e.g., 'prod' in both 'vm-prod-001')
+                            exact_matches = len(bicep_set & deployed_set)
+                            # Prefix/substring matches for tokens not found exactly
+                            prefix_matches = sum(1 for bt in bicep_tokens if bt not in deployed_set and any(dt.startswith(bt) or bt in dt for dt in deployed_tokens))
+                            matches_count = exact_matches + prefix_matches
                             score = matches_count / max(len(bicep_tokens), len(deployed_tokens))
                             if score > best_score:
                                 best_score = score
