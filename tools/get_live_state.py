@@ -113,6 +113,9 @@ def _extract_resource_group_from_id(resource_id: str) -> Optional[str]:
 
     Example: /subscriptions/SUB_ID/resourceGroups/MY_RG/providers/... → MY_RG
     """
+    if not resource_id:
+        return None
+
     parts = resource_id.lower().split('/')
     try:
         rg_index = parts.index('resourcegroups')
@@ -196,10 +199,8 @@ def _enrich_app_services(credential, subscription_id: str, resource_group: str, 
                         }
                 except Exception:
                     logger.debug("Exception during property enrichment.", exc_info=True)
-                    pass
             except Exception:
                 logger.debug("Exception during property enrichment.", exc_info=True)
-                pass
 
         elif resource["type"] == "Microsoft.Web/serverfarms":
             plan_name = resource["name"]

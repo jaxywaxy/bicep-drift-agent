@@ -13,7 +13,9 @@ import tempfile
 import os
 import re
 import logging
+import shlex
 from pathlib import Path
+from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +74,23 @@ def compile_bicep(bicep_file_path: str) -> dict:
                 f"az bicep build failed:\nSTDOUT: {safe_stdout}\nSTDERR: {safe_stderr}"
             )
 
-        with open(output_path) as f:
-            arm_template = json.load(f)
+        # Verify output file was created
+        if not output_path.exists():
+            raise RuntimeError(
+                f"Bicep compilation succeeded but output file not created: {output_path}"
+            )
+
+        try:
+            with open(output_path) as f:
+                arm_template = json.load(f)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"Failed to parse compiled Bicep output as JSON: {e}\n"
+                f"File: {output_path}\n"
+                f"This may indicate an issue with the az bicep build output."
+            )
+        except OSError as e:
+            raise RuntimeError(f"Failed to read compiled Bicep output: {e}")
 
     return arm_template
 
@@ -103,7 +120,7 @@ def detect_deployment_scope(arm_template: dict) -> str:
     return "resource_group"
 
 
-def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> list[dict]:
+def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> List[Dict]:
     """
     Extract and normalize resources from an ARM template.
 
