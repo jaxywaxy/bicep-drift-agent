@@ -12,6 +12,8 @@ jobs:
   load-config:
     name: Load LZ Config from External Repo
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --no-warnings=DEP0005
     outputs:
       lz-repo: ${{ steps.load.outputs.repo }}
       lz-config-path: ${{ steps.load.outputs.config_path }}
@@ -165,6 +167,7 @@ jobs:
     env:
       AZURE_SUBSCRIPTION_ID: ${{ needs.load-config.outputs.lz-subscription-id }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      NODE_OPTIONS: --no-warnings=DEP0005
     steps:
       - name: Azure Login (OIDC)
         uses: azure/login@v3
@@ -270,6 +273,8 @@ jobs:
     needs: [load-config, drift-checks]
     if: always()
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --no-warnings=DEP0005
     steps:
       - name: Checkout drift detection tools
         uses: actions/checkout@v7
