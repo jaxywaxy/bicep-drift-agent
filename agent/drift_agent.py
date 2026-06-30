@@ -4,6 +4,7 @@ Phase 2: Agent-based drift analysis and remediation.
 Uses Claude to reason about drift, classify severity, and suggest fixes.
 """
 
+import os
 import json
 from anthropic import Anthropic
 
@@ -13,10 +14,15 @@ from tools.models import DriftReport, Drift
 class DriftAgent:
     """Uses Claude to analyze drift and suggest remediation."""
 
-    def __init__(self, api_key: str = None):
-        """Initialize drift agent with Anthropic client."""
+    def __init__(self, api_key: str = None, model: str = None):
+        """Initialize drift agent with Anthropic client.
+
+        Args:
+            api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+            model: Claude model to use (defaults to DRIFT_AGENT_MODEL env var, then claude-opus-4-8)
+        """
         self.client = Anthropic(api_key=api_key)
-        self.model = "claude-opus-4-8"
+        self.model = model or os.environ.get("DRIFT_AGENT_MODEL", "claude-opus-4-8")
         self.conversation_history = []
 
     def analyze_drift(self, drift_report: DriftReport) -> str:
