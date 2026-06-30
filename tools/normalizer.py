@@ -269,9 +269,11 @@ def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     """
     call = call.strip()
 
-    # uniqueString() — can't resolve at compile time, leave as expression for smart matching
+    # uniqueString() — can't resolve at compile time, generate a consistent placeholder
     if call.startswith("uniqueString"):
-        return f"[{call}]"
+        import hashlib
+        hash_val = hashlib.md5(call.encode()).hexdigest()[:8]
+        return f"[{hash_val}]"
 
     # copyIndex() — can't resolve, leave as expression for smart matching
     if call.startswith("copyIndex"):
@@ -364,6 +366,37 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
         variables = {}
 
     expr = expr.strip()
+
+    # Handle embedded expressions like "prefix[uniqueString(...)]"
+    # This pattern appears when Bicep compiler outputs partially-resolved names
+    if "[" in expr and "]" in expr and not (expr.startswith("[") and expr.endswith("]")):
+        # Extract the bracketed part and resolve it
+        match = re.search(r"\[([^\[\]]+)\]", expr)
+        if match:
+            inner_expr = match.group(1)
+            prefix = expr[:match.start()]
+            suffix = expr[match.end():]
+
+            # Resolve the inner expression
+            if inner_expr.startswith("uniqueString"):
+                # uniqueString can't be resolved at compile time, generate a placeholder
+                import hashlib
+                hash_val = hashlib.md5(inner_expr.encode()).hexdigest()[:8]
+                resolved = f"[{hash_val}]"
+            elif inner_expr.startswith("format"):
+                template, args = _parse_format_call(inner_expr, parameters, variables)
+                if template is not None:
+                    resolved = template
+                    for i, arg in enumerate(args):
+                        resolved = resolved.replace(f"{{{i}}}", str(arg))
+                else:
+                    resolved = f"[{inner_expr}]"
+            else:
+                # Try to resolve as a general expression
+                resolved = resolve_expression(f"[{inner_expr}]", parameters, variables)
+
+            return prefix + resolved + suffix
+        return expr
 
     # Not an expression
     if not expr.startswith("[") or not expr.endswith("]"):
