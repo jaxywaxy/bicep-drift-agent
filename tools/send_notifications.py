@@ -12,10 +12,13 @@ import json
 import os
 import re
 import sys
+import logging
 from typing import Dict, List, Any
 from dataclasses import dataclass
 import urllib.request
 import urllib.error
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -153,7 +156,7 @@ class NotificationRouter:
         try:
             return json.loads(config_str)
         except json.JSONDecodeError:
-            print("⚠ Warning: Invalid DRIFT_NOTIFICATIONS JSON format")
+            logger.warning("Invalid DRIFT_NOTIFICATIONS JSON format")
             return {}
 
     def send_notifications(self, events: List[DriftEvent], context: Dict[str, str]) -> bool:
@@ -201,7 +204,7 @@ class NotificationRouter:
         filtered_events = [e for e in events if notification_filter.should_notify(e)]
 
         if not filtered_events:
-            print(f"  ℹ {team_name}: No events match filter '{filter_str}'")
+            logger.info(f"{team_name}: No events match filter '{filter_str}'")
             return True
 
         # Get template (use platform-specific default if not provided)
@@ -216,9 +219,9 @@ class NotificationRouter:
                 message = template.render(event_context)
                 success = self._send_to_slack(slack_url, message) and success
             if success:
-                print(f"  ✓ {team_name}: Slack notification sent ({len(filtered_events)} event(s))")
+                logger.info(f"{team_name}: Slack notification sent ({len(filtered_events)} event(s))")
             else:
-                print(f"  ✗ {team_name}: Slack notification failed")
+                logger.warning(f"{team_name}: Slack notification failed")
 
         # Send to Teams if configured
         teams_url = config.get("teams")
@@ -229,9 +232,9 @@ class NotificationRouter:
                 message = template.render(event_context)
                 success = self._send_to_teams(teams_url, message) and success
             if success:
-                print(f"  ✓ {team_name}: Teams notification sent ({len(filtered_events)} event(s))")
+                logger.info(f"{team_name}: Teams notification sent ({len(filtered_events)} event(s))")
             else:
-                print(f"  ✗ {team_name}: Teams notification failed")
+                logger.warning(f"{team_name}: Teams notification failed")
 
         return success
 
@@ -250,7 +253,7 @@ class NotificationRouter:
             with urllib.request.urlopen(req, timeout=10) as response:
                 return response.status == 200
         except Exception as e:
-            print(f"  ✗ Slack error: {type(e).__name__}: {e}")
+            logger.error(f"Slack error: {type(e).__name__}: {e}")
             return False
 
     def _send_to_teams(self, webhook_url: str, message: str) -> bool:
@@ -273,7 +276,7 @@ class NotificationRouter:
             with urllib.request.urlopen(req, timeout=10) as response:
                 return response.status in (200, 201)
         except Exception as e:
-            print(f"  ✗ Teams error: {type(e).__name__}: {e}")
+            logger.error(f"Teams error: {type(e).__name__}: {e}")
             return False
 
 
@@ -301,10 +304,10 @@ def extract_recommendations_from_reports() -> Dict[str, List[Dict[str, str]]]:
                     if "recommendation" in drift and drift["recommendation"]:
                         recommendations[resource_key] = drift["recommendation"]
             except Exception as e:
-                print(f"  ⚠ Could not read {json_file}: {e}")
+                logger.warning(f"Could not read {json_file}: {e}")
 
     except Exception as e:
-        print(f"  ⚠ Error extracting recommendations: {e}")
+        logger.warning(f"Error extracting recommendations: {e}")
 
     return recommendations
 
@@ -377,30 +380,34 @@ def parse_drift_output(output_file: str) -> List[DriftEvent]:
             )
 
     except FileNotFoundError:
-        print(f"⚠ Drift output file not found: {output_file}")
+        logger.warning(f"Drift output file not found: {output_file}")
 
     return events
 
 
 if __name__ == "__main__":
+    from .logger import setup_logging
+
+    setup_logging(level="INFO")
+
     # Example usage
     if len(sys.argv) < 2:
-        print("Usage: python send_notifications.py <drift_output_file> [report_url]")
+        logger.error("Usage: python send_notifications.py <drift_output_file> [report_url]")
         sys.exit(1)
 
     output_file = sys.argv[1]
     report_url = sys.argv[2] if len(sys.argv) > 2 else "See GitHub Actions run"
 
-    print("📋 Parsing drift output...")
+    logger.info("Parsing drift output...")
     events = parse_drift_output(output_file)
 
-    print("💡 Extracting AI recommendations from reports...")
+    logger.info("Extracting AI recommendations from reports...")
     recommendations = extract_recommendations_from_reports()
     html_report_info = get_html_report_url()
 
     # Enrich events with recommendations
     if recommendations:
-        print(f"  ✓ Found {len(recommendations)} recommendation(s)")
+        logger.info(f"Found {len(recommendations)} recommendation(s)")
         for event in events:
             resource_key = f"{event.resource_type}/{event.resource_name}"
             if resource_key in recommendations:
@@ -420,11 +427,11 @@ if __name__ == "__main__":
         context["html_report"] = html_report_info
 
     if events:
-        print(f"\n📢 Sending notifications for {len(events)} event(s)...")
+        logger.info(f"Sending notifications for {len(events)} event(s)...")
         if recommendations:
-            print(f"   (including {len(recommendations)} AI-generated recommendations)")
+            logger.info(f"(including {len(recommendations)} AI-generated recommendations)")
         success = router.send_notifications(events, context)
         sys.exit(0 if success else 1)
     else:
-        print("✓ No drift events to notify")
+        logger.info("No drift events to notify")
         sys.exit(0)

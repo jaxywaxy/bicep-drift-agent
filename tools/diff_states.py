@@ -7,9 +7,12 @@ Uses the normalizer to resolve expressions and flatten resources.
 Generates a drift report showing missing, extra, and modified resources.
 """
 
+import logging
 from dataclasses import dataclass, field
 from .normalizer import normalize_live_resources, resource_key
 from .property_drift import DriftDetector
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,7 +62,7 @@ def diff_states(
     # Log what was filtered for debugging
     unresolvable_count = len(arm_resources) - len(filtered_arm)
     if unresolvable_count > 0:
-        print(f"  ℹ Filtered {unresolvable_count} resource(s) with unresolvable expressions")
+        logger.debug(f"Filtered {unresolvable_count} resource(s) with unresolvable expressions")
 
     # Normalize live resources to match ARM shape
     normalized_live = normalize_live_resources(live_resources)
