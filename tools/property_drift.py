@@ -517,6 +517,12 @@ class PropertyComparator:
 
                 deployed_value = deployed_flat[key]
 
+                # Skip properties where Azure returns None (not exposed by API)
+                # This prevents false positives when Bicep has explicit values but
+                # the property isn't available in the Azure API response
+                if deployed_value is None:
+                    continue
+
                 # Normalize type comparisons (Azure may return different casing)
                 if key == "type" and isinstance(bicep_value, str) and isinstance(deployed_value, str):
                     if bicep_value.lower() == deployed_value.lower():
