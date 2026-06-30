@@ -11,6 +11,50 @@ from dataclasses import dataclass
 from collections import defaultdict
 
 
+class MatchConfidenceScores:
+    """
+    Confidence scores for resource matching strategies.
+
+    These thresholds determine how confident we are that a Bicep resource
+    matches a deployed resource. Used to handle ambiguous cases where multiple
+    deployed resources could match a single Bicep resource.
+
+    Scores range from 0.0 (no match) to 1.0 (perfect match).
+    """
+
+    # Exact name match (case-insensitive or substring)
+    # Most reliable: resource names match exactly
+    EXACT_MATCH = 0.95
+
+    # Contextual matching via parent resource
+    # High confidence when we can use related resources to disambiguate
+    # Example: matched disk to VM parent, then found deployed disk for that VM
+    CONTEXTUAL_MATCH_DISK = 0.95
+    CONTEXTUAL_MATCH_NIC = 0.90
+
+    # Prefix match for parameter-based names
+    # Example: 'st[uniqueString(...)]' matched to 'st12345abc' by prefix 'st'
+    PREFIX_MATCH = 0.85
+
+    # Fuzzy token-based matching
+    # Matches by splitting names into tokens and checking overlap
+    # Example: 'vm-prod-001' vs 'myvm-prod-001-nic' = high token overlap
+    FUZZY_MATCH_THRESHOLD = 0.60
+
+    # Positional matching for truly identical-named resources
+    # Last resort: match by position when all else fails
+    # Example: 4x resources all named [parameters('vmName')]-nic
+    POSITIONAL_MATCH = 0.60
+
+    # Single candidate fallback
+    # When only one deployed resource exists for a resource type
+    SINGLE_CANDIDATE = 0.70
+
+    # No match / unresolved
+    # Placeholder for resources that couldn't be matched
+    NO_MATCH = 0.25
+
+
 class ResourceIndexer:
     """Helper for indexing and grouping resources by type and properties."""
 
@@ -302,7 +346,7 @@ class ResourceMatcher:
                     break
 
             if exact_match:
-                matches.append((bicep_resource, exact_match, 0.95))
+                matches.append((bicep_resource, exact_match, MatchConfidenceScores.EXACT_MATCH))
                 used_deployed.add(id(exact_match))
             else:
                 # Try fuzzy matching for unresolvable names like sttestdrift[uniqueString(...)]
@@ -313,7 +357,7 @@ class ResourceMatcher:
                         prefix_matches = [d for d in candidates if d.get("name", "").startswith(prefix)]
                         if len(prefix_matches) == 1:
                             # Exactly one match found via prefix
-                            matches.append((bicep_resource, prefix_matches[0], 0.85))
+                            matches.append((bicep_resource, prefix_matches[0], MatchConfidenceScores.PREFIX_MATCH))
                             used_deployed.add(id(prefix_matches[0]))
 
         # Second pass: contextual + fuzzy matching for remaining resources
@@ -335,7 +379,7 @@ class ResourceMatcher:
             for bicep_idx, bicep_resource in enumerate(bicep_res_list):
                 bicep_name = bicep_resource.get("name", "")
                 best_match = None
-                best_score = 0.25
+                best_score = MatchConfidenceScores.NO_MATCH
 
                 # Try contextual matching strategies
                 if resource_type == "Microsoft.Compute/disks":
@@ -363,12 +407,12 @@ class ResourceMatcher:
                 # Fallback: positional matching for identical-named resources
                 if not best_match and all_identical and len(candidates) >= len(bicep_res_list):
                     best_match = candidates[bicep_idx]
-                    best_score = 0.60
+                    best_score = MatchConfidenceScores.POSITIONAL_MATCH
 
                 # Single candidate fallback
                 if not best_match and len(candidates) == 1:
                     best_match = candidates[0]
-                    best_score = 0.70
+                    best_score = MatchConfidenceScores.SINGLE_CANDIDATE
 
                 if best_match:
                     matches.append((bicep_resource, best_match, best_score))
