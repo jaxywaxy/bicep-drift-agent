@@ -523,10 +523,23 @@ class PropertyComparator:
                 if deployed_value is None:
                     continue
 
+                # Skip null vs empty string comparisons (functionally equivalent)
+                if (bicep_value is None and deployed_value == "") or (bicep_value == "" and deployed_value is None):
+                    continue
+
+                # Skip empty object/dict comparisons (null vs {})
+                if isinstance(bicep_value, dict) and isinstance(deployed_value, dict):
+                    if not bicep_value and not deployed_value:
+                        continue
+
                 # Normalize type comparisons (Azure may return different casing)
                 if key == "type" and isinstance(bicep_value, str) and isinstance(deployed_value, str):
                     if bicep_value.lower() == deployed_value.lower():
                         continue
+
+                # Skip if both values are empty (null, empty string, empty list, etc.)
+                if not bicep_value and not deployed_value:
+                    continue
 
                 if bicep_value != deployed_value:
                     severity = PropertyComparator._get_severity(key)
@@ -554,6 +567,12 @@ class PropertyComparator:
                 # Skip if deployed properties are incomplete (likely property enrichment issue)
                 # If deployed_flat is empty or minimal, property querying may have failed
                 if len(deployed_flat) < 3:
+                    continue
+
+                # Skip if Bicep value is essentially empty (optional property not set)
+                # null, empty string, empty dict, empty list — these are optional and not returning
+                # from Azure API is normal behavior, not drift
+                if not bicep_value or (isinstance(bicep_value, (dict, list)) and len(bicep_value) == 0):
                     continue
 
                 diffs.append(

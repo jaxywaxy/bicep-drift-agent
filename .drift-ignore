@@ -182,3 +182,28 @@ ignore:
 
   - resource_type: "Microsoft.EventHub/namespaces/eventhubs/authorizationRules"
     reason: "Child resource with parent name containing unresolved uniqueString() - deployed correctly but cannot be matched"
+
+  # Log Analytics resources with unresolvable parameter names
+  # Custom tables and solutions with parameter-based parent names cannot be reliably matched
+  - resource_type: "Microsoft.OperationalInsights/workspaces/tables"
+    reason: "Child resource with parent name containing unresolved parameter expressions"
+
+  - resource_type: "Microsoft.OperationalInsights/workspaces/savedSearches"
+    reason: "Child resource with parent name containing unresolved parameter expressions"
+
+  - resource_type: "Microsoft.OperationalInsights/workspaces/solutions"
+    reason: "Child resource with parent name containing unresolved parameter expressions"
+
+  # Key Vault properties that are null on both sides (not functional drift)
+  - resource_type: "Microsoft.KeyVault/vaults"
+    property: "properties.networkAcls"
+    reason: "networkAcls is null when not specified; Azure returns null vs empty object - not functional drift"
+
+  - resource_type: "Microsoft.KeyVault/vaults"
+    property: "properties.integrationAccount"
+    reason: "integrationAccount is optional; null on both sides is not functional drift"
+
+  # Logic App optional properties
+  - resource_type: "Microsoft.Logic/workflows"
+    property: "properties.integrationAccount"
+    reason: "integrationAccount is optional and may not be returned by Azure API when not set"
