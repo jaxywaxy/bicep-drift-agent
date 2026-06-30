@@ -372,6 +372,12 @@ class PropertyComparator:
                 if PropertyComparator._is_write_only_property(key):
                     continue
 
+                # Skip name property comparisons when the name contains unresolved expressions
+                # (e.g., sttestdrift[uniqueString(...)]) - these are matched by prefix
+                if key == "name" and isinstance(bicep_value, str):
+                    if "[" in bicep_value and "]" in bicep_value:
+                        continue
+
                 # Skip unresolved template expressions (resolve at deploy time)
                 if PropertyComparator._has_unresolved_expressions(bicep_value):
                     continue
