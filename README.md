@@ -5,7 +5,7 @@ Production-ready infrastructure drift detection for enterprise Bicep deployments
 ## What it does
 
 1. Compiles Bicep files to ARM JSON
-2. Queries live Azure state via ARM API
+2. Queries live Azure state via Azure Resource Graph (KQL)
 3. Compares desired state (Bicep) vs actual state (Azure)
 4. Reports drift with property-level details
 5. Sends notifications to teams via Slack/Teams
@@ -85,16 +85,13 @@ See [LANDING_ZONES.md](LANDING_ZONES.md) for complete setup.
 - Fuzzy prefix matching for `[uniqueString()]` names
 - 0.95 confidence for exact matches
 - 0.85 confidence for prefix matches
+- Contextual matching via parent resource references
 
-✅ **Type-specific enrichment**
+✅ **Critical resource protection**
 
-- Storage Accounts (accessTier, minTlsVersion, publicNetworkAccess)
-- App Services (httpsOnly, siteConfig)
-- Key Vaults (enableRbac, softDelete, networkAcls)
-- VMs (SKU, data disks, hardware profile)
-- Log Analytics (sku, retention, publicNetworkAccess)
-- Event Hubs (capacity, autoInflate, zoneRedundant)
-- Logic Apps (state, definition)
+- Lock detection and removal alerts (CanNotDelete/CanNotModify)
+- IaC-managed locks for key resources
+- Automatic drift alerts on lock removal
 
 ✅ **Flexible notifications**
 
@@ -254,9 +251,9 @@ az bicep build --file main.bicep --outfile template.json
 ### 3. Query Live State
 
 - Connect to Azure via `DefaultAzureCredential`
-- Query each resource group
-- Get actual resource properties
-- Enrich with type-specific details (storage, compute, networking, etc.)
+- Use Azure Resource Graph (KQL) for efficient querying
+- Query resources by resource group
+- Get actual resource properties and state
 
 ### 4. Normalize & Compare
 
@@ -274,6 +271,28 @@ az bicep build --file main.bicep --outfile template.json
 - Send to Slack/Teams
 
 ---
+
+## Ignore Patterns
+
+Create `.drift-ignore` to filter expected drift (60+ patterns pre-configured):
+
+```yaml
+ignore:
+  # Auto-created resources (not IaC-managed)
+  - resource_type: "Microsoft.Network/networkWatchers"
+    reason: "Auto-created by Azure in each region"
+  
+  # Child resources with unresolvable names
+  - resource_type: "Microsoft.OperationalInsights/workspaces/tables"
+    reason: "Child resource with parameter-based parent name"
+  
+  # Optional properties
+  - resource_type: "Microsoft.KeyVault/vaults"
+    property: "properties.networkAcls"
+    reason: "Null when not specified; not functional drift"
+```
+
+See `.drift-ignore` for complete list of patterns and reasoning.
 
 ## Documentation
 
