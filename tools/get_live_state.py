@@ -18,14 +18,14 @@ from azure.identity import DefaultAzureCredential
 from azure.core.exceptions import HttpResponseError
 
 logger = logging.getLogger(__name__)
-from azure.mgmt.resource.resources import ResourceManagementClient
-from azure.mgmt.compute import ComputeManagementClient
-from azure.mgmt.storage import StorageManagementClient
-from azure.mgmt.web import WebSiteManagementClient
-from azure.mgmt.keyvault import KeyVaultManagementClient
-from azure.mgmt.logic import LogicManagementClient
-from azure.mgmt.loganalytics import LogAnalyticsManagementClient
-from azure.mgmt.eventhub import EventHubManagementClient
+
+try:
+    from azure.mgmt.resourcegraph import ResourceGraphClient
+    from azure.mgmt.resourcegraph.models import QueryRequest
+    HAS_RESOURCE_GRAPH = True
+except ImportError:
+    logger.warning("azure-mgmt-resourcegraph not installed, will fall back to ResourceManagementClient")
+    HAS_RESOURCE_GRAPH = False
 
 T = TypeVar('T')
 
@@ -152,7 +152,7 @@ def get_live_state(
     scope: str = "resource_group"
 ) -> List[Dict]:
     """
-    Query resources and return their live state.
+    Query resources using Azure Resource Graph (fast and efficient).
 
     Supports both resource group and subscription scopes.
 
@@ -160,8 +160,6 @@ def get_live_state(
       - Environment variables (AZURE_CLIENT_ID, AZURE_CLIENT_SECRET, AZURE_TENANT_ID)
       - Managed Identity
       - Azure CLI (`az login`)
-
-    So if you're logged in via az login, this just works.
 
     Args:
         resource_group: Name of the Azure resource group (required for RG scope).
@@ -177,57 +175,101 @@ def get_live_state(
             "No subscription_id provided and AZURE_SUBSCRIPTION_ID not set in environment."
         )
 
+    if not HAS_RESOURCE_GRAPH:
+        logger.warning("Resource Graph not available, falling back to ResourceManagementClient")
+        return _get_live_state_fallback(resource_group, sub_id, scope)
+
+    credential = DefaultAzureCredential()
+    client = ResourceGraphClient(credential)
+
+    # Build KQL query based on scope
+    if scope == "resource_group":
+        if not resource_group:
+            raise ValueError("resource_group required for resource_group scope")
+        # Query resources in specific RG
+        kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
+    else:
+        # Query all resources in subscription
+        if resource_group:
+            kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
+        else:
+            kql_query = "Resources"
+
+    logger.info(f"Querying Azure Resource Graph: {kql_query}")
+    start_time = time.time()
+
+    try:
+        request = QueryRequest(subscriptions=[sub_id], query=kql_query)
+        response = client.resources(request)
+    except Exception as e:
+        logger.error(f"Resource Graph query failed: {e}, falling back to ResourceManagementClient")
+        return _get_live_state_fallback(resource_group, sub_id, scope)
+
+    elapsed = time.time() - start_time
+    logger.info(f"Resource Graph query completed in {elapsed:.2f}s")
+
+    # Transform results to match expected format
+    resources = []
+    if response.data:
+        for item in response.data:
+            resource_dict = {
+                "type": item.get("type"),
+                "name": item.get("name"),
+                "location": item.get("location"),
+                "tags": item.get("tags", {}),
+                "sku": item.get("sku"),
+                "kind": item.get("kind"),
+                "properties": item.get("properties", {}),
+                "id": item.get("id"),
+                "resource_group": item.get("resourceGroup"),
+            }
+            resources.append(resource_dict)
+
+    logger.info(f"Found {len(resources)} resource(s) via Resource Graph")
+    return resources
+
+
+def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> List[Dict]:
+    """Fallback: query resources using ResourceManagementClient when Resource Graph is unavailable."""
+    logger.warning(f"Using ResourceManagementClient fallback (slower than Resource Graph)")
+    from azure.mgmt.resource.resources import ResourceManagementClient
+
     credential = DefaultAzureCredential()
     client = ResourceManagementClient(credential, sub_id)
 
     resources = []
+    start_time = time.time()
 
-    # Determine which resources to query
+    # Query resources
     if scope == "resource_group":
         if not resource_group:
             raise ValueError("resource_group required for resource_group scope")
         resource_iterator = client.resources.list_by_resource_group(resource_group, expand="properties")
-        target_rg = resource_group
-    else:  # subscription scope
+    else:
         resource_iterator = client.resources.list(expand="properties")
-        target_rg = resource_group  # May be None if not filtering
 
-    # Process resources with unified logic
+    # Process resources
     for resource in resource_iterator:
-        # Extract resource group if needed (for subscription scope queries)
-        if scope == "subscription":
+        if scope == "subscription" and resource_group:
             rg_from_id = _extract_resource_group_from_id(resource.id)
-            # Filter to target RG if specified
-            if target_rg and rg_from_id and rg_from_id.lower() != target_rg.lower():
+            if rg_from_id and rg_from_id.lower() != resource_group.lower():
                 continue
-            res_rg = rg_from_id
-        else:
-            res_rg = target_rg
 
-        # Build resource dict
         resource_dict = {
             "type": resource.type,
             "name": resource.name,
             "location": resource.location,
             "tags": resource.tags or {},
-            "sku": _extract_sku(resource),
+            "sku": {"name": resource.sku.name} if resource.sku else None,
             "kind": resource.kind,
-            "properties": _safe_properties(resource),
+            "properties": resource.properties if resource.properties else {},
             "id": resource.id,
-            "resource_group": res_rg,
+            "resource_group": _extract_resource_group_from_id(resource.id),
         }
         resources.append(resource_dict)
 
-    # Enrich resource properties with type-specific clients
-    if resource_group:
-        _enrich_storage_accounts(credential, sub_id, resource_group, resources)
-        _enrich_app_services(credential, sub_id, resource_group, resources)
-        _enrich_key_vaults(credential, sub_id, resource_group, resources)
-        _enrich_logic_apps(credential, sub_id, resource_group, resources)
-        _enrich_log_analytics(credential, sub_id, resource_group, resources)
-        _enrich_event_hub_namespaces(credential, sub_id, resource_group, resources)
-        _enrich_vm_properties(credential, sub_id, resource_group, resources)
-
+    elapsed = time.time() - start_time
+    logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
     return resources
 
 
