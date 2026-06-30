@@ -8,7 +8,10 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 """
 
 import os
+import logging
 from azure.identity import DefaultAzureCredential
+
+logger = logging.getLogger(__name__)
 from azure.mgmt.resource.resources import ResourceManagementClient
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.storage import StorageManagementClient
@@ -124,6 +127,7 @@ def _enrich_storage_accounts(credential, subscription_id: str, resource_group: s
     try:
         storage_client = StorageManagementClient(credential, subscription_id)
     except Exception:
+        logger.debug("StorageManagementClient initialization failed. Skipping storage property enrichment.", exc_info=True)
         return
 
     for resource in resources:
@@ -146,11 +150,12 @@ def _enrich_storage_accounts(credential, subscription_id: str, resource_group: s
                         "publicNetworkAccess": props.get("publicNetworkAccess"),
                     })
             except Exception:
+                logger.debug("Exception during property enrichment.", exc_info=True)
                 pass
 
 
 def _enrich_app_services(credential, subscription_id: str, resource_group: str, resources: list[dict]) -> None:
-    """Enrich App Service properties using WebSiteManagementClient."""
+    """Enrich App Service and App Service Plan properties using WebSiteManagementClient."""
     try:
         web_client = WebSiteManagementClient(credential, subscription_id)
     except Exception:
@@ -188,7 +193,74 @@ def _enrich_app_services(credential, subscription_id: str, resource_group: str, 
                             "http20Enabled": config_props.get("http20Enabled"),
                         }
                 except Exception:
+                    logger.debug("Exception during property enrichment.", exc_info=True)
                     pass
+            except Exception:
+                logger.debug("Exception during property enrichment.", exc_info=True)
+                pass
+
+        elif resource["type"] == "Microsoft.Web/serverfarms":
+            plan_name = resource["name"]
+            try:
+                plan = web_client.app_service_plans.get(resource_group, plan_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+
+                # Extract SKU info (name, tier, family, size, capacity)
+                if hasattr(plan, "sku") and plan.sku:
+                    resource["sku"] = {
+                        "name": getattr(plan.sku, "name", None),
+                        "tier": getattr(plan.sku, "tier", None),
+                        "family": getattr(plan.sku, "family", None),
+                        "size": getattr(plan.sku, "size", None),
+                        "capacity": getattr(plan.sku, "capacity", None),
+                    }
+
+                # Extract plan properties
+                if hasattr(plan, "properties"):
+                    data = plan._data if hasattr(plan, "_data") else plan
+                    plan_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
+                    if plan_props:
+                        resource["properties"].update({
+                            "reserved": plan_props.get("reserved"),
+                            "workerSize": plan_props.get("workerSize"),
+                            "numberOfWorkers": plan_props.get("numberOfWorkers"),
+                            "isPremiumApp": plan_props.get("isPremiumApp"),
+                        })
+            except Exception:
+                logger.debug("Exception during property enrichment.", exc_info=True)
+                pass
+
+        elif resource["type"] == "Microsoft.Web/serverfarms":
+            plan_name = resource["name"]
+            try:
+                plan = web_client.app_service_plans.get(resource_group, plan_name)
+                if "properties" not in resource:
+                    resource["properties"] = {}
+
+                # Extract SKU info (name, tier, family, size, capacity)
+                if hasattr(plan, "sku") and plan.sku:
+                    resource["sku"] = {
+                        "name": getattr(plan.sku, "name", None),
+                        "tier": getattr(plan.sku, "tier", None),
+                        "family": getattr(plan.sku, "family", None),
+                        "size": getattr(plan.sku, "size", None),
+                        "capacity": getattr(plan.sku, "capacity", None),
+                    }
+
+                # Extract plan properties
+                if hasattr(plan, "properties"):
+                    data = plan._data if hasattr(plan, "_data") else plan
+                    plan_props = data.get("properties", {}) if isinstance(data, dict) else {}
+
+                    if plan_props:
+                        resource["properties"].update({
+                            "reserved": plan_props.get("reserved"),
+                            "workerSize": plan_props.get("workerSize"),
+                            "numberOfWorkers": plan_props.get("numberOfWorkers"),
+                            "isPremiumApp": plan_props.get("isPremiumApp"),
+                        })
             except Exception:
                 pass
 
@@ -233,6 +305,7 @@ def _enrich_key_vaults(credential, subscription_id: str, resource_group: str, re
                             "bypass": acls.get("bypass"),
                         }
             except Exception:
+                logger.debug("Exception during property enrichment.", exc_info=True)
                 pass
 
 
@@ -260,6 +333,7 @@ def _enrich_logic_apps(credential, subscription_id: str, resource_group: str, re
                         "definition": workflow_props.get("definition"),
                     })
             except Exception:
+                logger.debug("Exception during property enrichment.", exc_info=True)
                 pass
 
 
@@ -289,6 +363,7 @@ def _enrich_log_analytics(credential, subscription_id: str, resource_group: str,
                         "publicNetworkAccessForQuery": workspace_props.get("publicNetworkAccessForQuery"),
                     })
             except Exception:
+                logger.debug("Exception during property enrichment.", exc_info=True)
                 pass
 
 
@@ -326,6 +401,7 @@ def _enrich_event_hub_namespaces(credential, subscription_id: str, resource_grou
                             "capacity": sku.get("capacity"),
                         }
             except Exception:
+                logger.debug("Exception during property enrichment.", exc_info=True)
                 pass
 
 
@@ -340,7 +416,7 @@ def _enrich_vm_properties(credential, subscription_id: str, resource_group: str,
     try:
         compute_client = ComputeManagementClient(credential, subscription_id)
     except Exception as e:
-        print(f"  ⚠ ComputeManagementClient initialization failed: {type(e).__name__}. Skipping VM property enrichment.")
+        logger.warning(f"ComputeManagementClient initialization failed: {type(e).__name__}. Skipping VM property enrichment.", exc_info=True)
         return
 
     for resource in resources:
@@ -394,7 +470,7 @@ def _enrich_vm_properties(credential, subscription_id: str, resource_group: str,
                         ]
                     }
             except Exception as e:
-                print(f"  ⚠ Failed to enrich VM {vm_name}: {type(e).__name__}. Continuing with partial properties.")
+                logger.warning(f"Failed to enrich VM {vm_name}: {type(e).__name__}. Continuing with partial properties.", exc_info=True)
 
 
 def _extract_sku(resource) -> dict | None:
@@ -432,30 +508,40 @@ def _safe_properties(resource) -> dict:
             return {k: v for k, v in props.__dict__.items() if not k.startswith("_")}
         return {}
     except Exception:
+
+        logger.debug("Exception during initialization.", exc_info=True)
         return {}
 
 
 if __name__ == "__main__":
     import sys
     import json
+    from pathlib import Path
     from dotenv import load_dotenv
+    try:
+        from .logger import setup_logging
+    except ImportError:
+        # When run as standalone script, add parent directory to path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from logger import setup_logging
 
     load_dotenv()
+    setup_logging(level="INFO")
 
     if len(sys.argv) < 2:
-        print("Usage: python get_live_state.py <resource-group-name>")
+        logger.error("Usage: python get_live_state.py <resource-group-name>")
         sys.exit(1)
 
     rg = sys.argv[1]
-    print(f"\nQuerying live state for resource group: {rg}\n")
+    logger.info(f"Querying live state for resource group: {rg}")
 
     resources = get_live_state(rg)
 
-    print(f"Found {len(resources)} resource(s):\n")
+    logger.info(f"Found {len(resources)} resource(s)")
     for r in resources:
         sku_info = f" [{r['sku']['name']}]" if r.get("sku") else ""
-        print(f"  {r['type']} — {r['name']}{sku_info}")
+        logger.info(f"  {r['type']} — {r['name']}{sku_info}")
 
-    print("\nFull live state (first resource):")
+    logger.debug("Full live state (first resource):")
     if resources:
-        print(json.dumps(resources[0], indent=2, default=str))
+        logger.debug(json.dumps(resources[0], indent=2, default=str))

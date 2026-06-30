@@ -19,19 +19,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from tools.logger import setup_logging, get_logger
 from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detect_deployment_scope
 from tools.get_live_state import get_live_state
 from tools.diff_states import diff_states, format_drift_report
 from tools.ignore_patterns import IgnorePatternList
 
+logger = get_logger(__name__)
+
 
 def run(bicep_file: str, resource_group: str):
-    print(f"\n{'=' * 50}")
-    print(f"Bicep Drift Check")
-    print(f"{'=' * 50}")
-    print(f"  Bicep file:     {bicep_file}")
-    print(f"  Resource group: {resource_group}")
-    print()
+    logger.info(f"Bicep Drift Check — {bicep_file} (resource group: {resource_group})")
 
     # Load parameter overrides from environment or bicepparam file
     param_overrides = {}
@@ -39,9 +37,9 @@ def run(bicep_file: str, resource_group: str):
     if arm_params_env:
         try:
             param_overrides = json.loads(arm_params_env)
-            print(f"  Parameters:     {param_overrides}")
+            logger.debug(f"Parameters from ARM_PARAMETERS: {param_overrides}")
         except json.JSONDecodeError:
-            print(f"  ⚠ Invalid JSON in ARM_PARAMETERS")
+            logger.warning("Invalid JSON in ARM_PARAMETERS")
     else:
         # Try to load from bicepparam file based on resource group
         environment = resource_group.split('-')[-1]  # rg-prod → prod
@@ -64,78 +62,76 @@ def run(bicep_file: str, resource_group: str):
                             if value:  # Only add non-empty values
                                 param_overrides[key] = value
                 if param_overrides:
-                    print(f"  Parameters loaded from: {bicepparam_file.name}")
-                    for k, v in param_overrides.items():
-                        print(f"    {k}: {v}")
+                    logger.debug(f"Parameters loaded from {bicepparam_file.name}: {param_overrides}")
             except Exception as e:
-                print(f"  ⚠ Could not load {bicepparam_file.name}: {e}")
+                logger.warning(f"Could not load {bicepparam_file.name}: {e}")
 
     # Step 1: Compile Bicep → ARM JSON
-    print("Step 1: Compiling Bicep template...")
+    logger.info("Step 1: Compiling Bicep template...")
     try:
         arm_template = compile_bicep(bicep_file)
     except RuntimeError as e:
-        print(f"  ✗ Failed to compile Bicep: {e}")
+        logger.error(f"Failed to compile Bicep: {e}")
         raise
 
     # Detect deployment scope (subscription vs. resource group)
     deployment_scope = detect_deployment_scope(arm_template)
     if deployment_scope == "subscription":
-        print(f"  ℹ Detected subscription-scoped template (Landing Zone)")
+        logger.info("Detected subscription-scoped template (Landing Zone)")
 
     try:
         arm_resources = extract_resources_from_arm(arm_template, param_overrides)
     except Exception as e:
-        print(f"  ✗ Failed to extract resources: {e}")
+        logger.error(f"Failed to extract resources: {e}", exc_info=True)
         raise
 
-    print(f"  ✓ {len(arm_resources)} resource(s) defined in Bicep (scope: {deployment_scope})")
+    logger.info(f"✓ {len(arm_resources)} resource(s) defined in Bicep (scope: {deployment_scope})")
     for r in arm_resources[:10]:  # Show first 10
-        print(f"    {r.get('type')} — {r.get('name')}")
+        logger.debug(f"  {r.get('type')} — {r.get('name')}")
     if len(arm_resources) > 10:
-        print(f"    ... and {len(arm_resources) - 10} more")
+        logger.debug(f"  ... and {len(arm_resources) - 10} more")
 
     # Step 2: Query live Azure state
-    print("\nStep 2: Querying live Azure state...")
+    logger.info("Step 2: Querying live Azure state...")
     try:
         if deployment_scope == "subscription":
-            print(f"  ℹ Querying at subscription scope...")
+            logger.debug("Querying at subscription scope...")
             live_resources = get_live_state(resource_group=resource_group, scope="subscription")
         else:
             live_resources = get_live_state(resource_group=resource_group, scope="resource_group")
     except ValueError as e:
-        print(f"  ✗ Missing subscription ID: {e}")
+        logger.error(f"Missing subscription ID: {e}")
         raise
     except Exception as e:
-        print(f"  ✗ Failed to query Azure: {e}")
-        print("  💡 Ensure you're logged in: az login")
+        logger.error(f"Failed to query Azure: {e}", exc_info=True)
+        logger.info("Ensure you're logged in: az login")
         raise
 
-    print(f"  ✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
+    logger.info(f"✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
     for r in live_resources[:10]:  # Show first 10
-        print(f"    {r.get('type')} — {r.get('name')}")
+        logger.debug(f"  {r.get('type')} — {r.get('name')}")
     if len(live_resources) > 10:
-        print(f"    ... and {len(live_resources) - 10} more")
+        logger.debug(f"  ... and {len(live_resources) - 10} more")
 
     # Step 3: Load ignore patterns
-    print("\nStep 3: Loading ignore patterns...")
+    logger.info("Step 3: Loading ignore patterns...")
     ignore_patterns = IgnorePatternList.from_file(Path(".drift-ignore"))
     if ignore_patterns.patterns:
-        ignore_patterns.print_summary()
+        ignore_patterns.log_summary()
     else:
-        print("  ℹ No ignore patterns found")
+        logger.debug("No ignore patterns found")
 
     # Step 4: Diff
-    print("\nStep 4: Diffing desired vs actual...")
+    logger.info("Step 4: Diffing desired vs actual...")
     try:
         drifts = diff_states(arm_resources, live_resources, ignore_patterns=ignore_patterns)
     except Exception as e:
-        print(f"  ✗ Failed to diff states: {e}")
+        logger.error(f"Failed to diff states: {e}", exc_info=True)
         raise
 
     # Step 5: Report
-    print()
-    print(format_drift_report(drifts, resource_group))
+    logger.info("Drift Report Summary")
+    logger.info(format_drift_report(drifts, resource_group))
 
     # Dump raw data for inspection
     try:
@@ -159,15 +155,17 @@ def run(bicep_file: str, resource_group: str):
                 ],
             }, f, indent=2, default=str)
 
-        print(f"\n  ✓ Raw output saved to: {output_file}")
-        print("    Open this to see the full shape mismatch details.\n")
+        logger.info(f"✓ Raw output saved to: {output_file}")
     except Exception as e:
-        print(f"\n  ⚠ Warning: Could not write report: {e}\n")
+        logger.warning(f"Could not write report: {e}")
 
 
 def main():
+    # Initialize logging
+    setup_logging(level="INFO")
+
     if len(sys.argv) < 3:
-        print("Usage: python run_drift_check.py <bicep-file> <resource-group>")
+        logger.error("Usage: python run_drift_check.py <bicep-file> <resource-group>")
         sys.exit(1)
 
     bicep_file = sys.argv[1]
@@ -175,26 +173,24 @@ def main():
 
     # Validate inputs
     if not Path(bicep_file).exists():
-        print(f"Error: Bicep file not found: {bicep_file}")
+        logger.error(f"Bicep file not found: {bicep_file}")
         sys.exit(1)
 
     if not bicep_file.endswith(".bicep"):
-        print(f"Error: Expected .bicep file, got: {bicep_file}")
+        logger.error(f"Expected .bicep file, got: {bicep_file}")
         sys.exit(1)
 
     # Run with error handling
     try:
         run(bicep_file, resource_group)
     except FileNotFoundError as e:
-        print(f"\nError: {e}")
+        logger.error(f"File error: {e}")
         sys.exit(1)
     except ValueError as e:
-        print(f"\nError: {e}")
+        logger.error(f"Value error: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\nUnexpected error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Unexpected error: {e}", exc_info=True)
         sys.exit(1)
 
 

@@ -4,9 +4,12 @@ Generate HTML reports from drift analysis results.
 
 import json
 import html
+import logging
 from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 
 def generate_html_report(
@@ -23,7 +26,7 @@ def generate_html_report(
     drifts = data.get("drifts", [])
     recs_found = sum(1 for d in drifts if d.get("recommendation"))
     matched_found = len(data.get("smart_matched", []))
-    print(f"  [HTML] Found {recs_found}/{len(drifts)} recommendations and {matched_found} smart-matched resources")
+    logger.debug(f"Found {recs_found}/{len(drifts)} recommendations and {matched_found} smart-matched resources")
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])
@@ -557,7 +560,7 @@ def generate_html_report(
     with open(output_file, "w") as f:
         f.write(html_content)
 
-    print(f"✓ HTML report generated: {output_file}")
+    logger.info(f"HTML report generated: {output_file}")
 
 
 def _get_type_badge(drift_type: str) -> str:
@@ -758,16 +761,25 @@ def _render_recommendations_section(total: int, recommendations_html: str) -> st
 
 if __name__ == "__main__":
     import sys
+    from pathlib import Path
+    try:
+        from .logger import setup_logging
+    except ImportError:
+        # When run as standalone script, add parent directory to path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from logger import setup_logging
+
+    setup_logging(level="INFO")
 
     if len(sys.argv) < 3:
-        print("Usage: python -m tools.html_report <drift-json> <output-html>")
+        logger.error("Usage: python -m tools.html_report <drift-json> <output-html>")
         sys.exit(1)
 
     json_file = Path(sys.argv[1])
     html_file = Path(sys.argv[2])
 
     if not json_file.exists():
-        print(f"Error: {json_file} not found")
+        logger.error(f"{json_file} not found")
         sys.exit(1)
 
     generate_html_report(json_file, html_file, "resource-group", "main.bicep")

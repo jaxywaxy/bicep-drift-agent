@@ -198,6 +198,60 @@ def _resolve_concat(concat_expr: str, parameters: dict, variables: dict) -> str:
     return result if result else concat_expr
 
 
+def _resolve_resource_id(resource_id_expr: str, parameters: dict, variables: dict) -> str:
+    """
+    Resolve [resourceId(...)] expressions.
+
+    Examples:
+    - resourceId('Microsoft.Web/serverfarms', 'asp-test-drift')
+    - resourceId('Microsoft.Web/serverfarms', format('asp-{0}-drift', parameters('environment')))
+
+    Returns a formatted representation showing the resource type and name.
+    """
+    # Extract arguments from resourceId(arg1, arg2, ...)
+    match = re.match(r"resourceId\s*\((.*)\)", resource_id_expr)
+    if not match:
+        return "resourceId-unresolved"
+
+    args_str = match.group(1)
+    args = _split_function_arguments(args_str)
+
+    if len(args) < 2:
+        return "resourceId-unresolved"
+
+    # First arg is resource type
+    resource_type = args[0].strip().strip("'\"")
+
+    # Second arg is the name (might be an expression)
+    name_expr = args[1].strip()
+    name = name_expr.strip("'\"")
+
+    # If it's a function call in the name, try to resolve it
+    if name.startswith("format(") or name.startswith("parameters(") or name.startswith("variables("):
+        if name.startswith("format("):
+            template, template_args = _parse_format_call(name, parameters, variables)
+            if template is not None:
+                result = template
+                for i, arg in enumerate(template_args):
+                    result = result.replace(f"{{{i}}}", str(arg))
+                name = result
+        elif name.startswith("parameters("):
+            param_match = re.match(r"parameters\s*\(\s*'([^']+)'\s*\)", name)
+            if param_match:
+                param_name = param_match.group(1)
+                if param_name in parameters:
+                    name = str(parameters[param_name])
+        elif name.startswith("variables("):
+            var_match = re.match(r"variables\s*\(\s*'([^']+)'\s*\)", name)
+            if var_match:
+                var_name = var_match.group(1)
+                if var_name in variables:
+                    name = str(variables[var_name])
+
+    # Return a readable representation
+    return f"resourceId('{resource_type}', '{name}')"
+
+
 def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     """
     Resolve simple function calls like uniqueString(), copyIndex(), etc.
@@ -215,9 +269,11 @@ def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     """
     call = call.strip()
 
-    # uniqueString() — can't resolve at compile time, leave as expression for smart matching
+    # uniqueString() — can't resolve at compile time, generate a consistent placeholder
     if call.startswith("uniqueString"):
-        return f"[{call}]"
+        import hashlib
+        hash_val = hashlib.md5(call.encode()).hexdigest()[:8]
+        return f"[{hash_val}]"
 
     # copyIndex() — can't resolve, leave as expression for smart matching
     if call.startswith("copyIndex"):
@@ -311,6 +367,37 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
 
     expr = expr.strip()
 
+    # Handle embedded expressions like "prefix[uniqueString(...)]"
+    # This pattern appears when Bicep compiler outputs partially-resolved names
+    if "[" in expr and "]" in expr and not (expr.startswith("[") and expr.endswith("]")):
+        # Extract the bracketed part and resolve it
+        match = re.search(r"\[([^\[\]]+)\]", expr)
+        if match:
+            inner_expr = match.group(1)
+            prefix = expr[:match.start()]
+            suffix = expr[match.end():]
+
+            # Resolve the inner expression
+            if inner_expr.startswith("uniqueString"):
+                # uniqueString can't be resolved at compile time, generate a placeholder
+                import hashlib
+                hash_val = hashlib.md5(inner_expr.encode()).hexdigest()[:8]
+                resolved = f"[{hash_val}]"
+            elif inner_expr.startswith("format"):
+                template, args = _parse_format_call(inner_expr, parameters, variables)
+                if template is not None:
+                    resolved = template
+                    for i, arg in enumerate(args):
+                        resolved = resolved.replace(f"{{{i}}}", str(arg))
+                else:
+                    resolved = f"[{inner_expr}]"
+            else:
+                # Try to resolve as a general expression
+                resolved = resolve_expression(f"[{inner_expr}]", parameters, variables)
+
+            return prefix + resolved + suffix
+        return expr
+
     # Not an expression
     if not expr.startswith("[") or not expr.endswith("]"):
         return expr
@@ -356,6 +443,19 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     # Handle [deployment().location] — we can't resolve this without runtime context
     if "deployment()" in inner and "location" in inner:
         return "deployment-location"
+
+    # Handle [subscription().tenantId] and [subscription().subscriptionId]
+    if "subscription()" in inner:
+        if "tenantId" in inner:
+            return "subscription-tenant-id"
+        elif "subscriptionId" in inner:
+            return "subscription-id"
+        else:
+            return "subscription-context"
+
+    # Handle [resourceId(...)] expressions
+    if inner.startswith("resourceId"):
+        return _resolve_resource_id(inner, parameters, variables)
 
     # Other expressions — try to extract a meaningful name
     # For complex expressions, just return a generic fallback

@@ -12,7 +12,10 @@ import subprocess
 import tempfile
 import os
 import re
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_error_message(error_text: str) -> str:
@@ -130,17 +133,26 @@ def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = N
 if __name__ == "__main__":
     # Quick smoke test — point at any .bicep file you have handy
     import sys
+    from pathlib import Path
+    try:
+        from .logger import setup_logging
+    except ImportError:
+        # When run as standalone script, add parent directory to path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from logger import setup_logging
+
+    setup_logging(level="INFO")
 
     if len(sys.argv) < 2:
-        print("Usage: python compile_bicep.py <path-to-file.bicep>")
+        logger.error("Usage: python compile_bicep.py <path-to-file.bicep>")
         sys.exit(1)
 
     template = compile_bicep(sys.argv[1])
     resources = extract_resources_from_arm(template)
 
-    print(f"\nCompiled OK. Found {len(resources)} resource(s):\n")
+    logger.info(f"Compiled OK. Found {len(resources)} resource(s)")
     for r in resources:
-        print(f"  {r.get('type')} — {r.get('name')}")
+        logger.info(f"  {r.get('type')} — {r.get('name')}")
 
-    print("\nFull ARM JSON:")
-    print(json.dumps(template, indent=2))
+    logger.debug("Full ARM JSON:")
+    logger.debug(json.dumps(template, indent=2))
