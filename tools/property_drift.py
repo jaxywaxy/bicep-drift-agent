@@ -334,6 +334,8 @@ class PropertyComparator:
         "properties.storageprofile.osdisk.manageddisk.storageaccounttype",
         # Network interfaces (Bicep uses expressions, Azure returns resolved IDs - functionally equivalent)
         "properties.networkprofile.networkinterfaces",
+        # App Service Plan properties (not returned by API)
+        "properties.reserved",
     }
 
     @staticmethod
@@ -354,9 +356,9 @@ class PropertyComparator:
         deployed_flat = PropertyComparator._flatten_dict(deployed_properties)
 
         # Skip detailed comparison if property enrichment failed
-        # (deployed_properties have no nested "properties.*" keys - likely API returned empty)
+        # (deployed_properties have no nested "properties.*" or "sku.*" keys - likely API returned empty)
         has_detailed_deployed_properties = any(
-            k.startswith("properties.") for k in deployed_flat.keys()
+            k.startswith("properties.") or k.startswith("sku.") for k in deployed_flat.keys()
         )
         if not has_detailed_deployed_properties:
             # Property enrichment didn't work for this resource - return empty diffs
@@ -375,6 +377,12 @@ class PropertyComparator:
                     continue
 
                 deployed_value = deployed_flat[key]
+
+                # Normalize type comparisons (Azure may return different casing)
+                if key == "type" and isinstance(bicep_value, str) and isinstance(deployed_value, str):
+                    if bicep_value.lower() == deployed_value.lower():
+                        continue
+
                 if bicep_value != deployed_value:
                     severity = PropertyComparator._get_severity(key)
                     diffs.append(
