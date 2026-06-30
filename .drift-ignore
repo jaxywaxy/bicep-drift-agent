@@ -171,30 +171,14 @@ ignore:
   - resource_type: "Microsoft.ApiManagement/service/operationTags"
     reason: "Operation tags auto-managed by API Management"
 
-  # Event Hub child resources with unresolvable parent names
+  # Event Hub resources with unresolvable parameter-based names
+  # Child resources and namespaces cannot be matched/compared due to uniqueString()
+  # They are deployed correctly but drift detection has matching/property visibility issues
+  - resource_type: "Microsoft.EventHub/namespaces"
+    reason: "Namespace properties not fully exposed by Azure API; child resources cannot be matched due to unresolved parameter names"
+
   - resource_type: "Microsoft.EventHub/namespaces/eventhubs"
     reason: "Child resource with parent name containing unresolved uniqueString() - deployed correctly but cannot be matched"
 
   - resource_type: "Microsoft.EventHub/namespaces/eventhubs/authorizationRules"
     reason: "Child resource with parent name containing unresolved uniqueString() - deployed correctly but cannot be matched"
-
-  # Event Hub namespace properties not exposed by Azure API
-  - resource_type: "Microsoft.EventHub/namespaces"
-    drift_type: "properties.isAutoInflateEnabled"
-    reason: "Property not exposed in Azure API response"
-
-  - resource_type: "Microsoft.EventHub/namespaces"
-    drift_type: "properties.maximumThroughputUnits"
-    reason: "Property not exposed in Azure API response"
-
-  - resource_type: "Microsoft.EventHub/namespaces"
-    drift_type: "properties.kafkaEnabled"
-    reason: "Property not exposed in Azure API response"
-
-  - resource_type: "Microsoft.EventHub/namespaces"
-    drift_type: "properties.zoneRedundant"
-    reason: "Property not exposed in Azure API response"
-
-  - resource_type: "Microsoft.EventHub/namespaces"
-    drift_type: "properties.disableLocalAuth"
-    reason: "Property not exposed in Azure API response"
