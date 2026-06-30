@@ -59,6 +59,28 @@ def main():
     logger.info("Phase 1: Detecting drift...")
     try:
         run_phase1(bicep_file, resource_group)
+
+        # Output drift summary for workflow consolidation (must bypass logger to be grep-able)
+        report_file = Path(f"reports/{resource_group}-drift.json")
+        if report_file.exists():
+            with open(report_file) as f:
+                report_data = json.load(f)
+            drifts = report_data.get("drifts", [])
+            if drifts:
+                print("\n" + "="*60)
+                for drift in drifts:
+                    drift_type = drift.get("drift_type", "unknown")
+                    resource_type = drift.get("type", "")
+                    resource_name = drift.get("name", "")
+
+                    if drift_type == "missing_in_azure":
+                        print(f"[MISSING] {resource_type}/{resource_name} is in Bicep but not deployed")
+                    elif drift_type == "extra_in_azure":
+                        print(f"[EXTRA]   {resource_type}/{resource_name} is deployed but not in Bicep")
+                    elif drift_type == "property_drift":
+                        changes = list(drift.get("details", {}).get("changed_properties", {}).keys())
+                        print(f"[DRIFT]   {resource_type}/{resource_name} — properties differ: {', '.join(changes)}")
+                print("="*60 + "\n")
     except Exception as e:
         logger.error(f"Error in Phase 1: {e}", exc_info=True)
         sys.exit(1)
