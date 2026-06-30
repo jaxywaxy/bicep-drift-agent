@@ -484,8 +484,14 @@ def _safe_properties(resource) -> dict:
 if __name__ == "__main__":
     import sys
     import json
+    from pathlib import Path
     from dotenv import load_dotenv
-    from .logger import setup_logging
+    try:
+        from .logger import setup_logging
+    except ImportError:
+        # When run as standalone script, add parent directory to path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from logger import setup_logging
 
     load_dotenv()
     setup_logging(level="INFO")

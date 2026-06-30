@@ -386,7 +386,15 @@ def parse_drift_output(output_file: str) -> List[DriftEvent]:
 
 
 if __name__ == "__main__":
-    from .logger import setup_logging
+    # Handle both relative import (when run as module) and absolute import (when run as script)
+    try:
+        from .logger import setup_logging
+    except ImportError:
+        # When run as standalone script, add parent directory to path
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).parent))
+        from logger import setup_logging
 
     setup_logging(level="INFO")
 
