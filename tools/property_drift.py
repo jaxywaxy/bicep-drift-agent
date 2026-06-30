@@ -353,6 +353,16 @@ class PropertyComparator:
         bicep_flat = PropertyComparator._flatten_dict(bicep_properties)
         deployed_flat = PropertyComparator._flatten_dict(deployed_properties)
 
+        # Skip detailed comparison if property enrichment failed
+        # (deployed_properties are too sparse - likely a query timeout or permission issue)
+        has_detailed_deployed_properties = len(deployed_flat) > 5 or any(
+            k.startswith("properties.") for k in deployed_flat.keys()
+        )
+        if not has_detailed_deployed_properties:
+            # Property enrichment didn't work for this resource - return empty diffs
+            # to avoid false positives from incomplete data
+            return diffs
+
         # Check for modified properties
         for key, bicep_value in bicep_flat.items():
             if key in deployed_flat:
