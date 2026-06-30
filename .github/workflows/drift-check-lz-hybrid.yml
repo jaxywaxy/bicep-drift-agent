@@ -21,12 +21,12 @@ jobs:
       lz-subscription-id: ${{ steps.validate.outputs.subscription_id }}
     steps:
       - name: Checkout drift-agent (for index)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: drift-agent
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -84,7 +84,7 @@ jobs:
           PYTHON_SCRIPT
 
       - name: Checkout external Bicep repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ steps.load.outputs.repo }}
           path: lz-repo
@@ -167,18 +167,18 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - name: Azure Login (OIDC)
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
       - name: Checkout drift detection tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: drift-tools
 
       - name: Checkout Bicep repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ matrix.check.repo }}
           ref: ${{ matrix.check.branch || 'main' }}
@@ -187,7 +187,7 @@ jobs:
           token: ${{ secrets.BICEP_REPO_TOKEN || github.token }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -272,7 +272,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout drift detection tools
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download all drift reports
         uses: actions/download-artifact@v4
@@ -280,7 +280,7 @@ jobs:
           name: drift-reports-${{ needs.load-config.outputs.lz-name }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -328,7 +328,7 @@ jobs:
           echo "  - TOTAL ISSUES: $TOTAL_ISSUES"
 
       - name: Checkout external repo for notifications config
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ needs.load-config.outputs.lz-repo }}
           path: lz-repo
