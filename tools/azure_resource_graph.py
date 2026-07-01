@@ -1,21 +1,16 @@
 """Azure Resource Graph client for querying resources via KQL."""
 
-from azure.mgmt.resourcegraph import ResourceGraphManagementClient
-from azure.mgmt.resourcegraph.models import QueryRequest
-from azure.identity import DefaultAzureCredential
+import os
+import subprocess
+import json
 
 
 class ResourceGraphClient:
     """Client for querying Azure resources using KQL."""
 
-    def __init__(self):
-        """Initialize Resource Graph client."""
-        self.credential = DefaultAzureCredential()
-        self.client = ResourceGraphManagementClient(self.credential)
-
     def query(self, query: str, subscriptions: list = None):
         """
-        Execute a KQL query against Azure resources.
+        Execute a KQL query against Azure resources using Azure CLI.
 
         Args:
             query: KQL query string
@@ -24,12 +19,18 @@ class ResourceGraphClient:
         Returns:
             List of query results
         """
-        import os
-
         if subscriptions is None:
             sub_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
             subscriptions = [sub_id] if sub_id else []
 
-        request = QueryRequest(query=query, subscriptions=subscriptions)
-        response = self.client.resources(request)
-        return response.data if response.data else []
+        try:
+            # Use Azure CLI to query Resource Graph
+            cmd = ["az", "graph", "query", "-q", query]
+            if subscriptions:
+                cmd.extend(["-s"] + subscriptions)
+
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            data = json.loads(result.stdout)
+            return data.get("data", [])
+        except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+            raise RuntimeError(f"Resource Graph query failed: {e}")
