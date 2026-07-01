@@ -436,7 +436,7 @@ def main():
                     drift["change_origin"] = origin_info.to_dict()
 
                     logger.info(
-                        f"  {resource_name}: {len(activity_logs or [])} RG event(s) -> "
+                        f"  {bicep_name}: {len(activity_logs or [])} RG event(s) -> "
                         f"{len(relevant_logs)} relevant; "
                         f"origin={origin_info.origin.value}, by={origin_info.changed_by}"
                     )
