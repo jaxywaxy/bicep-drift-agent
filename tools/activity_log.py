@@ -135,11 +135,11 @@ def query_activity_log_via_rest(
 
         # If no entries found and resource_type provided, try broader search (for deleted resources)
         if len(entries) == 0 and resource_type and resource_group:
-            logger.info(f"No events for specific resource, trying broader search by type and RG...")
+            logger.info(f"No events for specific resource, trying broader search by RG...")
+            # Use resourceGroup and resourceProviderName instead for broader matching
             filter_str_broad = (
                 f"eventTimestamp ge '{start_time.isoformat()}Z' "
-                f"and resourceGroupName eq '{resource_group}' "
-                f"and resourceType eq '{resource_type}'"
+                f"and resourceGroup eq '{resource_group}'"
             )
             activity_logs = client.activity_logs.list(filter=filter_str_broad)
 
