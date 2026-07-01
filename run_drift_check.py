@@ -107,7 +107,21 @@ def run(bicep_file: str, resource_group: str):
 
     # Step 3: Load ignore patterns
     logger.info("Step 3: Loading ignore patterns...")
-    ignore_patterns = IgnorePatternList.from_file(Path(".drift-ignore"))
+    # Look for .drift-ignore in: bicep repo root, current dir, or parent dir
+    bicep_dir = Path(bicep_file).parent.parent  # bicep/main.bicep → repo root
+    ignore_file_paths = [
+        bicep_dir / ".drift-ignore",  # In bicep repo root
+        Path(".drift-ignore"),         # In current directory
+        Path("../.drift-ignore"),      # In parent directory
+    ]
+    ignore_file = None
+    for path in ignore_file_paths:
+        if path.exists():
+            ignore_file = path
+            logger.debug(f"Found .drift-ignore at: {path.resolve()}")
+            break
+
+    ignore_patterns = IgnorePatternList.from_file(ignore_file) if ignore_file else IgnorePatternList([])
     if ignore_patterns.patterns:
         ignore_patterns.log_summary()
     else:
