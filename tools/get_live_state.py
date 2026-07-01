@@ -162,13 +162,17 @@ def get_live_state(
 
     # Query locks separately (Resource Graph doesn't index them)
     try:
-        locks = _query_locks(resource_group, sub_id, scope)
-        resources.extend(locks)
-        logger.info(f"Found {len(resources)} total resource(s) via Resource Graph + locks")
+        resources.extend(_query_locks(resource_group, sub_id, scope))
     except Exception as e:
         logger.warning(f"Failed to query locks: {e}")
-        logger.info(f"Found {len(resources)} resource(s) via Resource Graph (locks unavailable)")
 
+    # Query Cosmos DB SQL databases/containers (Resource Graph doesn't index them either)
+    try:
+        resources.extend(_query_cosmos_children(resources, sub_id))
+    except Exception as e:
+        logger.warning(f"Failed to query Cosmos child resources: {e}")
+
+    logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
     return resources
 
 
@@ -211,13 +215,15 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
         }
         resources.append(resource_dict)
 
-    # Query locks separately (not returned by Resource Graph or resource list)
+    # Query locks and Cosmos children separately (not returned by resource list)
     try:
-        locks = _query_locks(resource_group, sub_id, scope)
-        resources.extend(locks)
-        logger.info(f"Added {len(locks)} lock(s) to results")
+        resources.extend(_query_locks(resource_group, sub_id, scope))
     except Exception as e:
         logger.warning(f"Failed to query locks: {e}")
+    try:
+        resources.extend(_query_cosmos_children(resources, sub_id))
+    except Exception as e:
+        logger.warning(f"Failed to query Cosmos child resources: {e}")
 
     elapsed = time.time() - start_time
     logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
@@ -281,6 +287,90 @@ def _query_locks(resource_group: Optional[str], sub_id: str, scope: str) -> List
     except Exception as e:
         logger.warning(f"Could not query locks: {e}")
         return []
+
+
+def _query_cosmos_children(resources: List[Dict], sub_id: str) -> List[Dict]:
+    """
+    Query Cosmos DB SQL databases and containers via the ARM REST API.
+
+    Resource Graph does not index Cosmos SQL databases/containers, so they never
+    appear in the base query and get falsely flagged as missing. We enumerate them
+    from each Cosmos account already found, naming them '{account}/{db}' and
+    '{account}/{db}/{container}' to match the Bicep resource naming.
+    """
+    import json as _json
+    import urllib.request
+
+    api_version = "2023-11-15"
+    accounts = [
+        r for r in resources
+        if (r.get("type") or "").lower() == "microsoft.documentdb/databaseaccounts"
+    ]
+    if not accounts:
+        return []
+
+    try:
+        credential = DefaultAzureCredential()
+        token = credential.get_token("https://management.azure.com/.default").token
+    except Exception as e:
+        logger.warning(f"Could not acquire token for Cosmos query: {e}")
+        return []
+
+    def _get(url: str) -> Dict:
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return _json.load(resp)
+
+    children: List[Dict] = []
+    for acct in accounts:
+        acct_id = acct.get("id", "")
+        acct_name = acct.get("name", "")
+        rg = acct.get("resource_group") or _extract_resource_group_from_id(acct_id)
+        if not acct_id or not acct_name:
+            continue
+        try:
+            dbs = _get(f"https://management.azure.com{acct_id}/sqlDatabases?api-version={api_version}")
+        except Exception as e:
+            logger.debug(f"Could not list Cosmos databases for {acct_name}: {e}")
+            continue
+
+        for db in dbs.get("value", []):
+            db_name = (db.get("properties", {}) or {}).get("resource", {}).get("id") or db.get("name")
+            db_id = db.get("id", "")
+            children.append({
+                "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+                "name": f"{acct_name}/{db_name}",
+                "location": "unknown",
+                "tags": {},
+                "sku": None,
+                "kind": None,
+                "properties": db.get("properties", {}) or {},
+                "id": db_id,
+                "resource_group": rg,
+            })
+
+            try:
+                containers = _get(f"https://management.azure.com{db_id}/containers?api-version={api_version}")
+            except Exception as e:
+                logger.debug(f"Could not list Cosmos containers for {acct_name}/{db_name}: {e}")
+                continue
+
+            for c in containers.get("value", []):
+                c_name = (c.get("properties", {}) or {}).get("resource", {}).get("id") or c.get("name")
+                children.append({
+                    "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+                    "name": f"{acct_name}/{db_name}/{c_name}",
+                    "location": "unknown",
+                    "tags": {},
+                    "sku": None,
+                    "kind": None,
+                    "properties": c.get("properties", {}) or {},
+                    "id": c.get("id", ""),
+                    "resource_group": rg,
+                })
+
+    logger.info(f"Found {len(children)} Cosmos SQL database/container resource(s) via ARM REST API")
+    return children
 
 
 def _extract_resource_group_from_id(resource_id: str) -> Optional[str]:
