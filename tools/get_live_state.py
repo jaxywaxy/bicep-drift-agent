@@ -172,6 +172,8 @@ def get_live_state(
     except Exception as e:
         logger.warning(f"Failed to query Cosmos child resources: {e}")
 
+    _normalize_cosmos_account_locations(resources)
+
     logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
     return resources
 
@@ -224,6 +226,8 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
         resources.extend(_query_cosmos_children(resources, sub_id))
     except Exception as e:
         logger.warning(f"Failed to query Cosmos child resources: {e}")
+
+    _normalize_cosmos_account_locations(resources)
 
     elapsed = time.time() - start_time
     logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
@@ -399,6 +403,39 @@ def _query_cosmos_children(resources: List[Dict], sub_id: str) -> List[Dict]:
 
     logger.info(f"Found {len(children)} Cosmos SQL database/container resource(s) via ARM REST API")
     return children
+
+
+def _normalize_cosmos_account_locations(resources: List[Dict]) -> None:
+    """
+    Normalize Cosmos DB account 'properties.locations' in-place to avoid false drift.
+
+    Bicep declares locations as e.g. {locationName: 'australiaeast', failoverPriority: 0,
+    isZoneRedundant: false}. Azure returns the display-form region name ('Australia East')
+    plus service-injected fields (id, documentEndpoint, provisioningState). We reduce each
+    live location to the Bicep-relevant fields and normalize locationName (lowercase, no
+    spaces) so 'Australia East' == 'australiaeast' and only genuine changes are flagged.
+    """
+    for r in resources:
+        if (r.get("type") or "").lower() != "microsoft.documentdb/databaseaccounts":
+            continue
+        props = r.get("properties")
+        if not isinstance(props, dict):
+            continue
+        locs = props.get("locations")
+        if not isinstance(locs, list):
+            continue
+        normalized = []
+        for loc in locs:
+            if not isinstance(loc, dict):
+                normalized.append(loc)
+                continue
+            name = loc.get("locationName", "")
+            normalized.append({
+                "locationName": name.replace(" ", "").lower() if isinstance(name, str) else name,
+                "failoverPriority": loc.get("failoverPriority"),
+                "isZoneRedundant": loc.get("isZoneRedundant"),
+            })
+        props["locations"] = normalized
 
 
 def _extract_resource_group_from_id(resource_id: str) -> Optional[str]:
