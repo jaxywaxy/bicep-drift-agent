@@ -69,11 +69,16 @@ def generate_html_report(
         elif not details:
             details = "No additional details"
 
+        # Get change origin info
+        change_origin = drift.get("change_origin", {})
+        origin_badge = _get_origin_badge(change_origin)
+
         drift_rows += f"""
         <tr>
             <td><strong>{html.escape(drift['type'])}</strong></td>
             <td><code>{html.escape(drift['name'])}</code></td>
             <td>{type_badge}</td>
+            <td>{origin_badge}</td>
             <td><pre>{html.escape(details)}</pre></td>
         </tr>
         """
@@ -360,6 +365,30 @@ def generate_html_report(
             .badge.modified {{
                 background: #fff3e0;
                 color: #e65100;
+            }}
+
+            .badge.origin-policy {{
+                background: #e8f5e9;
+                color: #2e7d32;
+                border: 1px solid #81c784;
+            }}
+
+            .badge.origin-system {{
+                background: #e8f5e9;
+                color: #2e7d32;
+                border: 1px solid #81c784;
+            }}
+
+            .badge.origin-manual {{
+                background: #ffebee;
+                color: #c62828;
+                border: 1px solid #ef5350;
+            }}
+
+            .badge.origin-unknown {{
+                background: #f5f5f5;
+                color: #666;
+                border: 1px solid #ccc;
             }}
 
             pre {{
@@ -709,6 +738,32 @@ def _get_type_badge(drift_type: str) -> str:
         return '<span class="badge modified">Modified</span>'
 
 
+def _get_origin_badge(change_origin: dict) -> str:
+    """Get HTML badge for change origin."""
+    if not change_origin:
+        return '<span class="badge origin-unknown">Unknown</span>'
+
+    origin = change_origin.get('origin', 'unknown')
+    expected = change_origin.get('expected', False)
+
+    # Policy-enforced changes (green)
+    if 'policy' in origin:
+        return '<span class="badge origin-policy" title="Policy-enforced change">✅ Policy</span>'
+
+    # System-managed changes (green)
+    if origin == 'system_managed':
+        return '<span class="badge origin-system" title="System-managed change">✅ System</span>'
+
+    # Manual/unauthorized changes (red)
+    if origin in ('manual_change', 'terraform_change'):
+        icon = '⚠️' if origin == 'manual_change' else '🔄'
+        title = 'Manual change - requires review' if origin == 'manual_change' else 'External IaC tool (Terraform)'
+        return f'<span class="badge origin-manual" title="{title}">{icon} Manual</span>'
+
+    # Unknown
+    return '<span class="badge origin-unknown">Unknown</span>'
+
+
 def _render_drift_section(total: int, drift_rows: str) -> str:
     """Render drift section HTML."""
     if total == 0:
@@ -730,6 +785,7 @@ def _render_drift_section(total: int, drift_rows: str) -> str:
                     <th>Resource Type</th>
                     <th>Resource Name</th>
                     <th>Drift Type</th>
+                    <th>Change Origin</th>
                     <th>Details</th>
                 </tr>
             </thead>
