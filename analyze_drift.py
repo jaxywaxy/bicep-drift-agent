@@ -399,7 +399,8 @@ def main():
                         logger.debug(f"No live resource found for {resource_type}/{bicep_name}, using bicep name")
 
                     # Extract resource group from context (needed for resource ID)
-                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/').lower()}/{deployed_name}"
+                    # IMPORTANT: Keep the resource type casing as-is - Azure resource IDs are case-sensitive
+                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/')}/{deployed_name}"
 
                     # Query Activity Log for all changes
                     # For missing/deleted resources, also provide type and RG for broader search
