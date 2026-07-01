@@ -127,7 +127,12 @@ class IgnorePatternList:
                                 if pattern.resource_type_regex else True
                             )
                             if resource_matches:
-                                if fnmatch.fnmatch(prop_name.lower(), pattern.property_regex):
+                                prop_lower = prop_name.lower()
+                                # Match the property itself OR any nested sub-property, so a
+                                # pattern like "properties.networkAcls" also covers
+                                # "properties.networkAcls.defaultAction" / ".bypass".
+                                if (fnmatch.fnmatch(prop_lower, pattern.property_regex)
+                                        or prop_lower.startswith(pattern.property_regex + ".")):
                                     drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
                                     ignored.append(drift)
                                     is_ignored = True
@@ -138,6 +143,13 @@ class IgnorePatternList:
             # Standard pattern matching for non-property drifts or if not already ignored
             if not is_ignored:
                 for pattern in self.patterns:
+                    # Property-scoped patterns only apply to property_drift (handled above).
+                    # Without this guard, a pattern like {type: KeyVault, property: networkAcls}
+                    # would match ANY KeyVault drift - including missing_in_azure / extra_in_azure -
+                    # because matches() does not consider the property field. That would wrongly
+                    # suppress a manually-added (extra) or deleted (missing) resource.
+                    if pattern.property_regex:
+                        continue
                     if pattern.matches(resource_type, resource_name, drift_type):
                         drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
                         ignored.append(drift)
