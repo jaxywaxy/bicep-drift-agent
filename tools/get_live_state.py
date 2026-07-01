@@ -117,18 +117,32 @@ def get_live_state(
 
     # Build KQL query based on scope
     # Note: Resource Graph doesn't have a separate AuthorizationResources table
-    # Locks are queried through the regular Resources table filtered by type
+    # Query resources in resource group, explicitly including locks and Log Analytics
     if scope == "resource_group":
         if not resource_group:
             raise ValueError("resource_group required for resource_group scope")
-        # Query resources and locks in specific RG
-        kql_query = f"Resources | where resourceGroup =~ '{resource_group}' or (type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}')"
+        # Query resources AND locks AND workspaces - use proper precedence with parentheses
+        kql_query = (
+            f"Resources "
+            f"| where resourceGroup =~ '{resource_group}' "
+            f"| union (Resources | where type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}') "
+            f"| union (Resources | where type =~ 'Microsoft.OperationalInsights/workspaces' and resourceGroup =~ '{resource_group}')"
+        )
     else:
-        # Query all resources and locks in subscription
+        # Query all resources in subscription
         if resource_group:
-            kql_query = f"Resources | where resourceGroup =~ '{resource_group}' or (type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}')"
+            kql_query = (
+                f"Resources "
+                f"| where resourceGroup =~ '{resource_group}' "
+                f"| union (Resources | where type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}') "
+                f"| union (Resources | where type =~ 'Microsoft.OperationalInsights/workspaces' and resourceGroup =~ '{resource_group}')"
+            )
         else:
-            kql_query = "Resources | union (Resources | where type =~ 'Microsoft.Authorization/locks')"
+            kql_query = (
+                "Resources "
+                "| union (Resources | where type =~ 'Microsoft.Authorization/locks') "
+                "| union (Resources | where type =~ 'Microsoft.OperationalInsights/workspaces')"
+            )
 
     logger.info(f"Querying Azure Resource Graph: {kql_query}")
     start_time = time.time()
