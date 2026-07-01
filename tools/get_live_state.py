@@ -115,34 +115,20 @@ def get_live_state(
     credential = DefaultAzureCredential()
     client = ResourceGraphClient(credential)
 
-    # Build KQL query based on scope
-    # Note: Resource Graph doesn't have a separate AuthorizationResources table
-    # Query resources in resource group, explicitly including locks and Log Analytics
+    # Build KQL query based on scope.
+    # NOTE: The Resources table already returns all normal resources (including
+    # OperationalInsights workspaces) for the RG. Do NOT union them again - that
+    # produces duplicate rows. Management locks are NOT in the Resources table at
+    # all, so they are queried separately via the ARM REST API in _query_locks().
     if scope == "resource_group":
         if not resource_group:
             raise ValueError("resource_group required for resource_group scope")
-        # Query resources AND locks AND workspaces - use proper precedence with parentheses
-        kql_query = (
-            f"Resources "
-            f"| where resourceGroup =~ '{resource_group}' "
-            f"| union (Resources | where type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}') "
-            f"| union (Resources | where type =~ 'Microsoft.OperationalInsights/workspaces' and resourceGroup =~ '{resource_group}')"
-        )
+        kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
     else:
-        # Query all resources in subscription
         if resource_group:
-            kql_query = (
-                f"Resources "
-                f"| where resourceGroup =~ '{resource_group}' "
-                f"| union (Resources | where type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}') "
-                f"| union (Resources | where type =~ 'Microsoft.OperationalInsights/workspaces' and resourceGroup =~ '{resource_group}')"
-            )
+            kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
         else:
-            kql_query = (
-                "Resources "
-                "| union (Resources | where type =~ 'Microsoft.Authorization/locks') "
-                "| union (Resources | where type =~ 'Microsoft.OperationalInsights/workspaces')"
-            )
+            kql_query = "Resources"
 
     logger.info(f"Querying Azure Resource Graph: {kql_query}")
     start_time = time.time()
@@ -239,58 +225,58 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
 
 
 def _query_locks(resource_group: Optional[str], sub_id: str, scope: str) -> List[Dict]:
-    """Query management locks (not returned by Resource Graph or resource list APIs)."""
+    """
+    Query management locks via the ARM REST API.
+
+    Locks are NOT indexed in Resource Graph, and the management_locks operations
+    have been moved/removed across azure-mgmt-* SDK versions. The ARM REST endpoint
+    is stable and version-independent, so we call it directly with the credential
+    token we already have.
+    """
+    import json as _json
+    import urllib.request
+    import urllib.error
+
     try:
-        from azure.mgmt.authorization import AuthorizationManagementClient
-
         credential = DefaultAzureCredential()
-        client = AuthorizationManagementClient(credential, sub_id)
-
-        locks = []
+        token = credential.get_token("https://management.azure.com/.default").token
 
         if scope == "resource_group" and resource_group:
-            # Query locks in specific resource group
-            try:
-                lock_iterator = client.management_locks.list_at_resource_group_level(resource_group)
-                for lock in lock_iterator:
-                    lock_dict = {
-                        "type": "Microsoft.Authorization/locks",
-                        "name": lock.name,
-                        "location": "unknown",
-                        "tags": {},
-                        "sku": None,
-                        "kind": None,
-                        "properties": {"level": lock.level, "notes": lock.notes} if hasattr(lock, 'notes') else {"level": lock.level},
-                        "id": lock.id,
-                        "resource_group": resource_group,
-                    }
-                    locks.append(lock_dict)
-            except Exception as e:
-                logger.debug(f"Failed to query resource group locks: {e}")
+            url = (
+                f"https://management.azure.com/subscriptions/{sub_id}/resourceGroups/"
+                f"{resource_group}/providers/Microsoft.Authorization/locks?api-version=2016-09-01"
+            )
         else:
-            # Query all locks in subscription
-            try:
-                lock_iterator = client.management_locks.list_at_subscription_level()
-                for lock in lock_iterator:
-                    rg = _extract_resource_group_from_id(lock.id)
-                    if scope == "subscription" and resource_group and rg and rg.lower() != resource_group.lower():
-                        continue
+            url = (
+                f"https://management.azure.com/subscriptions/{sub_id}/providers/"
+                f"Microsoft.Authorization/locks?api-version=2016-09-01"
+            )
 
-                    lock_dict = {
-                        "type": "Microsoft.Authorization/locks",
-                        "name": lock.name,
-                        "location": "unknown",
-                        "tags": {},
-                        "sku": None,
-                        "kind": None,
-                        "properties": {"level": lock.level, "notes": lock.notes} if hasattr(lock, 'notes') else {"level": lock.level},
-                        "id": lock.id,
-                        "resource_group": rg,
-                    }
-                    locks.append(lock_dict)
-            except Exception as e:
-                logger.debug(f"Failed to query subscription locks: {e}")
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = _json.load(resp)
 
+        locks = []
+        for lk in data.get("value", []):
+            lock_id = lk.get("id", "")
+            rg = _extract_resource_group_from_id(lock_id) or resource_group
+            # When scoped to a subscription-wide query, keep only requested RG
+            if scope == "subscription" and resource_group and rg and rg.lower() != resource_group.lower():
+                continue
+            props = lk.get("properties", {}) or {}
+            locks.append({
+                "type": "Microsoft.Authorization/locks",
+                "name": lk.get("name"),
+                "location": "unknown",
+                "tags": {},
+                "sku": None,
+                "kind": None,
+                "properties": {"level": props.get("level"), "notes": props.get("notes")},
+                "id": lock_id,
+                "resource_group": rg,
+            })
+
+        logger.info(f"Found {len(locks)} management lock(s) via ARM REST API")
         return locks
     except Exception as e:
         logger.warning(f"Could not query locks: {e}")
