@@ -81,8 +81,12 @@ ignore:
     reason: "Role assignments auto-created by policies or RBAC automation"
 
   # Monitoring/Diagnostics
+  # Only ignore EXTRA workspaces (auto-created by Defender/Monitor and not in IaC).
+  # A missing_in_azure workspace means an IaC-managed workspace was deleted - that
+  # is real drift and must NOT be suppressed.
   - resource_type: "Microsoft.OperationalInsights/workspaces"
-    reason: "Auto-created by Azure Defender/Monitor, not explicitly managed in IaC"
+    drift_type: "extra_in_azure"
+    reason: "Extra workspace auto-created by Azure Defender/Monitor, not managed in IaC"
 
   - resource_type: "microsoft.insights/actiongroups"
     resource_name: ".*Smart Detection.*"
