@@ -44,7 +44,10 @@ def generate_html_report(
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])
-    modified = len([d for d in drifts if "modified" in d["drift_type"]])
+    # Property-level changes are recorded with drift_type "property_drift" (not the
+    # literal "modified"), so count those as modified too - otherwise a changed
+    # property (e.g. storage accessTier) shows up in Total but not in Modified.
+    modified = len([d for d in drifts if "modified" in d["drift_type"] or "property" in d["drift_type"]])
 
     # Determine status
     if total == 0:
