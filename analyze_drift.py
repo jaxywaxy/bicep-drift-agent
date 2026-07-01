@@ -402,7 +402,16 @@ def main():
                     resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/').lower()}/{deployed_name}"
 
                     # Query Activity Log for all changes
-                    activity_logs = get_change_history(resource_id, subscription_id, days=30)
+                    # For missing/deleted resources, also provide type and RG for broader search
+                    drift_type = drift.get("drift_type", "").lower()
+                    is_missing = "missing" in drift_type
+                    activity_logs = get_change_history(
+                        resource_id,
+                        subscription_id,
+                        days=30,
+                        resource_type=resource_type if is_missing else None,
+                        resource_group=resource_group if is_missing else None,
+                    )
 
                     # Build complete resource lifecycle
                     lifecycle = build_resource_lifecycle(resource_id, activity_logs)
