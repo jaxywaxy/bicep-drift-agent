@@ -35,6 +35,8 @@ from tools.property_drift import DriftDetector, PropertyExtractor
 from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 from tools.azure_resource_graph import ResourceGraphClient
+from tools.activity_log import get_change_history
+from tools.change_origin import classify_change_origin, format_change_origin_for_display
 
 logger = get_logger(__name__)
 
@@ -329,14 +331,50 @@ def main():
             print(f"[ERROR] Claude API call failed: {type(e).__name__}")
             raise
 
-        # Generate per-drift recommendations
+        # Phase 3: Detect change origin (Policy-enforced vs Manual)
         drifts_to_analyze = report_data.get("drifts", [])
         logger.info(f"Found {len(drifts_to_analyze)} drift(s) to generate recommendations for")
 
         if len(drifts_to_analyze) > 0:
-            logger.info("Generating recommendations via Claude...")
-            recommendations_count = 0
+            logger.info("Phase 3: Detecting change origin from Activity Log...")
+            subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
 
+            for drift in drifts_to_analyze:
+                try:
+                    # Build resource ID for Activity Log query
+                    resource_type = drift.get("type", "")
+                    resource_name = drift.get("name", "")
+
+                    # Extract resource group from context (needed for resource ID)
+                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/').lower()}/{resource_name}"
+
+                    # Query Activity Log
+                    activity_logs = get_change_history(resource_id, subscription_id, days=30)
+
+                    # Classify origin
+                    origin_info = classify_change_origin(activity_logs)
+                    drift["change_origin"] = origin_info.to_dict()
+
+                    logger.debug(f"  {resource_name}: {origin_info.origin.value} ({origin_info.reason})")
+
+                except Exception as e:
+                    logger.warning(f"Failed to detect change origin for {drift.get('name')}: {str(e)[:100]}")
+                    # Fall back to unknown origin
+                    drift["change_origin"] = {
+                        'origin': 'unknown',
+                        'category': 'unknown',
+                        'severity': 'medium',
+                        'expected': False,
+                        'reason': f"Could not query activity log: {str(e)[:50]}",
+                    }
+
+            logger.info("Change origin detection completed")
+
+        # Generate per-drift recommendations
+        logger.info("Generating recommendations via Claude...")
+        recommendations_count = 0
+
+        if len(drifts_to_analyze) > 0:
             for i, drift in enumerate(drifts_to_analyze, 1):
                 try:
                     drift_name = drift.get("name", "unknown")
