@@ -11,7 +11,7 @@ import os
 import json
 import logging
 import time
-from typing import Optional, List, Dict, Callable, TypeVar, Any
+from typing import Optional, List, Dict, Callable, TypeVar
 from functools import wraps
 from azure.identity import DefaultAzureCredential
 from azure.core.exceptions import HttpResponseError
@@ -64,7 +64,7 @@ def retry_with_backoff(max_retries: int = 3, initial_delay: float = 1.0) -> Call
                         logger.warning(
                             f"Failed after {max_retries + 1} attempts in {func.__name__}: {e}"
                         )
-                except Exception as e:
+                except Exception:
                     # Non-transient errors, fail immediately
                     raise
 
@@ -160,27 +160,14 @@ def get_live_state(
             }
             resources.append(resource_dict)
 
-    # Query locks separately (Resource Graph doesn't index them)
-    try:
-        resources.extend(_query_locks(resource_group, sub_id, scope))
-    except Exception as e:
-        logger.warning(f"Failed to query locks: {e}")
-
-    # Query Cosmos DB SQL databases/containers (Resource Graph doesn't index them either)
-    try:
-        resources.extend(_query_cosmos_children(resources, sub_id))
-    except Exception as e:
-        logger.warning(f"Failed to query Cosmos child resources: {e}")
-
-    _normalize_cosmos_account_locations(resources)
-
+    _augment_untracked_resources(resources, resource_group, sub_id, scope)
     logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
     return resources
 
 
 def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> List[Dict]:
     """Fallback: query resources using ResourceManagementClient when Resource Graph is unavailable."""
-    logger.warning(f"Using ResourceManagementClient fallback (slower than Resource Graph)")
+    logger.warning("Using ResourceManagementClient fallback (slower than Resource Graph)")
     from azure.mgmt.resource.resources import ResourceManagementClient
 
     credential = DefaultAzureCredential()
@@ -217,7 +204,21 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
         }
         resources.append(resource_dict)
 
-    # Query locks and Cosmos children separately (not returned by resource list)
+    _augment_untracked_resources(resources, resource_group, sub_id, scope)
+    elapsed = time.time() - start_time
+    logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
+    return resources
+
+
+def _augment_untracked_resources(resources: List[Dict], resource_group: Optional[str], sub_id: str, scope: str) -> None:
+    """
+    Add resources not indexed by Resource Graph / the resource list API, and
+    normalize known false-positive properties. Mutates `resources` in place.
+
+    - Management locks (Microsoft.Authorization/locks) via ARM REST
+    - Cosmos DB SQL databases/containers via ARM REST
+    - Cosmos account location normalization
+    """
     try:
         resources.extend(_query_locks(resource_group, sub_id, scope))
     except Exception as e:
@@ -226,12 +227,7 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
         resources.extend(_query_cosmos_children(resources, sub_id))
     except Exception as e:
         logger.warning(f"Failed to query Cosmos child resources: {e}")
-
     _normalize_cosmos_account_locations(resources)
-
-    elapsed = time.time() - start_time
-    logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
-    return resources
 
 
 def _query_locks(resource_group: Optional[str], sub_id: str, scope: str) -> List[Dict]:
@@ -454,40 +450,10 @@ def _extract_resource_group_from_id(resource_id: str) -> Optional[str]:
     except (ValueError, IndexError):
         pass
     return None
-    """Enrich Storage Account properties using StorageManagementClient."""
-    try:
-        storage_client = StorageManagementClient(credential, subscription_id)
-    except Exception:
-        logger.debug("StorageManagementClient initialization failed. Skipping storage property enrichment.", exc_info=True)
-        return
-
-    for resource in resources:
-        if resource["type"] == "Microsoft.Storage/storageAccounts":
-            account_name = resource["name"]
-            try:
-                account = storage_client.storage_accounts.get_properties(resource_group, account_name)
-                if "properties" not in resource:
-                    resource["properties"] = {}
-
-                # Azure SDK returns models with _data dict attribute
-                data = account._data if hasattr(account, "_data") else account
-                props = data.get("properties", {}) if isinstance(data, dict) else {}
-
-                if props:
-                    resource["properties"].update({
-                        "accessTier": str(props.get("accessTier", "")).split(".")[-1],
-                        "minimumTlsVersion": str(props.get("minimumTlsVersion", "")).split(".")[-1],
-                        "supportsHttpsTrafficOnly": props.get("supportsHttpsTrafficOnly"),
-                        "publicNetworkAccess": props.get("publicNetworkAccess"),
-                    })
-            except Exception:
-                logger.debug("Exception during property enrichment.", exc_info=True)
-                pass
 
 
 if __name__ == "__main__":
     import sys
-    import json
     from pathlib import Path
     from dotenv import load_dotenv
     try:

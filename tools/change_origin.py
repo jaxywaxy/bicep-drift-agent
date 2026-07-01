@@ -240,8 +240,6 @@ def classify_change_origin(
     latest = activity_logs[0]
     caller = latest.get('caller', '').lower()
     operation = latest.get('operation', '').lower()
-    props = latest.get('properties', {})
-    status = latest.get('status', 'Unknown')
 
     # Check for policy-enforced changes
     if "azure policy" in caller or "policy" in operation:
@@ -583,47 +581,3 @@ def _build_event_reason(
         return f"Manual change by {actor}"
     else:
         return f"{op_type.value.title()} operation by {actor}"
-
-
-def format_change_origin_for_display(info: ChangeOriginInfo) -> Dict[str, str]:
-    """Format change origin info for display in reports."""
-    status_icon = "✅" if info.expected else "🔴"
-    severity_color = "low" if info.severity == ChangeSeverity.LOW else "high"
-
-    return {
-        'icon': status_icon,
-        'origin': info.origin.value.replace('_', ' ').title(),
-        'changed_by': info.changed_by or "Unknown",
-        'method': info.method or "Unknown",
-        'timestamp': info.timestamp.isoformat() if info.timestamp else "Unknown",
-        'policy_name': info.policy_name or "N/A",
-        'severity': info.severity.value.upper(),
-        'expected': "Yes" if info.expected else "No",
-        'reason': info.reason,
-        'action': "None (auto-enforced)" if info.expected else "Review & Remediate",
-    }
-
-
-def format_lifecycle_for_display(lifecycle: ResourceLifecycle) -> Dict[str, Any]:
-    """Format lifecycle for HTML display."""
-    return {
-        'created_at': lifecycle.created_at.isoformat() if lifecycle.created_at else None,
-        'created_by': lifecycle.created_by,
-        'deleted_at': lifecycle.deleted_at.isoformat() if lifecycle.deleted_at else None,
-        'deleted_by': lifecycle.deleted_by,
-        'last_modified_at': lifecycle.last_modified_at.isoformat() if lifecycle.last_modified_at else None,
-        'last_modified_by': lifecycle.last_modified_by,
-        'events': [
-            {
-                'timestamp': e.timestamp.isoformat() if e.timestamp else None,
-                'operation': e.operation.value,
-                'actor': e.actor,
-                'method': e.method,
-                'status': e.status,
-                'reason': e.reason,
-                'origin': e.origin.value,
-                'policy_name': e.policy_name,
-            }
-            for e in lifecycle.events
-        ],
-    }
