@@ -174,7 +174,15 @@ def get_live_state(
             }
             resources.append(resource_dict)
 
-    logger.info(f"Found {len(resources)} resource(s) via Resource Graph")
+    # Query locks separately (Resource Graph doesn't index them)
+    try:
+        locks = _query_locks(resource_group, sub_id, scope)
+        resources.extend(locks)
+        logger.info(f"Found {len(resources)} total resource(s) via Resource Graph + locks")
+    except Exception as e:
+        logger.warning(f"Failed to query locks: {e}")
+        logger.info(f"Found {len(resources)} resource(s) via Resource Graph (locks unavailable)")
+
     return resources
 
 
@@ -217,9 +225,76 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
         }
         resources.append(resource_dict)
 
+    # Query locks separately (not returned by Resource Graph or resource list)
+    try:
+        locks = _query_locks(resource_group, sub_id, scope)
+        resources.extend(locks)
+        logger.info(f"Added {len(locks)} lock(s) to results")
+    except Exception as e:
+        logger.warning(f"Failed to query locks: {e}")
+
     elapsed = time.time() - start_time
     logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
     return resources
+
+
+def _query_locks(resource_group: Optional[str], sub_id: str, scope: str) -> List[Dict]:
+    """Query management locks (not returned by Resource Graph or resource list APIs)."""
+    try:
+        from azure.mgmt.authorization import AuthorizationManagementClient
+
+        credential = DefaultAzureCredential()
+        client = AuthorizationManagementClient(credential, sub_id)
+
+        locks = []
+
+        if scope == "resource_group" and resource_group:
+            # Query locks in specific resource group
+            try:
+                lock_iterator = client.management_locks.list_at_resource_group_level(resource_group)
+                for lock in lock_iterator:
+                    lock_dict = {
+                        "type": "Microsoft.Authorization/locks",
+                        "name": lock.name,
+                        "location": "unknown",
+                        "tags": {},
+                        "sku": None,
+                        "kind": None,
+                        "properties": {"level": lock.level, "notes": lock.notes} if hasattr(lock, 'notes') else {"level": lock.level},
+                        "id": lock.id,
+                        "resource_group": resource_group,
+                    }
+                    locks.append(lock_dict)
+            except Exception as e:
+                logger.debug(f"Failed to query resource group locks: {e}")
+        else:
+            # Query all locks in subscription
+            try:
+                lock_iterator = client.management_locks.list_at_subscription_level()
+                for lock in lock_iterator:
+                    rg = _extract_resource_group_from_id(lock.id)
+                    if scope == "subscription" and resource_group and rg and rg.lower() != resource_group.lower():
+                        continue
+
+                    lock_dict = {
+                        "type": "Microsoft.Authorization/locks",
+                        "name": lock.name,
+                        "location": "unknown",
+                        "tags": {},
+                        "sku": None,
+                        "kind": None,
+                        "properties": {"level": lock.level, "notes": lock.notes} if hasattr(lock, 'notes') else {"level": lock.level},
+                        "id": lock.id,
+                        "resource_group": rg,
+                    }
+                    locks.append(lock_dict)
+            except Exception as e:
+                logger.debug(f"Failed to query subscription locks: {e}")
+
+        return locks
+    except Exception as e:
+        logger.warning(f"Could not query locks: {e}")
+        return []
 
 
 def _extract_resource_group_from_id(resource_id: str) -> Optional[str]:
