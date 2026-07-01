@@ -35,7 +35,7 @@ from tools.property_drift import DriftDetector
 from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 from tools.azure_resource_graph import ResourceGraphClient
-from tools.activity_log import get_change_history
+from tools.activity_log import fetch_resource_group_activity, match_activity_for_resource
 from tools.change_origin import (
     classify_change_origin,
     build_resource_lifecycle,
@@ -401,6 +401,13 @@ def main():
             subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
             live_resources = report_data.get("live_resources", [])
 
+            # Fetch the resource group's Activity Log ONCE and match each drift against
+            # it in memory (the $filter can't target a single resource, so a per-drift
+            # query would re-scan the whole RG N times).
+            rg_activity_events = fetch_resource_group_activity(
+                subscription_id, resource_group, days=30
+            )
+
             for drift in drifts_to_analyze:
                 try:
                     # Build resource ID for Activity Log query
@@ -423,16 +430,10 @@ def main():
                     # that breaks the provider namespace (Microsoft.Storage -> Microsoft/Storage).
                     resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type}/{deployed_name}"
 
-                    # Query Activity Log for all changes.
-                    # Always pass resource_type + resource_group: the query filters by RG
-                    # and matches the resource client-side. resource_type enables matching
-                    # deleted resources whose exact ID is no longer resolvable.
-                    activity_logs = get_change_history(
-                        resource_id,
-                        subscription_id,
-                        days=30,
-                        resource_type=resource_type,
-                        resource_group=resource_group,
+                    # Match this resource against the pre-fetched RG events. resource_type
+                    # enables matching deleted resources whose exact ID can't be built.
+                    activity_logs = match_activity_for_resource(
+                        rg_activity_events, resource_id, resource_type
                     )
 
                     # Narrow the RG-wide events down to the ONE operation that explains
