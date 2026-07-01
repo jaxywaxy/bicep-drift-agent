@@ -118,10 +118,25 @@ def query_activity_log_via_rest(
             f"and (status eq 'Succeeded' or status eq 'Failed')"
         )
 
+        logger.info(f"[Activity Log Query]")
+        logger.info(f"  Subscription: {subscription_id}")
+        logger.info(f"  Resource ID: {resource_id}")
+        logger.info(f"  Filter: {filter_str}")
+        logger.info(f"  Days: {days}")
+
         activity_logs = client.activity_logs.list(filter=filter_str)
 
         entries = []
+        log_count = 0
         for log in activity_logs:
+            log_count += 1
+            logger.debug(f"  Log entry {log_count}:")
+            logger.debug(f"    Timestamp: {log.event_timestamp}")
+            logger.debug(f"    Caller: {log.caller}")
+            logger.debug(f"    Operation: {log.operation_name.value if log.operation_name else 'Unknown'}")
+            logger.debug(f"    Status: {log.status.value if log.status else 'Unknown'}")
+            logger.debug(f"    Resource ID: {log.resource_id}")
+
             entries.append({
                 'timestamp': log.event_timestamp,
                 'caller': log.caller,
@@ -133,17 +148,30 @@ def query_activity_log_via_rest(
                 'authorization': log.authorization if hasattr(log, 'authorization') else None,
             })
 
+        logger.info(f"  Result: {len(entries)} entries found")
+
         # If no entries found and resource_type provided, try broader search (for deleted resources)
         if len(entries) == 0 and resource_type and resource_group:
-            logger.info(f"No events for specific resource, trying broader search by RG...")
+            logger.info(f"[Activity Log Fallback Search]")
+            logger.info(f"  No results for specific resource ID, trying broader search...")
+            logger.info(f"  Resource Type: {resource_type}")
+            logger.info(f"  Resource Group: {resource_group}")
+
             # Use resourceGroup and resourceProviderName instead for broader matching
             filter_str_broad = (
                 f"eventTimestamp ge '{start_time.isoformat()}Z' "
                 f"and resourceGroup eq '{resource_group}'"
             )
+            logger.info(f"  Broader Filter: {filter_str_broad}")
+
             activity_logs = client.activity_logs.list(filter=filter_str_broad)
 
+            fallback_count = 0
             for log in activity_logs:
+                fallback_count += 1
+                if fallback_count <= 5:  # Log first 5 for debugging
+                    logger.debug(f"  Fallback log {fallback_count}: {log.resource_id} - {log.caller}")
+
                 entries.append({
                     'timestamp': log.event_timestamp,
                     'caller': log.caller,
@@ -154,7 +182,7 @@ def query_activity_log_via_rest(
                     'method': log.properties.get('method') if log.properties else None,
                     'authorization': log.authorization if hasattr(log, 'authorization') else None,
                 })
-            logger.info(f"Found {len(entries)} activity log entries via broader search for {resource_type}")
+            logger.info(f"  Fallback result: {len(entries)} entries found")
 
         logger.info(f"Found {len(entries)} activity log entries via REST API for {resource_id}")
         return entries
