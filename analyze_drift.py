@@ -399,19 +399,21 @@ def main():
                         logger.debug(f"No live resource found for {resource_type}/{bicep_name}, using bicep name")
 
                     # Extract resource group from context (needed for resource ID)
-                    # IMPORTANT: Keep the resource type casing as-is - Azure resource IDs are case-sensitive
-                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/')}/{deployed_name}"
+                    # IMPORTANT: resource_type is already in "Namespace/type" form (e.g.
+                    # "Microsoft.Storage/storageAccounts"). Do NOT replace '.' with '/' -
+                    # that breaks the provider namespace (Microsoft.Storage -> Microsoft/Storage).
+                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type}/{deployed_name}"
 
-                    # Query Activity Log for all changes
-                    # For missing/deleted resources, also provide type and RG for broader search
-                    drift_type = drift.get("drift_type", "").lower()
-                    is_missing = "missing" in drift_type
+                    # Query Activity Log for all changes.
+                    # Always pass resource_type + resource_group: the query filters by RG
+                    # and matches the resource client-side. resource_type enables matching
+                    # deleted resources whose exact ID is no longer resolvable.
                     activity_logs = get_change_history(
                         resource_id,
                         subscription_id,
                         days=30,
-                        resource_type=resource_type if is_missing else None,
-                        resource_group=resource_group if is_missing else None,
+                        resource_type=resource_type,
+                        resource_group=resource_group,
                     )
 
                     # Build complete resource lifecycle

@@ -10,7 +10,6 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from azure.identity import DefaultAzureCredential
-from azure.monitor.query import LogsQueryClient
 
 logger = logging.getLogger(__name__)
 
@@ -37,72 +36,32 @@ def get_change_history(
     Returns:
         List of activity log entries (most recent first), or None if query fails
     """
-    try:
-        credential = DefaultAzureCredential()
-        client = LogsQueryClient(credential)
-
-        start_time = datetime.utcnow() - timedelta(days=days)
-
-        # KQL query for activity log
-        query = f"""
-        AzureActivity
-        | where TimeGenerated >= ago({days}d)
-        | where ResourceId =~ "{resource_id}"
-        | where ActivityStatus == "Succeeded" or ActivityStatus == "Failed"
-        | project
-            TimeGenerated,
-            Caller,
-            OperationName,
-            ActivityStatus,
-            Properties,
-            ResourceId,
-            SubscriptionId
-        | order by TimeGenerated desc
-        | limit 100
-        """
-
-        # Query Log Analytics workspace
-        # Note: This requires Activity Logs to be sent to Log Analytics
-        # Alternative: Use REST API directly (see fallback below)
-        try:
-            response = client.query_workspace(
-                workspace_id=subscription_id,  # This will be the workspace ID in practice
-                query=query,
-                timespan=(start_time, datetime.utcnow()),
-            )
-
-            if response.status == "Success":
-                entries = []
-                for row in response.tables[0].rows:
-                    entries.append({
-                        'timestamp': row[0],
-                        'caller': row[1],
-                        'operation': row[2],
-                        'status': row[3],
-                        'properties': row[4],
-                        'resource_id': row[5],
-                    })
-                logger.info(f"Found {len(entries)} activity log entries for {resource_id}")
-                return entries
-        except Exception as e:
-            logger.debug(f"Log Analytics query failed: {e}, falling back to REST API")
-            return query_activity_log_via_rest(resource_id, subscription_id, days)
-
-    except Exception as e:
-        logger.error(f"Failed to query activity log: {e}")
-        return None
+    # Query the Azure Monitor Activity Log via the management REST API.
+    # (We do NOT use Log Analytics here - that requires a workspace ID and diagnostic
+    #  settings routing Activity Log to a workspace, which isn't guaranteed. The
+    #  management Activity Log is always available for the subscription.)
+    return query_activity_log_via_rest(
+        resource_id,
+        subscription_id,
+        days,
+        resource_type=resource_type,
+        resource_group=resource_group,
+    )
 
 
 def query_activity_log_via_rest(
     resource_id: str,
     subscription_id: str,
     days: int = 30,
+    resource_type: Optional[str] = None,
+    resource_group: Optional[str] = None,
 ) -> Optional[List[Dict[str, Any]]]:
     """
-    Fallback: Query Activity Log using Azure REST API directly.
+    Query the Azure Monitor Activity Log using the management REST API.
 
-    This is more reliable than Log Analytics since Activity Log is always available,
-    though less flexible.
+    The Activity Log $filter only supports eventTimestamp + resourceGroupName
+    (and a few others) combined with 'and'. We filter by RG + time, then match
+    the specific resource (or resource type, for deleted resources) client-side.
     """
     try:
         from azure.mgmt.monitor import MonitorManagementClient
@@ -110,34 +69,60 @@ def query_activity_log_via_rest(
         credential = DefaultAzureCredential()
         client = MonitorManagementClient(credential, subscription_id)
 
-        # Build OData filter
+        # Determine resource group for the query filter.
+        # The Activity Log REST API $filter ONLY supports a very limited set of fields
+        # (eventTimestamp, resourceGroupName, resourceId, resourceProvider, correlationId)
+        # combined with 'and' ONLY. It does NOT support 'status', 'resourceType', or 'or'.
+        # So we filter by eventTimestamp + resourceGroupName and match everything else client-side.
+        rg_for_filter = resource_group or _extract_rg_from_resource_id(resource_id)
         start_time = datetime.utcnow() - timedelta(days=days)
+
+        if not rg_for_filter:
+            logger.warning(f"Could not determine resource group for {resource_id}; skipping activity log")
+            return []
+
         filter_str = (
             f"eventTimestamp ge '{start_time.isoformat()}Z' "
-            f"and resourceId eq '{resource_id}' "
-            f"and (status eq 'Succeeded' or status eq 'Failed')"
+            f"and resourceGroupName eq '{rg_for_filter}'"
         )
 
         logger.info(f"[Activity Log Query]")
         logger.info(f"  Subscription: {subscription_id}")
-        logger.info(f"  Resource ID: {resource_id}")
+        logger.info(f"  Resource ID (target): {resource_id}")
+        logger.info(f"  Resource Group (filter): {rg_for_filter}")
         logger.info(f"  Filter: {filter_str}")
         logger.info(f"  Days: {days}")
 
         activity_logs = client.activity_logs.list(filter=filter_str)
 
-        entries = []
-        log_count = 0
+        # Collect all RG events, then match client-side.
+        resource_id_lower = resource_id.lower()
+        resource_type_lower = (resource_type or "").lower()
+        matched = []
+        total_seen = 0
         for log in activity_logs:
-            log_count += 1
-            logger.debug(f"  Log entry {log_count}:")
-            logger.debug(f"    Timestamp: {log.event_timestamp}")
-            logger.debug(f"    Caller: {log.caller}")
-            logger.debug(f"    Operation: {log.operation_name.value if log.operation_name else 'Unknown'}")
-            logger.debug(f"    Status: {log.status.value if log.status else 'Unknown'}")
-            logger.debug(f"    Resource ID: {log.resource_id}")
+            total_seen += 1
+            log_resource_id = (log.resource_id or "")
+            log_resource_id_lower = log_resource_id.lower()
 
-            entries.append({
+            # Match strategy:
+            # 1. Exact/substring resource ID match (case-insensitive) - handles live resources
+            # 2. For missing/deleted resources: match by resource type in the resource ID
+            is_match = False
+            if resource_id_lower and (
+                log_resource_id_lower == resource_id_lower
+                or log_resource_id_lower.startswith(resource_id_lower)
+                or resource_id_lower.startswith(log_resource_id_lower)
+            ):
+                is_match = True
+            elif resource_type_lower and resource_type_lower in log_resource_id_lower:
+                # broader match for deleted resources (resource ID no longer resolvable)
+                is_match = True
+
+            if not is_match:
+                continue
+
+            matched.append({
                 'timestamp': log.event_timestamp,
                 'caller': log.caller,
                 'operation': log.operation_name.value if log.operation_name else "Unknown",
@@ -147,42 +132,14 @@ def query_activity_log_via_rest(
                 'method': log.properties.get('method') if log.properties else None,
                 'authorization': log.authorization if hasattr(log, 'authorization') else None,
             })
+            if len(matched) <= 10:
+                logger.debug(
+                    f"  Matched: {log.event_timestamp} | {log.caller} | "
+                    f"{log.operation_name.value if log.operation_name else '?'} | {log_resource_id}"
+                )
 
-        logger.info(f"  Result: {len(entries)} entries found")
-
-        # If no entries found and resource_type provided, try broader search (for deleted resources)
-        if len(entries) == 0 and resource_type and resource_group:
-            logger.info(f"[Activity Log Fallback Search]")
-            logger.info(f"  No results for specific resource ID, trying broader search...")
-            logger.info(f"  Resource Type: {resource_type}")
-            logger.info(f"  Resource Group: {resource_group}")
-
-            # Use resourceGroup and resourceProviderName instead for broader matching
-            filter_str_broad = (
-                f"eventTimestamp ge '{start_time.isoformat()}Z' "
-                f"and resourceGroup eq '{resource_group}'"
-            )
-            logger.info(f"  Broader Filter: {filter_str_broad}")
-
-            activity_logs = client.activity_logs.list(filter=filter_str_broad)
-
-            fallback_count = 0
-            for log in activity_logs:
-                fallback_count += 1
-                if fallback_count <= 5:  # Log first 5 for debugging
-                    logger.debug(f"  Fallback log {fallback_count}: {log.resource_id} - {log.caller}")
-
-                entries.append({
-                    'timestamp': log.event_timestamp,
-                    'caller': log.caller,
-                    'operation': log.operation_name.value if log.operation_name else "Unknown",
-                    'status': log.status.value if log.status else "Unknown",
-                    'properties': log.properties if log.properties else {},
-                    'resource_id': log.resource_id,
-                    'method': log.properties.get('method') if log.properties else None,
-                    'authorization': log.authorization if hasattr(log, 'authorization') else None,
-                })
-            logger.info(f"  Fallback result: {len(entries)} entries found")
+        logger.info(f"  Scanned {total_seen} RG event(s), matched {len(matched)} for target resource")
+        entries = matched
 
         logger.info(f"Found {len(entries)} activity log entries via REST API for {resource_id}")
         return entries
@@ -190,6 +147,17 @@ def query_activity_log_via_rest(
     except Exception as e:
         logger.error(f"Failed to query Activity Log via REST API: {e}")
         return None
+
+
+def _extract_rg_from_resource_id(resource_id: str) -> Optional[str]:
+    """Extract the resource group name from an Azure resource ID (case-insensitive)."""
+    if not resource_id:
+        return None
+    parts = resource_id.split("/")
+    for i, part in enumerate(parts):
+        if part.lower() == "resourcegroups" and i + 1 < len(parts):
+            return parts[i + 1]
+    return None
 
 
 def extract_policy_info(activity_entry: Dict[str, Any]) -> Optional[Dict[str, str]]:
