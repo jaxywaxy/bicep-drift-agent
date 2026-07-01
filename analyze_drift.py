@@ -297,12 +297,27 @@ def main():
             # Detect property-level drift
             property_drifts = DriftDetector.detect_drift(filtered_bicep_resources, deployed_resources)
 
-            # Apply ignore patterns to property drifts
+            # Apply ignore patterns to property drifts.
+            # Build dicts in the SAME shape the main drift filter uses: a "modified"
+            # resource maps to drift_type "property_drift" with changed_properties keyed
+            # by property path. Without this, property-scoped ignore patterns (e.g.
+            # KeyVault networkAcls) never match here - they only apply to "property_drift"
+            # + the property branch needs the changed_properties keys.
             raw_property_drifts = [
                 {
                     "type": d.resource_type,
                     "name": d.resource_name,
-                    "drift_type": d.drift_type,
+                    "drift_type": "property_drift" if d.drift_type == "modified" else d.drift_type,
+                    "details": {
+                        "changed_properties": {
+                            diff.property_path: {
+                                "desired": diff.desired_value,
+                                "actual": diff.actual_value,
+                                "severity": diff.severity,
+                            }
+                            for diff in d.property_diffs
+                        }
+                    },
                 }
                 for d in property_drifts
             ]
