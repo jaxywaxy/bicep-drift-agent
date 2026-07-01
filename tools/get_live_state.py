@@ -219,33 +219,42 @@ def _augment_untracked_resources(resources: List[Dict], resource_group: Optional
     - Cosmos DB SQL databases/containers via ARM REST
     - Cosmos account location normalization
     """
+    # Share one credential+token across the ARM REST helpers instead of each
+    # creating its own (avoids repeated auth round-trips).
     try:
-        resources.extend(_query_locks(resource_group, sub_id, scope))
+        credential = DefaultAzureCredential()
+        token = credential.get_token("https://management.azure.com/.default").token
+    except Exception as e:
+        logger.warning(f"Could not acquire token for untracked-resource queries: {e}")
+        token = None
+
+    try:
+        resources.extend(_query_locks(resource_group, sub_id, scope, token=token))
     except Exception as e:
         logger.warning(f"Failed to query locks: {e}")
     try:
-        resources.extend(_query_cosmos_children(resources, sub_id))
+        resources.extend(_query_cosmos_children(resources, sub_id, token=token))
     except Exception as e:
         logger.warning(f"Failed to query Cosmos child resources: {e}")
     _normalize_cosmos_account_locations(resources)
 
 
-def _query_locks(resource_group: Optional[str], sub_id: str, scope: str) -> List[Dict]:
+def _query_locks(resource_group: Optional[str], sub_id: str, scope: str, token: Optional[str] = None) -> List[Dict]:
     """
     Query management locks via the ARM REST API.
 
     Locks are NOT indexed in Resource Graph, and the management_locks operations
     have been moved/removed across azure-mgmt-* SDK versions. The ARM REST endpoint
     is stable and version-independent, so we call it directly with the credential
-    token we already have.
+    token we already have. A shared token may be passed in to avoid re-auth.
     """
     import json as _json
     import urllib.request
     import urllib.error
 
     try:
-        credential = DefaultAzureCredential()
-        token = credential.get_token("https://management.azure.com/.default").token
+        if not token:
+            token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
 
         if scope == "resource_group" and resource_group:
             url = (
@@ -289,7 +298,7 @@ def _query_locks(resource_group: Optional[str], sub_id: str, scope: str) -> List
         return []
 
 
-def _query_cosmos_children(resources: List[Dict], sub_id: str) -> List[Dict]:
+def _query_cosmos_children(resources: List[Dict], sub_id: str, token: Optional[str] = None) -> List[Dict]:
     """
     Query Cosmos DB SQL databases and containers via the ARM REST API.
 
@@ -297,6 +306,7 @@ def _query_cosmos_children(resources: List[Dict], sub_id: str) -> List[Dict]:
     appear in the base query and get falsely flagged as missing. We enumerate them
     from each Cosmos account already found, naming them '{account}/{db}' and
     '{account}/{db}/{container}' to match the Bicep resource naming.
+    A shared token may be passed in to avoid re-auth.
     """
     import json as _json
     import urllib.request
@@ -310,8 +320,8 @@ def _query_cosmos_children(resources: List[Dict], sub_id: str) -> List[Dict]:
         return []
 
     try:
-        credential = DefaultAzureCredential()
-        token = credential.get_token("https://management.azure.com/.default").token
+        if not token:
+            token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
     except Exception as e:
         logger.warning(f"Could not acquire token for Cosmos query: {e}")
         return []
