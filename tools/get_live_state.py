@@ -116,30 +116,19 @@ def get_live_state(
     client = ResourceGraphClient(credential)
 
     # Build KQL query based on scope
-    # Include locks (Microsoft.Authorization/locks) which are not in Resources by default
+    # Note: Resource Graph doesn't have a separate AuthorizationResources table
+    # Locks are queried through the regular Resources table filtered by type
     if scope == "resource_group":
         if not resource_group:
             raise ValueError("resource_group required for resource_group scope")
-        # Query resources + locks in specific RG
-        kql_query = f"""
-        (Resources | where resourceGroup =~ '{resource_group}')
-        union
-        (AuthorizationResources | where resourceGroup =~ '{resource_group}' and type =~ 'Microsoft.Authorization/locks')
-        """
+        # Query resources and locks in specific RG
+        kql_query = f"Resources | where resourceGroup =~ '{resource_group}' or (type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}')"
     else:
-        # Query all resources + locks in subscription
+        # Query all resources and locks in subscription
         if resource_group:
-            kql_query = f"""
-            (Resources | where resourceGroup =~ '{resource_group}')
-            union
-            (AuthorizationResources | where resourceGroup =~ '{resource_group}' and type =~ 'Microsoft.Authorization/locks')
-            """
+            kql_query = f"Resources | where resourceGroup =~ '{resource_group}' or (type =~ 'Microsoft.Authorization/locks' and resourceGroup =~ '{resource_group}')"
         else:
-            kql_query = """
-            (Resources)
-            union
-            (AuthorizationResources | where type =~ 'Microsoft.Authorization/locks')
-            """
+            kql_query = "Resources | union (Resources | where type =~ 'Microsoft.Authorization/locks')"
 
     logger.info(f"Querying Azure Resource Graph: {kql_query}")
     start_time = time.time()
