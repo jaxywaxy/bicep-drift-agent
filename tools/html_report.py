@@ -73,13 +73,20 @@ def generate_html_report(
         change_origin = drift.get("change_origin", {})
         origin_badge = _get_origin_badge(change_origin)
 
+        # Get lifecycle info
+        lifecycle = drift.get("lifecycle", {})
+        lifecycle_html = _get_lifecycle_html(lifecycle)
+
         drift_rows += f"""
         <tr>
             <td><strong>{html.escape(drift['type'])}</strong></td>
             <td><code>{html.escape(drift['name'])}</code></td>
             <td>{type_badge}</td>
             <td>{origin_badge}</td>
-            <td><pre>{html.escape(details)}</pre></td>
+            <td>
+                <pre>{html.escape(details)}</pre>
+                {lifecycle_html}
+            </td>
         </tr>
         """
 
@@ -389,6 +396,101 @@ def generate_html_report(
                 background: #f5f5f5;
                 color: #666;
                 border: 1px solid #ccc;
+            }}
+
+            .lifecycle-timeline {{
+                margin-top: 15px;
+                padding: 12px;
+                background: #fafafa;
+                border-left: 4px solid #1976d2;
+                border-radius: 4px;
+                font-size: 13px;
+            }}
+
+            .lifecycle-header {{
+                margin-bottom: 10px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #ddd;
+                font-weight: bold;
+            }}
+
+            .lifecycle-event {{
+                margin-bottom: 10px;
+                padding: 8px;
+                background: white;
+                border-left: 3px solid #999;
+                display: flex;
+                gap: 12px;
+                align-items: flex-start;
+                flex-wrap: wrap;
+            }}
+
+            .lifecycle-event.timeline-create {{
+                border-left-color: #4caf50;
+                background: #f1f8e9;
+            }}
+
+            .lifecycle-event.timeline-delete {{
+                border-left-color: #f44336;
+                background: #ffebee;
+            }}
+
+            .lifecycle-event.timeline-modify {{
+                border-left-color: #ff9800;
+                background: #fff3e0;
+            }}
+
+            .timeline-event-time {{
+                font-weight: bold;
+                color: #1976d2;
+                min-width: 80px;
+            }}
+
+            .timeline-event-op {{
+                background: #e0e0e0;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-weight: bold;
+                font-size: 11px;
+                text-transform: uppercase;
+                min-width: 60px;
+                text-align: center;
+            }}
+
+            .timeline-event-actor {{
+                color: #555;
+                font-family: monospace;
+                font-size: 12px;
+                flex: 1;
+                min-width: 150px;
+            }}
+
+            .timeline-event-method {{
+                color: #888;
+                font-size: 12px;
+            }}
+
+            .timeline-event-reason {{
+                width: 100%;
+                color: #666;
+                padding-top: 4px;
+                border-top: 1px solid #eee;
+                font-style: italic;
+            }}
+
+            .lifecycle-deleted {{
+                margin-top: 10px;
+                padding: 10px;
+                background: #ffebee;
+                border: 1px solid #f44336;
+                border-radius: 4px;
+                color: #c62828;
+            }}
+
+            .lifecycle-empty {{
+                padding: 10px;
+                color: #999;
+                font-style: italic;
             }}
 
             pre {{
@@ -762,6 +864,70 @@ def _get_origin_badge(change_origin: dict) -> str:
 
     # Unknown
     return '<span class="badge origin-unknown">Unknown</span>'
+
+
+def _get_lifecycle_html(lifecycle: dict) -> str:
+    """Get HTML timeline for resource lifecycle events."""
+    if not lifecycle or not lifecycle.get('events'):
+        return '<div class="lifecycle-empty">No activity log history found</div>'
+
+    events = lifecycle.get('events', [])
+    if not events:
+        return '<div class="lifecycle-empty">No activity log history found</div>'
+
+    # Create timeline HTML
+    timeline_html = '<div class="lifecycle-timeline">'
+    timeline_html += '<div class="lifecycle-header">'
+    timeline_html += f'<strong>Resource Lifecycle ({len(events)} event{"s" if len(events) != 1 else ""})</strong>'
+
+    # Show creation info
+    created_at = lifecycle.get('created_at')
+    created_by = lifecycle.get('created_by')
+    if created_at:
+        created_dt = created_at.split('T')[0] if isinstance(created_at, str) else 'Unknown'
+        timeline_html += f'<br><small>Created: {created_dt} by {created_by or "Unknown"}</small>'
+
+    timeline_html += '</div>'
+
+    # Timeline events (in reverse chronological order for display)
+    for event in reversed(events):
+        timestamp = event.get('timestamp', 'Unknown')
+        operation = event.get('operation', 'unknown').upper()
+        actor = event.get('actor', 'Unknown')
+        method = event.get('method', 'Unknown')
+        reason = event.get('reason', '')
+
+        # Format timestamp
+        if isinstance(timestamp, str):
+            ts_display = timestamp.split('T')[0] if 'T' in timestamp else timestamp
+        else:
+            ts_display = 'Unknown'
+
+        # Color code by operation type
+        op_color = 'timeline-create' if operation == 'CREATE' else \
+                   'timeline-delete' if operation == 'DELETE' else \
+                   'timeline-modify' if 'MODIFY' in operation else \
+                   'timeline-event'
+
+        timeline_html += f'''
+        <div class="timeline-event {op_color}">
+            <div class="timeline-event-time">{ts_display}</div>
+            <div class="timeline-event-op">{operation}</div>
+            <div class="timeline-event-actor">{actor}</div>
+            <div class="timeline-event-method">{method}</div>
+            {f'<div class="timeline-event-reason">{reason}</div>' if reason else ''}
+        </div>
+        '''
+
+    # Show deletion info if deleted
+    deleted_at = lifecycle.get('deleted_at')
+    deleted_by = lifecycle.get('deleted_by')
+    if deleted_at:
+        deleted_dt = deleted_at.split('T')[0] if isinstance(deleted_at, str) else 'Unknown'
+        timeline_html += f'<div class="lifecycle-deleted"><strong>⚠️ Deleted: {deleted_dt} by {deleted_by or "Unknown"}</strong></div>'
+
+    timeline_html += '</div>'
+    return timeline_html
 
 
 def _render_drift_section(total: int, drift_rows: str) -> str:
