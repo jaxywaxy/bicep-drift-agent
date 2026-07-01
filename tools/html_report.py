@@ -81,6 +81,11 @@ def generate_html_report(
         # Build recommendations section
         recommendation = drift.get("recommendation", "")
         if recommendation:
+            # Process recommendation text to handle long strings better
+            # Replace newlines with <br> for proper display, escape HTML first
+            rec_text = html.escape(recommendation)
+            rec_text = rec_text.replace('\n', '<br>')
+
             recommendations_html += f"""
         <div class="recommendation-item">
             <div class="recommendation-header">
@@ -89,7 +94,7 @@ def generate_html_report(
                 {type_badge}
             </div>
             <div class="recommendation-resource">{html.escape(drift['type'])}</div>
-            <div class="recommendation-text">{html.escape(recommendation)}</div>
+            <div class="recommendation-text">{rec_text}</div>
         </div>
         """
 
@@ -371,17 +376,27 @@ def generate_html_report(
                 border: 1px solid #e0e7ff;
                 border-left: 4px solid #0066cc;
                 border-radius: 6px;
-                padding: 16px;
-                margin-bottom: 16px;
+                padding: 18px;
+                margin-bottom: 18px;
+                display: flex;
+                flex-direction: column;
             }}
 
             .recommendation-header {{
                 display: flex;
-                gap: 10px;
-                align-items: center;
-                margin-bottom: 8px;
+                gap: 12px;
+                align-items: flex-start;
+                margin-bottom: 12px;
                 font-weight: 600;
                 color: #333;
+                flex-wrap: wrap;
+                word-break: break-word;
+            }}
+
+            .recommendation-header strong {{
+                flex: 1;
+                min-width: 200px;
+                word-break: break-word;
             }}
 
             .recommendation-number {{
@@ -407,11 +422,16 @@ def generate_html_report(
 
             .recommendation-text {{
                 background: white;
-                padding: 12px;
+                padding: 14px;
                 border-radius: 4px;
-                line-height: 1.6;
+                line-height: 1.8;
                 color: #333;
                 font-size: 14px;
+                word-break: break-word;
+                overflow-wrap: break-word;
+                white-space: normal;
+                max-width: 100%;
+                overflow: visible;
             }}
 
             .matched-item {{
@@ -555,6 +575,28 @@ def generate_html_report(
                 }}
 
                 pre {{
+                    font-size: 10px;
+                }}
+
+                .recommendation-item {{
+                    padding: 12px;
+                    margin-bottom: 12px;
+                }}
+
+                .recommendation-header {{
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 8px;
+                }}
+
+                .recommendation-text {{
+                    padding: 10px;
+                    font-size: 13px;
+                }}
+
+                .recommendation-number {{
+                    width: 24px;
+                    height: 24px;
                     font-size: 10px;
                 }}
             }}
