@@ -2,5 +2,7 @@ anthropic==0.111.0
 azure-identity==1.25.3
 azure-mgmt-resource==26.0.0
 azure-mgmt-resourcegraph==8.0.1
+azure-mgmt-monitor==7.2.0
+azure-monitor-query==1.5.0
 python-dotenv==1.2.2
 pyyaml==6.0.3
