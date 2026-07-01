@@ -106,7 +106,8 @@ ignore:
 
   # API versions (metadata, not functional)
   - resource_type: "Microsoft.RecoveryServices/vaults"
-    reason: "API version differences are metadata, not functional drift"
+    drift_type: "property_drift"
+    reason: "API version differences are metadata - property drift only; a deleted/added vault is still real drift"
 
   # Recovery Services child resources with unresolvable parameter expressions
   - resource_type: "Microsoft.RecoveryServices/vaults/replicationFabrics"
@@ -145,10 +146,12 @@ ignore:
   # Optional resource properties (not defined in Bicep)
   # These appear in Azure but weren't explicitly set in template
   - resource_type: "Microsoft.RecoveryServices/vaults"
-    reason: "Optional properties (sku fields, tags added by Azure) ignored if not in Bicep"
+    drift_type: "property_drift"
+    reason: "Optional properties (sku fields, tags added by Azure) ignored if not in Bicep - property drift only"
 
   - resource_type: "Microsoft.ContainerService/managedClusters"
-    reason: "AKS cluster properties may have runtime-resolved values"
+    drift_type: "property_drift"
+    reason: "AKS cluster properties may have runtime-resolved values - property drift only; a deleted/added cluster is still real drift"
 
   # API Management auto-managed resources
   - resource_type: "Microsoft.ApiManagement/service/groups"
@@ -179,7 +182,8 @@ ignore:
   # Child resources and namespaces cannot be matched/compared due to uniqueString()
   # They are deployed correctly but drift detection has matching/property visibility issues
   - resource_type: "Microsoft.EventHub/namespaces"
-    reason: "Namespace properties not fully exposed by Azure API; child resources cannot be matched due to unresolved parameter names"
+    drift_type: "property_drift"
+    reason: "Namespace properties not fully exposed by Azure API - property drift only; a deleted/added namespace is still real drift"
 
   - resource_type: "Microsoft.EventHub/namespaces/eventhubs"
     reason: "Child resource with parent name containing unresolved uniqueString() - deployed correctly but cannot be matched"
