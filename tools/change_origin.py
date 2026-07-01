@@ -181,8 +181,25 @@ def select_relevant_activity(
         return (op.endswith("/write") or "modify" in op or "update" in op
                 or "remediat" in op) and not is_delete(entry)
 
+    def latest(entries):
+        return max(entries, key=lambda e: str(e.get("timestamp") or "")) if entries else None
+
     if is_missing:
-        candidates = [e for e in activity_logs if is_delete(e)]
+        deletes = [e for e in activity_logs if is_delete(e)]
+        writes = [e for e in activity_logs if is_write(e)]
+        latest_delete = latest(deletes)
+        latest_write = latest(writes)
+
+        # Stale-delete guard: names are deterministic (uniqueString is stable per RG),
+        # so a resource deleted and later re-created shares the same name and both
+        # events show up. If a create/write is NEWER than the delete, the resource
+        # was recreated and is NOT actually gone - don't report it as deleted.
+        if latest_delete and latest_write:
+            if str(latest_write.get("timestamp") or "") > str(latest_delete.get("timestamp") or ""):
+                return [latest_write]
+        if latest_delete:
+            return [latest_delete]
+        candidates = writes
     else:
         candidates = [e for e in activity_logs if is_write(e)]
 

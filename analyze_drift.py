@@ -84,6 +84,30 @@ def _find_deployed_resource_name(resource_type: str, bicep_name: str, live_resou
     return ""
 
 
+def _print_drift_summary(drifts):
+    """Emit the grep-able drift summary consumed by the CI workflow.
+
+    Bypasses the logger so the workflow can grep these exact lines. Must be
+    called with the FINAL (ignore-pattern-filtered) drift list so the summary
+    matches the HTML/JSON report rather than the raw Phase 1 output.
+    """
+    if not drifts:
+        return
+    print("\n" + "=" * 60)
+    for drift in drifts:
+        drift_type = drift.get("drift_type", "unknown")
+        resource_type = drift.get("type", "")
+        resource_name = drift.get("name", "")
+        if drift_type == "missing_in_azure":
+            print(f"[MISSING] {resource_type}/{resource_name} is in Bicep but not deployed")
+        elif drift_type == "extra_in_azure":
+            print(f"[EXTRA]   {resource_type}/{resource_name} is deployed but not in Bicep")
+        elif drift_type == "property_drift":
+            changes = list(drift.get("details", {}).get("changed_properties", {}).keys())
+            print(f"[DRIFT]   {resource_type}/{resource_name} — properties differ: {', '.join(changes)}")
+    print("=" * 60 + "\n")
+
+
 def discover_resource_groups():
     """Query Azure for all resource groups in the current subscription."""
     try:
@@ -134,27 +158,10 @@ def main():
             logger.info(f"Running drift check for resource group: {rg}")
             run_phase1(bicep_file, rg)
 
-        # Output drift summary for workflow consolidation (must bypass logger to be grep-able)
-        report_file = Path(f"reports/{resource_group}-drift.json")
-        if report_file.exists():
-            with open(report_file) as f:
-                report_data = json.load(f)
-            drifts = report_data.get("drifts", [])
-            if drifts:
-                print("\n" + "="*60)
-                for drift in drifts:
-                    drift_type = drift.get("drift_type", "unknown")
-                    resource_type = drift.get("type", "")
-                    resource_name = drift.get("name", "")
-
-                    if drift_type == "missing_in_azure":
-                        print(f"[MISSING] {resource_type}/{resource_name} is in Bicep but not deployed")
-                    elif drift_type == "extra_in_azure":
-                        print(f"[EXTRA]   {resource_type}/{resource_name} is deployed but not in Bicep")
-                    elif drift_type == "property_drift":
-                        changes = list(drift.get("details", {}).get("changed_properties", {}).keys())
-                        print(f"[DRIFT]   {resource_type}/{resource_name} — properties differ: {', '.join(changes)}")
-                print("="*60 + "\n")
+        # NOTE: The grep-able drift summary for workflow consolidation is emitted
+        # AFTER Phase 2 (see _print_drift_summary below), so it reflects the
+        # ignore-pattern-filtered drift set and matches the HTML/JSON report.
+        # Emitting it here (pre-filter) would show ignored/false-positive drifts.
     except Exception as e:
         logger.error(f"Error in Phase 1: {e}", exc_info=True)
         sys.exit(1)
@@ -279,6 +286,10 @@ def main():
                 report_data.get("drifts", []),
                 report_data.get("smart_matched", [])
             )
+
+        # Emit the grep-able summary from the FILTERED drift set so the CI workflow
+        # summary matches the HTML/JSON report (ignored drifts are excluded).
+        _print_drift_summary(report_data.get("drifts", []))
 
         # Perform property-level drift detection
         logger.info("Detecting property-level drift (comparing configurations)...")
