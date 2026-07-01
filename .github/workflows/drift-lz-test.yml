@@ -7,6 +7,17 @@ on:
   schedule:
     - cron: '0 * * * *'  # Every hour for testing
   workflow_dispatch:
+    inputs:
+      subscription_id:
+        description: 'Azure subscription ID (defaults to config file subscription)'
+        required: false
+        default: ''
+        type: string
+      resource_group:
+        description: 'Resource group name (defaults to config file resource group)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   id-token: write
@@ -17,4 +28,6 @@ jobs:
     uses: ./.github/workflows/drift-check-lz-hybrid.yml
     with:
       landing_zone: test-resources
+      override_subscription: ${{ github.event.inputs.subscription_id }}
+      override_resource_group: ${{ github.event.inputs.resource_group }}
     secrets: inherit
