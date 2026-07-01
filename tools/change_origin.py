@@ -148,6 +148,56 @@ class ChangeOriginInfo:
         }
 
 
+def select_relevant_activity(
+    activity_logs: Optional[List[Dict[str, Any]]],
+    drift_type: str,
+) -> List[Dict[str, Any]]:
+    """
+    Narrow a resource's Activity Log entries down to the ones that explain THIS drift.
+
+    A resource group query returns every event for the resource type. We only want
+    the operation that actually caused the observed drift:
+      - missing_in_azure  -> the DELETE that removed the resource
+      - property/modified -> the WRITE/action that changed it (ignore reads/list/deletes)
+
+    Returns the single most-recent relevant entry (as a 1-item list), or [] if none
+    match. Entries are matched on the operation name suffix.
+    """
+    if not activity_logs:
+        return []
+
+    drift_type = (drift_type or "").lower()
+    is_missing = "missing" in drift_type or "delete" in drift_type
+
+    def op_of(entry: Dict[str, Any]) -> str:
+        return (entry.get("operation") or "").lower()
+
+    def is_delete(entry: Dict[str, Any]) -> bool:
+        return op_of(entry).endswith("/delete") or op_of(entry).endswith("delete")
+
+    def is_write(entry: Dict[str, Any]) -> bool:
+        op = op_of(entry)
+        # writes/updates that mutate config; exclude reads, lists, and deletes
+        return (op.endswith("/write") or "modify" in op or "update" in op
+                or "remediat" in op) and not is_delete(entry)
+
+    if is_missing:
+        candidates = [e for e in activity_logs if is_delete(e)]
+    else:
+        candidates = [e for e in activity_logs if is_write(e)]
+
+    # Fallback: if nothing matched the expected operation, keep any non-read event
+    if not candidates:
+        candidates = [e for e in activity_logs if "read" not in op_of(e) and "list" not in op_of(e)]
+
+    if not candidates:
+        return []
+
+    # Most recent first
+    candidates.sort(key=lambda e: str(e.get("timestamp") or ""), reverse=True)
+    return [candidates[0]]
+
+
 def classify_change_origin(
     activity_logs: Optional[List[Dict[str, Any]]]
 ) -> ChangeOriginInfo:

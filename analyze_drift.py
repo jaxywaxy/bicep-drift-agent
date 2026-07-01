@@ -41,6 +41,7 @@ from tools.change_origin import (
     format_change_origin_for_display,
     build_resource_lifecycle,
     format_lifecycle_for_display,
+    select_relevant_activity,
 )
 
 logger = get_logger(__name__)
@@ -416,15 +417,24 @@ def main():
                         resource_group=resource_group,
                     )
 
-                    # Build complete resource lifecycle
-                    lifecycle = build_resource_lifecycle(resource_id, activity_logs)
+                    # Narrow the RG-wide events down to the ONE operation that explains
+                    # this drift (delete for missing, write/update for modified).
+                    relevant_logs = select_relevant_activity(
+                        activity_logs, drift.get("drift_type", "")
+                    )
+
+                    # Build lifecycle + origin from the relevant event(s) only
+                    lifecycle = build_resource_lifecycle(resource_id, relevant_logs)
                     drift["lifecycle"] = lifecycle.to_dict()
 
-                    # Also include latest change origin for compatibility
-                    origin_info = classify_change_origin(activity_logs)
+                    origin_info = classify_change_origin(relevant_logs)
                     drift["change_origin"] = origin_info.to_dict()
 
-                    logger.debug(f"  {resource_name}: {len(lifecycle.events)} event(s), latest: {origin_info.origin.value}")
+                    logger.info(
+                        f"  {resource_name}: {len(activity_logs or [])} RG event(s) -> "
+                        f"{len(relevant_logs)} relevant; "
+                        f"origin={origin_info.origin.value}, by={origin_info.changed_by}"
+                    )
 
                 except Exception as e:
                     logger.warning(f"Failed to build lifecycle for {drift.get('name')}: {str(e)[:100]}")
