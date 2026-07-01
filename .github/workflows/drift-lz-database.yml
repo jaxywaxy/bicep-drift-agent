@@ -14,7 +14,7 @@ on:
         default: ''
         type: string
       resource_group:
-        description: 'Resource group name (defaults to config file resource group)'
+        description: 'Resource group name, or "*" to test all RGs in subscription'
         required: false
         default: ''
         type: string
