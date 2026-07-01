@@ -2,6 +2,7 @@
 Generate HTML reports from drift analysis results.
 """
 
+import re
 import json
 import html
 import logging
@@ -39,6 +40,7 @@ def generate_html_report(
         raise
 
     drifts = data.get("drifts", [])
+    agent_analysis = data.get("agent_analysis", None)
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])
@@ -235,6 +237,55 @@ def generate_html_report(
                 margin-bottom: 15px;
                 padding-bottom: 10px;
                 border-bottom: 2px solid #f0f0f0;
+            }}
+
+            .section.agent-analysis {{
+                background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
+                border-left: 4px solid #0066cc;
+            }}
+
+            .analysis-content {{
+                background: white;
+                padding: 16px;
+                border-radius: 6px;
+                line-height: 1.8;
+                margin-top: 12px;
+            }}
+
+            .analysis-content p {{
+                margin-bottom: 12px;
+                color: #333;
+            }}
+
+            .analysis-content h2 {{
+                font-size: 18px;
+                font-weight: 600;
+                color: #333;
+                margin-top: 16px;
+                margin-bottom: 8px;
+                border: none;
+                padding-bottom: 0;
+            }}
+
+            .analysis-content h3 {{
+                font-size: 16px;
+                font-weight: 600;
+                color: #555;
+                margin-top: 14px;
+                margin-bottom: 8px;
+            }}
+
+            .analysis-content h4 {{
+                font-size: 14px;
+                font-weight: 600;
+                color: #666;
+                margin-top: 12px;
+                margin-bottom: 6px;
+            }}
+
+            .analysis-content strong {{
+                color: #0066cc;
+                font-weight: 700;
             }}
 
             .no-drift {{
@@ -550,6 +601,8 @@ def generate_html_report(
                 </div>
             </div>
 
+            {_render_agent_analysis_section(agent_analysis)}
+
             {_render_property_drift_section(data)}
 
             <div class="section">
@@ -574,6 +627,34 @@ def generate_html_report(
         f.write(html_content)
 
     logger.info(f"HTML report generated: {output_file}")
+
+
+def _render_agent_analysis_section(agent_analysis: str) -> str:
+    """Render comprehensive agent analysis section."""
+    if not agent_analysis:
+        return ""
+
+    # Convert markdown-style formatting to HTML
+    analysis_html = html.escape(agent_analysis)
+    # Convert bold: **text** → <strong>text</strong>
+    analysis_html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', analysis_html)
+    # Convert headers: # Header → <h3>Header</h3>
+    analysis_html = re.sub(r'^### (.+)$', r'<h4>\1</h4>', analysis_html, flags=re.MULTILINE)
+    analysis_html = re.sub(r'^## (.+)$', r'<h3>\1</h3>', analysis_html, flags=re.MULTILINE)
+    analysis_html = re.sub(r'^# (.+)$', r'<h2>\1</h2>', analysis_html, flags=re.MULTILINE)
+    # Convert line breaks to proper paragraphs
+    analysis_html = re.sub(r'\n\n+', '</p><p>', analysis_html)
+    analysis_html = f"<p>{analysis_html}</p>"
+
+    return f"""
+            <div class="section agent-analysis">
+                <h2>🔍 Comprehensive Drift Analysis</h2>
+                <p>Claude AI's analysis of drift patterns, root causes, and remediation strategy:</p>
+                <div class="analysis-content">
+                    {analysis_html}
+                </div>
+            </div>
+            """
 
 
 def _get_type_badge(drift_type: str) -> str:

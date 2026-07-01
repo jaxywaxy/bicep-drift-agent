@@ -316,11 +316,14 @@ def main():
 
         # Get analysis from Claude
         logger.info("Calling Claude API for drift analysis...")
+        agent_analysis = None
         try:
-            analysis = agent.analyze_drift(drift_report)
+            agent_analysis = agent.analyze_drift(drift_report)
             logger.info("✓ Claude analysis completed")
             logger.info("DRIFT ANALYSIS")
-            logger.info(analysis)
+            logger.info(agent_analysis)
+            # Add comprehensive analysis to report
+            report_data["agent_analysis"] = agent_analysis
         except Exception as e:
             logger.error(f"✗ Claude analysis failed: {type(e).__name__}: {str(e)[:200]}", exc_info=True)
             print(f"[ERROR] Claude API call failed: {type(e).__name__}")
@@ -372,13 +375,16 @@ def main():
             logger.info("No drifts to analyze for recommendations")
 
         # Save analysis
-        analysis_file = Path(f"reports/{resource_group}-analysis.md")
-        with open(analysis_file, "w") as f:
-            f.write(f"# Drift Analysis: {resource_group}\n\n")
-            f.write(f"**Bicep File:** {bicep_file}\n\n")
-            f.write(analysis)
-
-        logger.info(f"Analysis saved to: {analysis_file}")
+        if agent_analysis:
+            analysis_file = Path(f"reports/{resource_group}-analysis.md")
+            analysis_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(analysis_file, "w") as f:
+                f.write(f"# Drift Analysis: {resource_group}\n\n")
+                f.write(f"**Bicep File:** {bicep_file}\n\n")
+                f.write(agent_analysis)
+            logger.info(f"Analysis saved to: {analysis_file}")
+        else:
+            logger.warning("No agent analysis generated")
 
         # Interactive follow-up (only in interactive mode)
         if os.isatty(0):
