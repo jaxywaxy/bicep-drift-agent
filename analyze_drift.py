@@ -36,7 +36,12 @@ from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 from tools.azure_resource_graph import ResourceGraphClient
 from tools.activity_log import get_change_history
-from tools.change_origin import classify_change_origin, format_change_origin_for_display
+from tools.change_origin import (
+    classify_change_origin,
+    format_change_origin_for_display,
+    build_resource_lifecycle,
+    format_lifecycle_for_display,
+)
 
 logger = get_logger(__name__)
 
@@ -331,12 +336,12 @@ def main():
             print(f"[ERROR] Claude API call failed: {type(e).__name__}")
             raise
 
-        # Phase 3: Detect change origin (Policy-enforced vs Manual)
+        # Phase 3: Detect change origin and build resource lifecycle
         drifts_to_analyze = report_data.get("drifts", [])
         logger.info(f"Found {len(drifts_to_analyze)} drift(s) to generate recommendations for")
 
         if len(drifts_to_analyze) > 0:
-            logger.info("Phase 3: Detecting change origin from Activity Log...")
+            logger.info("Phase 3: Building resource lifecycle from Activity Log...")
             subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
 
             for drift in drifts_to_analyze:
@@ -348,18 +353,32 @@ def main():
                     # Extract resource group from context (needed for resource ID)
                     resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/').lower()}/{resource_name}"
 
-                    # Query Activity Log
+                    # Query Activity Log for all changes
                     activity_logs = get_change_history(resource_id, subscription_id, days=30)
 
-                    # Classify origin
+                    # Build complete resource lifecycle
+                    lifecycle = build_resource_lifecycle(resource_id, activity_logs)
+                    drift["lifecycle"] = lifecycle.to_dict()
+
+                    # Also include latest change origin for compatibility
                     origin_info = classify_change_origin(activity_logs)
                     drift["change_origin"] = origin_info.to_dict()
 
-                    logger.debug(f"  {resource_name}: {origin_info.origin.value} ({origin_info.reason})")
+                    logger.debug(f"  {resource_name}: {len(lifecycle.events)} event(s), latest: {origin_info.origin.value}")
 
                 except Exception as e:
-                    logger.warning(f"Failed to detect change origin for {drift.get('name')}: {str(e)[:100]}")
-                    # Fall back to unknown origin
+                    logger.warning(f"Failed to build lifecycle for {drift.get('name')}: {str(e)[:100]}")
+                    # Fall back to minimal data
+                    drift["lifecycle"] = {
+                        'resource_id': resource_id,
+                        'events': [],
+                        'created_at': None,
+                        'created_by': None,
+                        'deleted_at': None,
+                        'deleted_by': None,
+                        'last_modified_at': None,
+                        'last_modified_by': None,
+                    }
                     drift["change_origin"] = {
                         'origin': 'unknown',
                         'category': 'unknown',
@@ -368,7 +387,7 @@ def main():
                         'reason': f"Could not query activity log: {str(e)[:50]}",
                     }
 
-            logger.info("Change origin detection completed")
+            logger.info("Resource lifecycle detection completed")
 
         # Generate per-drift recommendations
         logger.info("Generating recommendations via Claude...")
