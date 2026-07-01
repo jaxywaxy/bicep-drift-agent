@@ -212,21 +212,14 @@ def main():
         logger.info("✓ Phase 2: Analyzing drift with Claude...")
 
     try:
-        if not api_key:
-            logger.info("Skipping Phase 2 - no API key available")
-            # Still generate HTML report with Phase 1 results
-            html_file = Path(f"reports/{resource_group}-drift.html")
-            logger.info(f"Generating HTML report with Phase 1 data to {html_file}...")
-            generate_html_report(
-                drift_json_file=Path(f"reports/{resource_group}-drift.json"),
-                output_file=html_file,
-                resource_group=resource_group,
-                bicep_file=bicep_file,
-            )
-            logger.info(f"HTML report saved to: {html_file}")
-            return
-
-        agent = DriftAgent(api_key=api_key)
+        # Claude is optional. The deterministic drift processing (smart matching,
+        # ignore-pattern filtering, property-level detection, lifecycle) ALWAYS runs
+        # so the saved report/HTML match the filtered summary. Only the Claude-powered
+        # steps (analysis narrative, per-drift recommendations, follow-up) are gated
+        # on the API key.
+        agent = DriftAgent(api_key=api_key) if api_key else None
+        if not agent:
+            logger.info("No ANTHROPIC_API_KEY - running drift filtering/detection without Claude analysis")
 
         # Load the drift report from Phase 1
         report_file = Path(f"reports/{resource_group}-drift.json")
@@ -370,20 +363,21 @@ def main():
             total_modified=len([d for d in drifts if "modified" in d.drift_type]),
         )
 
-        # Get analysis from Claude
-        logger.info("Calling Claude API for drift analysis...")
+        # Get analysis from Claude (only when a key is available)
         agent_analysis = None
-        try:
-            agent_analysis = agent.analyze_drift(drift_report)
-            logger.info("✓ Claude analysis completed")
-            logger.info("DRIFT ANALYSIS")
-            logger.info(agent_analysis)
-            # Add comprehensive analysis to report
-            report_data["agent_analysis"] = agent_analysis
-        except Exception as e:
-            logger.error(f"✗ Claude analysis failed: {type(e).__name__}: {str(e)[:200]}", exc_info=True)
-            print(f"[ERROR] Claude API call failed: {type(e).__name__}")
-            raise
+        if agent:
+            logger.info("Calling Claude API for drift analysis...")
+            try:
+                agent_analysis = agent.analyze_drift(drift_report)
+                logger.info("✓ Claude analysis completed")
+                logger.info("DRIFT ANALYSIS")
+                logger.info(agent_analysis)
+                # Add comprehensive analysis to report
+                report_data["agent_analysis"] = agent_analysis
+            except Exception as e:
+                logger.error(f"✗ Claude analysis failed: {type(e).__name__}: {str(e)[:200]}", exc_info=True)
+                print(f"[ERROR] Claude API call failed: {type(e).__name__}")
+                raise
 
         # Phase 3: Detect change origin and build resource lifecycle
         drifts_to_analyze = report_data.get("drifts", [])
@@ -470,11 +464,10 @@ def main():
 
             logger.info("Resource lifecycle detection completed")
 
-        # Generate per-drift recommendations
-        logger.info("Generating recommendations via Claude...")
-        recommendations_count = 0
-
-        if len(drifts_to_analyze) > 0:
+        # Generate per-drift recommendations (only when a key is available)
+        if agent and len(drifts_to_analyze) > 0:
+            logger.info("Generating recommendations via Claude...")
+            recommendations_count = 0
             for i, drift in enumerate(drifts_to_analyze, 1):
                 try:
                     drift_name = drift.get("name", "unknown")
@@ -495,22 +488,18 @@ def main():
                     drift["recommendation"] = f"Could not generate recommendation: {str(e)[:100]}"
 
             logger.info(f"Generated recommendations for {recommendations_count}/{len(drifts_to_analyze)} drifts")
+        elif not agent:
+            logger.info("Skipping Claude recommendations (no API key)")
 
-            # Update JSON report with recommendations
-            try:
-                with open(report_file, "w") as f:
-                    json.dump(report_data, f, indent=2, default=str)
-                logger.info(f"Saved recommendations to JSON: {report_file}")
-
-                # Verify recommendations are in the file
-                with open(report_file) as f:
-                    verify_data = json.load(f)
-                recs_verified = sum(1 for d in verify_data.get("drifts", []) if d.get("recommendation"))
-                logger.info(f"Verified {recs_verified} recommendations in saved JSON file")
-            except Exception as e:
-                logger.warning(f"Failed to save recommendations: {e}", exc_info=True)
-        else:
-            logger.info("No drifts to analyze for recommendations")
+        # ALWAYS persist the processed report (filtered drifts + property_drifts +
+        # lifecycle, and recommendations if generated) so the HTML report - which reads
+        # this JSON file - matches the filtered summary regardless of the API key.
+        try:
+            with open(report_file, "w") as f:
+                json.dump(report_data, f, indent=2, default=str)
+            logger.info(f"Saved processed drift report to JSON: {report_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save processed report: {e}", exc_info=True)
 
         # Save analysis
         if agent_analysis:
@@ -524,8 +513,8 @@ def main():
         else:
             logger.warning("No agent analysis generated")
 
-        # Interactive follow-up (only in interactive mode)
-        if os.isatty(0):
+        # Interactive follow-up (only in interactive mode, with a Claude agent)
+        if agent and os.isatty(0):
             logger.info("Interactive mode: Ask Claude follow-up questions (or 'quit' to exit)")
             while True:
                 question = input("You: ").strip()
