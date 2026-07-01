@@ -1,0 +1,20 @@
+name: Database Testing Drift Check
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour for testing
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  drift-check:
+    uses: ./.github/workflows/drift-check-lz-hybrid.yml
+    with:
+      landing_zone: database-testing
+    secrets: inherit

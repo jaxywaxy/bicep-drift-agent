@@ -23,6 +23,12 @@ landing_zones:
     schedule: '0 * * * *'
     workflow: drift-lz-test.yml
 
+  database-testing:
+    repo: jaxywaxy/drift-test-resources
+    config_path: .github/drift-lz-database-config.yml
+    schedule: '0 * * * *'
+    workflow: drift-lz-database.yml
+
   frontend:
     repo: myorg/frontend-bicep
     config_path: .github/drift-lz-config.yml
