@@ -5,6 +5,7 @@ Phase 2 entry point: Analyze drift using Claude AI.
 
 Usage:
     python analyze_drift.py ./path/to/main.bicep your-resource-group
+    python analyze_drift.py ./path/to/main.bicep "*"  # Test all RGs in subscription
 
 This will:
 1. Run Phase 1 drift check
@@ -33,8 +34,22 @@ from tools.smart_matching import (
 from tools.property_drift import DriftDetector, PropertyExtractor
 from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
+from tools.azure_resource_graph import ResourceGraphClient
 
 logger = get_logger(__name__)
+
+
+def discover_resource_groups():
+    """Query Azure for all resource groups in the current subscription."""
+    try:
+        client = ResourceGraphClient()
+        query = "Resources | summarize by resourceGroup | project name = resourceGroup | distinct name"
+        results = client.query(query)
+        rgs = [result["name"] for result in results if result.get("name")]
+        return sorted(rgs)
+    except Exception as e:
+        logger.error(f"Failed to discover resource groups: {e}")
+        return []
 
 
 def main():
@@ -53,12 +68,26 @@ def main():
         sys.exit(1)
 
     logger.info("Bicep Drift Agent - Phase 1 + Phase 2")
-    logger.info(f"Processing: {bicep_file} (resource group: {resource_group})")
 
-    # Phase 1: Run drift check
+    # Handle wildcard resource group (discover all RGs in subscription)
+    if resource_group == "*":
+        logger.info(f"Processing: {bicep_file} (discovering all resource groups in subscription)")
+        discovered_rgs = discover_resource_groups()
+        if not discovered_rgs:
+            logger.error("No resource groups found in subscription")
+            sys.exit(1)
+        logger.info(f"Found {len(discovered_rgs)} resource group(s): {', '.join(discovered_rgs)}")
+        resource_groups_to_test = discovered_rgs
+    else:
+        logger.info(f"Processing: {bicep_file} (resource group: {resource_group})")
+        resource_groups_to_test = [resource_group]
+
+    # Phase 1: Run drift check for each resource group
     logger.info("Phase 1: Detecting drift...")
     try:
-        run_phase1(bicep_file, resource_group)
+        for rg in resource_groups_to_test:
+            logger.info(f"Running drift check for resource group: {rg}")
+            run_phase1(bicep_file, rg)
 
         # Output drift summary for workflow consolidation (must bypass logger to be grep-able)
         report_file = Path(f"reports/{resource_group}-drift.json")
@@ -85,7 +114,42 @@ def main():
         logger.error(f"Error in Phase 1: {e}", exc_info=True)
         sys.exit(1)
 
-    # Phase 2: Analyze with Claude (optional)
+    # Phase 2: Analyze with Claude (only for single resource group)
+    if len(resource_groups_to_test) > 1:
+        logger.info("✓ Wildcard mode: Skipping Phase 2 for multiple resource groups")
+        logger.info(f"Consolidating Phase 1 results for {len(resource_groups_to_test)} resource groups...")
+        # Output consolidated summary
+        print("\n" + "="*60)
+        print("WILDCARD RESULTS SUMMARY")
+        print("="*60)
+        total_drifts = 0
+        for rg in resource_groups_to_test:
+            report_file = Path(f"reports/{rg}-drift.json")
+            if report_file.exists():
+                with open(report_file) as f:
+                    report_data = json.load(f)
+                drifts = report_data.get("drifts", [])
+                print(f"\n{rg}: {len(drifts)} issue(s)")
+                total_drifts += len(drifts)
+                for drift in drifts[:3]:  # Show first 3 issues per RG
+                    drift_type = drift.get("drift_type", "unknown")
+                    resource_type = drift.get("type", "")
+                    resource_name = drift.get("name", "")
+                    if drift_type == "missing_in_azure":
+                        print(f"  [MISSING] {resource_type}/{resource_name}")
+                    elif drift_type == "extra_in_azure":
+                        print(f"  [EXTRA]   {resource_type}/{resource_name}")
+                    elif drift_type == "property_drift":
+                        print(f"  [DRIFT]   {resource_type}/{resource_name}")
+                if len(drifts) > 3:
+                    print(f"  ... and {len(drifts) - 3} more")
+        print(f"\nTOTAL ISSUES: {total_drifts}")
+        print("="*60 + "\n")
+        return
+
+    # Single RG mode - continue with Phase 2
+    resource_group = resource_groups_to_test[0]
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         logger.warning("⚠️  ANTHROPIC_API_KEY not set in environment")

@@ -7,6 +7,16 @@ on:
         type: string
         required: true
         description: 'Landing Zone name from lz-index.yml'
+      override_subscription:
+        type: string
+        required: false
+        default: ''
+        description: 'Override subscription ID from config'
+      override_resource_group:
+        type: string
+        required: false
+        default: ''
+        description: 'Override resource group name from config'
 
 jobs:
   load-config:
@@ -128,10 +138,24 @@ jobs:
             checks = config.get('checks', [])
             notif = config.get('notifications', {})
             subscription_id = config.get('subscription_id', '')
+            resource_group = config.get('resource_group', '')
+
+            # Apply overrides from workflow_dispatch inputs
+            override_sub = "${{ inputs.override_subscription }}"
+            override_rg = "${{ inputs.override_resource_group }}"
+
+            if override_sub:
+              subscription_id = override_sub
+              print(f"ℹ Override subscription ID: {subscription_id}")
+
+            if override_rg:
+              resource_group = override_rg
+              print(f"ℹ Override resource group: {resource_group}")
 
             print(f"✓ Config valid")
             print(f"  Name: {config.get('name', 'unknown')}")
             print(f"  Subscription ID: {subscription_id if subscription_id else '(not specified)'}")
+            print(f"  Resource Group: {resource_group if resource_group else '(not specified)'}")
             print(f"  Checks: {len(checks)}")
             print(f"  Notifications: {', '.join(notif.keys())}")
 
@@ -144,6 +168,7 @@ jobs:
                 f.write(f"checks={checks_json}\n")
                 f.write(f"notifications={notif_json}\n")
                 f.write(f"subscription_id={subscription_id}\n")
+                f.write(f"resource_group={resource_group}\n")
               print(f"✓ Config outputs written to GitHub")
 
           except Exception as e:

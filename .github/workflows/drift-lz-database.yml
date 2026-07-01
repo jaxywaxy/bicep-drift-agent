@@ -1,4 +1,4 @@
-name: Test Landing Zone Drift Check
+name: Database Testing Drift Check
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -27,7 +27,7 @@ jobs:
   drift-check:
     uses: ./.github/workflows/drift-check-lz-hybrid.yml
     with:
-      landing_zone: test-resources
+      landing_zone: database-testing
       override_subscription: ${{ github.event.inputs.subscription_id }}
       override_resource_group: ${{ github.event.inputs.resource_group }}
     secrets: inherit
