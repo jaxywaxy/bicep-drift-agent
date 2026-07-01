@@ -31,16 +31,14 @@ from tools.smart_matching import (
     smart_match_resources,
     annotate_drifts_with_matches,
 )
-from tools.property_drift import DriftDetector, PropertyExtractor
+from tools.property_drift import DriftDetector
 from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 from tools.azure_resource_graph import ResourceGraphClient
 from tools.activity_log import get_change_history
 from tools.change_origin import (
     classify_change_origin,
-    format_change_origin_for_display,
     build_resource_lifecycle,
-    format_lifecycle_for_display,
     select_relevant_activity,
 )
 

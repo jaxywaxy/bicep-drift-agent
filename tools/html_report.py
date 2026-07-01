@@ -8,7 +8,6 @@ import html
 import logging
 from pathlib import Path
 from datetime import datetime
-from typing import List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -849,7 +848,6 @@ def _get_origin_badge(change_origin: dict) -> str:
         return '<span class="badge origin-unknown">Unknown</span>'
 
     origin = change_origin.get('origin', 'unknown')
-    expected = change_origin.get('expected', False)
 
     # Policy-enforced changes (green)
     if 'policy' in origin:
@@ -1122,7 +1120,6 @@ def _render_recommendations_section(total: int, recommendations_html: str) -> st
 
 if __name__ == "__main__":
     import sys
-    from pathlib import Path
     try:
         from .logger import setup_logging
     except ImportError:

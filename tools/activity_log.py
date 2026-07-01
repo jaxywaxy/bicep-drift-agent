@@ -86,12 +86,9 @@ def query_activity_log_via_rest(
             f"and resourceGroupName eq '{rg_for_filter}'"
         )
 
-        logger.info(f"[Activity Log Query]")
-        logger.info(f"  Subscription: {subscription_id}")
-        logger.info(f"  Resource ID (target): {resource_id}")
-        logger.info(f"  Resource Group (filter): {rg_for_filter}")
-        logger.info(f"  Filter: {filter_str}")
-        logger.info(f"  Days: {days}")
+        logger.debug(
+            f"Activity Log query: rg={rg_for_filter}, target={resource_id}, days={days}, filter={filter_str}"
+        )
 
         activity_logs = client.activity_logs.list(filter=filter_str)
 
@@ -102,8 +99,7 @@ def query_activity_log_via_rest(
         total_seen = 0
         for log in activity_logs:
             total_seen += 1
-            log_resource_id = (log.resource_id or "")
-            log_resource_id_lower = log_resource_id.lower()
+            log_resource_id_lower = (log.resource_id or "").lower()
 
             # Match strategy:
             # 1. Exact/substring resource ID match (case-insensitive) - handles live resources
@@ -119,34 +115,32 @@ def query_activity_log_via_rest(
                 # broader match for deleted resources (resource ID no longer resolvable)
                 is_match = True
 
-            if not is_match:
-                continue
+            if is_match:
+                matched.append(_entry_from_log(log))
 
-            matched.append({
-                'timestamp': log.event_timestamp,
-                'caller': log.caller,
-                'operation': log.operation_name.value if log.operation_name else "Unknown",
-                'status': log.status.value if log.status else "Unknown",
-                'properties': log.properties if log.properties else {},
-                'resource_id': log.resource_id,
-                'method': log.properties.get('method') if log.properties else None,
-                'authorization': log.authorization if hasattr(log, 'authorization') else None,
-            })
-            if len(matched) <= 10:
-                logger.debug(
-                    f"  Matched: {log.event_timestamp} | {log.caller} | "
-                    f"{log.operation_name.value if log.operation_name else '?'} | {log_resource_id}"
-                )
-
-        logger.info(f"  Scanned {total_seen} RG event(s), matched {len(matched)} for target resource")
-        entries = matched
-
-        logger.info(f"Found {len(entries)} activity log entries via REST API for {resource_id}")
-        return entries
+        logger.info(
+            f"Activity Log: scanned {total_seen} RG event(s), matched {len(matched)} for {resource_id}"
+        )
+        return matched
 
     except Exception as e:
         logger.error(f"Failed to query Activity Log via REST API: {e}")
         return None
+
+
+def _entry_from_log(log: Any) -> Dict[str, Any]:
+    """Normalize an Azure Monitor activity-log record into our dict shape."""
+    props = log.properties if log.properties else {}
+    return {
+        'timestamp': log.event_timestamp,
+        'caller': log.caller,
+        'operation': log.operation_name.value if log.operation_name else "Unknown",
+        'status': log.status.value if log.status else "Unknown",
+        'properties': props,
+        'resource_id': log.resource_id,
+        'method': props.get('method') if isinstance(props, dict) else None,
+        'authorization': log.authorization if hasattr(log, 'authorization') else None,
+    }
 
 
 def _extract_rg_from_resource_id(resource_id: str) -> Optional[str]:
@@ -157,50 +151,4 @@ def _extract_rg_from_resource_id(resource_id: str) -> Optional[str]:
     for i, part in enumerate(parts):
         if part.lower() == "resourcegroups" and i + 1 < len(parts):
             return parts[i + 1]
-    return None
-
-
-def extract_policy_info(activity_entry: Dict[str, Any]) -> Optional[Dict[str, str]]:
-    """
-    Extract Azure Policy information from activity log entry.
-
-    Returns policy assignment ID, definition ID, and policy name if available.
-    """
-    try:
-        props = activity_entry.get('properties', {})
-
-        policy_id = props.get('policyAssignmentId')
-        policy_def_id = props.get('policyDefinitionId')
-
-        if policy_id:
-            # Extract policy name from ID path
-            # Format: /subscriptions/.../policyAssignments/PolicyName
-            policy_name = policy_id.split('/')[-1]
-
-            return {
-                'policy_assignment_id': policy_id,
-                'policy_definition_id': policy_def_id,
-                'policy_name': policy_name,
-            }
-    except Exception as e:
-        logger.debug(f"Failed to extract policy info: {e}")
-
-    return None
-
-
-def extract_modified_properties(activity_entry: Dict[str, Any]) -> Optional[Dict[str, Dict[str, Any]]]:
-    """
-    Extract list of properties that were modified by a policy.
-
-    Returns dict of {property_name: {old_value, new_value}}
-    """
-    try:
-        props = activity_entry.get('properties', {})
-        modified = props.get('modifiedProperties', {})
-
-        if modified:
-            return modified
-    except Exception as e:
-        logger.debug(f"Failed to extract modified properties: {e}")
-
     return None
