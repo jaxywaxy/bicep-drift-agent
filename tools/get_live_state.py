@@ -356,7 +356,35 @@ def _query_cosmos_children(resources: List[Dict], sub_id: str) -> List[Dict]:
                 continue
 
             for c in containers.get("value", []):
-                c_name = (c.get("properties", {}) or {}).get("resource", {}).get("id") or c.get("name")
+                c_id = c.get("id", "")
+                c_props = c.get("properties", {}) or {}
+                c_name = c_props.get("resource", {}).get("id") or c.get("name")
+
+                # Normalize indexingMode casing: Azure returns lowercase ("consistent")
+                # while Bicep declares it capitalized ("Consistent"). Cosmos treats it
+                # case-insensitively, so align casing to avoid a false property drift.
+                idx = c_props.get("resource", {}).get("indexingPolicy", {})
+                if isinstance(idx, dict) and isinstance(idx.get("indexingMode"), str):
+                    idx["indexingMode"] = idx["indexingMode"].capitalize()
+
+                # Throughput is not returned by the container GET - it lives at the
+                # throughputSettings sub-resource. Fetch it so Bicep's options.throughput
+                # can be compared instead of always showing as drift.
+                try:
+                    th = _get(
+                        f"https://management.azure.com{c_id}/throughputSettings/default"
+                        f"?api-version={api_version}"
+                    )
+                    th_res = (th.get("properties", {}) or {}).get("resource", {}) or {}
+                    if th_res.get("throughput") is not None:
+                        c_props.setdefault("options", {})["throughput"] = th_res["throughput"]
+                    elif (th_res.get("autoscaleSettings") or {}).get("maxThroughput") is not None:
+                        c_props.setdefault("options", {}).setdefault("autoscaleSettings", {})[
+                            "maxThroughput"
+                        ] = th_res["autoscaleSettings"]["maxThroughput"]
+                except Exception as e:
+                    logger.debug(f"Could not fetch throughput for {acct_name}/{db_name}/{c_name}: {e}")
+
                 children.append({
                     "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
                     "name": f"{acct_name}/{db_name}/{c_name}",
@@ -364,8 +392,8 @@ def _query_cosmos_children(resources: List[Dict], sub_id: str) -> List[Dict]:
                     "tags": {},
                     "sku": None,
                     "kind": None,
-                    "properties": c.get("properties", {}) or {},
-                    "id": c.get("id", ""),
+                    "properties": c_props,
+                    "id": c_id,
                     "resource_group": rg,
                 })
 
