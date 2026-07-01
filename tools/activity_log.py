@@ -109,7 +109,7 @@ def query_activity_log_via_rest(
         filter_str = (
             f"eventTimestamp ge '{start_time.isoformat()}Z' "
             f"and resourceId eq '{resource_id}' "
-            f"and status eq 'Succeeded' or status eq 'Failed'"
+            f"and (status eq 'Succeeded' or status eq 'Failed')"
         )
 
         activity_logs = client.activity_logs.list(filter=filter_str)
