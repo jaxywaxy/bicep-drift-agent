@@ -19,14 +19,20 @@ def get_change_history(
     resource_id: str,
     subscription_id: str,
     days: int = 30,
+    resource_type: Optional[str] = None,
+    resource_group: Optional[str] = None,
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Query Activity Log for changes to a specific resource.
+
+    For deleted resources, provide resource_type and resource_group for broader search.
 
     Args:
         resource_id: Full Azure resource ID
         subscription_id: Azure subscription ID
         days: Look back this many days in activity log
+        resource_type: Resource type (e.g., Microsoft.OperationalInsights/workspaces) for fallback search
+        resource_group: Resource group name for fallback search
 
     Returns:
         List of activity log entries (most recent first), or None if query fails
@@ -126,6 +132,29 @@ def query_activity_log_via_rest(
                 'method': log.properties.get('method') if log.properties else None,
                 'authorization': log.authorization if hasattr(log, 'authorization') else None,
             })
+
+        # If no entries found and resource_type provided, try broader search (for deleted resources)
+        if len(entries) == 0 and resource_type and resource_group:
+            logger.info(f"No events for specific resource, trying broader search by type and RG...")
+            filter_str_broad = (
+                f"eventTimestamp ge '{start_time.isoformat()}Z' "
+                f"and resourceGroupName eq '{resource_group}' "
+                f"and resourceType eq '{resource_type}'"
+            )
+            activity_logs = client.activity_logs.list(filter=filter_str_broad)
+
+            for log in activity_logs:
+                entries.append({
+                    'timestamp': log.event_timestamp,
+                    'caller': log.caller,
+                    'operation': log.operation_name.value if log.operation_name else "Unknown",
+                    'status': log.status.value if log.status else "Unknown",
+                    'properties': log.properties if log.properties else {},
+                    'resource_id': log.resource_id,
+                    'method': log.properties.get('method') if log.properties else None,
+                    'authorization': log.authorization if hasattr(log, 'authorization') else None,
+                })
+            logger.info(f"Found {len(entries)} activity log entries via broader search for {resource_type}")
 
         logger.info(f"Found {len(entries)} activity log entries via REST API for {resource_id}")
         return entries
