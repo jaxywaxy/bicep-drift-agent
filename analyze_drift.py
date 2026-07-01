@@ -46,6 +46,43 @@ from tools.change_origin import (
 logger = get_logger(__name__)
 
 
+def _find_deployed_resource_name(resource_type: str, bicep_name: str, live_resources: list) -> str:
+    """
+    Find actual deployed resource name given bicep template name.
+
+    Bicep names may contain placeholders like [uniqueString] that are resolved
+    to actual names during deployment. This function finds the deployed resource
+    that matches the bicep resource.
+
+    Args:
+        resource_type: Azure resource type (e.g., 'Microsoft.Storage/storageAccounts')
+        bicep_name: Name from bicep template (may contain placeholders)
+        live_resources: List of live resources from deployment
+
+    Returns:
+        Actual deployed resource name, or empty string if not found
+    """
+    type_lower = resource_type.lower()
+
+    # First try: exact name match
+    for resource in live_resources:
+        if (resource.get("type", "").lower() == type_lower and
+            resource.get("name", "") == bicep_name):
+            return resource.get("name", "")
+
+    # Second try: match by type and prefix (for resources with uniqueString placeholders)
+    # Extract the prefix before any [ or ] characters
+    name_prefix = bicep_name.split("[")[0] if "[" in bicep_name else bicep_name
+    if name_prefix:
+        for resource in live_resources:
+            deployed_name = resource.get("name", "")
+            if (resource.get("type", "").lower() == type_lower and
+                deployed_name.startswith(name_prefix)):
+                return deployed_name
+
+    return ""
+
+
 def discover_resource_groups():
     """Query Azure for all resource groups in the current subscription."""
     try:
@@ -343,15 +380,26 @@ def main():
         if len(drifts_to_analyze) > 0:
             logger.info("Phase 3: Building resource lifecycle from Activity Log...")
             subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
+            live_resources = report_data.get("live_resources", [])
 
             for drift in drifts_to_analyze:
                 try:
                     # Build resource ID for Activity Log query
                     resource_type = drift.get("type", "")
-                    resource_name = drift.get("name", "")
+                    bicep_name = drift.get("name", "")
+
+                    # Find actual deployed resource name (not bicep template name with placeholders)
+                    deployed_name = _find_deployed_resource_name(
+                        resource_type, bicep_name, live_resources
+                    )
+
+                    if not deployed_name:
+                        # Fallback to bicep name if no deployed resource found
+                        deployed_name = bicep_name
+                        logger.debug(f"No live resource found for {resource_type}/{bicep_name}, using bicep name")
 
                     # Extract resource group from context (needed for resource ID)
-                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/').lower()}/{resource_name}"
+                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type.replace('.', '/').lower()}/{deployed_name}"
 
                     # Query Activity Log for all changes
                     activity_logs = get_change_history(resource_id, subscription_id, days=30)
