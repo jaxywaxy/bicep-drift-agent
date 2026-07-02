@@ -734,6 +734,8 @@ def generate_html_report(
 
             {_render_smart_matched_section(data)}
 
+            {_render_policy_enforced_section(data)}
+
             {_render_recommendations_section(total, recommendations_html)}
 
             <footer>
@@ -848,6 +850,52 @@ def _get_lifecycle_html(lifecycle: dict) -> str:
 
     timeline_html += '</div>'
     return timeline_html
+
+
+def _render_policy_enforced_section(data: dict) -> str:
+    """Render the Policy / System-Enforced changes section (detected, not actionable drift)."""
+    items = data.get("policy_enforced_drifts", [])
+    if not items:
+        return ""
+
+    rows = ""
+    for d in items:
+        co = d.get("change_origin", {}) or {}
+        origin = (co.get("origin") or "unknown").replace("_", " ").title()
+        who = co.get("changed_by") or "Unknown"
+        policy = co.get("policy_name") or "-"
+        when = (co.get("timestamp") or "").split("T")[0] or "-"
+        drift_type = d.get("drift_type", "")
+        rows += f"""
+                <tr>
+                    <td><strong>{html.escape(str(d.get('type', '')))}</strong></td>
+                    <td><code>{html.escape(str(d.get('name', '')))}</code></td>
+                    <td>{html.escape(drift_type)}</td>
+                    <td><span class="badge origin-policy">✅ {html.escape(origin)}</span></td>
+                    <td>{html.escape(str(policy))}</td>
+                    <td>{html.escape(str(who))}</td>
+                    <td>{html.escape(str(when))}</td>
+                </tr>
+        """
+
+    return f"""
+            <div class="section">
+                <h2>🛡️ Policy / System-Enforced Changes ({len(items)})</h2>
+                <p>These changes were made by Azure Policy or an Azure service, not manual/out-of-band.
+                   They are detected for audit but excluded from the actionable drift count.</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Resource Type</th><th>Name</th><th>Change</th>
+                            <th>Origin</th><th>Policy</th><th>By</th><th>When</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows}
+                    </tbody>
+                </table>
+            </div>
+    """
 
 
 def _render_drift_section(total: int, drift_rows: str) -> str:
