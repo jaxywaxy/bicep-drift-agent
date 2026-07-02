@@ -6,9 +6,12 @@ to detect configuration changes outside of IaC.
 """
 
 import json
+import logging
 from typing import Dict, List, Tuple, Any
 from dataclasses import dataclass
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 
 class MatchConfidenceScores:
@@ -404,15 +407,36 @@ class ResourceMatcher:
                     if result:
                         best_match, best_score = result
 
-                # Fallback: positional matching for identical-named resources
-                if not best_match and all_identical and len(candidates) >= len(bicep_res_list):
+                # Fallback: positional matching for TRUE duplicates only (multiple
+                # identical-named Bicep resources, e.g. 4x "parameters('vmName')-nic").
+                # Requires len > 1 - a single resource must not be positionally paired
+                # with a lone unrelated candidate (that's the guarded single-candidate
+                # case below, which checks name plausibility).
+                if (not best_match and all_identical and len(bicep_res_list) > 1
+                        and len(candidates) >= len(bicep_res_list)):
                     best_match = candidates[bicep_idx]
                     best_score = MatchConfidenceScores.POSITIONAL_MATCH
 
-                # Single candidate fallback
+                # Single candidate fallback - only when the names plausibly correspond.
+                # Guard against pairing a deleted resource's Bicep definition with an
+                # unrelated, differently-named new resource of the same type (which would
+                # hide BOTH a missing_in_azure and an extra_in_azure). If the Bicep name
+                # has a meaningful static prefix (the literal part before a uniqueString
+                # placeholder, e.g. 'acrtestdrift' in 'acrtestdrift[86c9cbf6]'), require
+                # the lone candidate to share it.
                 if not best_match and len(candidates) == 1:
-                    best_match = candidates[0]
-                    best_score = MatchConfidenceScores.SINGLE_CANDIDATE
+                    cand_name = candidates[0].get("name", "").lower()
+                    static_prefix = bicep_name.split("[")[0].lower().strip()
+                    plausible = len(static_prefix) < 3 or cand_name.startswith(static_prefix) or static_prefix in cand_name
+                    if plausible:
+                        best_match = candidates[0]
+                        best_score = MatchConfidenceScores.SINGLE_CANDIDATE
+                    else:
+                        logger.debug(
+                            f"Single-candidate fallback skipped: '{bicep_name}' prefix "
+                            f"'{static_prefix}' does not match lone candidate '{cand_name}' "
+                            f"- treating as missing + extra"
+                        )
 
                 if best_match:
                     matches.append((bicep_resource, best_match, best_score))
