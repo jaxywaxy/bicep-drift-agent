@@ -431,25 +431,25 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     # Strip outer brackets
     inner = expr[1:-1].strip()
 
-    # Handle [parameters('name')] expressions
+    # Handle [parameters('name')] expressions. When the WHOLE expression is a
+    # single parameter reference, return the value AS-IS (dict/list/int/bool),
+    # not str() - otherwise an object param like `tags` becomes the string
+    # "{'environment': 'dev', ...}" and never matches the live dict. Callers that
+    # need a string (format/concat args) str() it themselves.
     param_match = re.match(r"parameters\s*\(\s*'([^']+)'\s*\)", inner)
     if param_match:
         param_name = param_match.group(1)
         if param_name in parameters and parameters[param_name] is not None:
-            return str(parameters[param_name])
+            return parameters[param_name]
         # Unresolved parameter — return the name as fallback
         return param_name
 
-    # Handle [variables('name')] expressions
+    # Handle [variables('name')] expressions (same: return value as-is)
     var_match = re.match(r"variables\s*\(\s*'([^']+)'\s*\)", inner)
     if var_match:
         var_name = var_match.group(1)
         if var_name in variables and variables[var_name] is not None:
-            val = variables[var_name]
-            if isinstance(val, str):
-                return val
-            else:
-                return str(val)
+            return variables[var_name]
         return var_name
 
     # Handle [concat(...)] expressions (from Bicep string interpolation)
