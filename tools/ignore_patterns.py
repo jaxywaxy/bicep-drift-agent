@@ -78,20 +78,36 @@ class IgnorePatternList:
     def __init__(self, patterns: List[dict] = None):
         self.patterns = [IgnorePattern(p) for p in (patterns or [])]
 
-    @classmethod
-    def from_file(cls, file_path: Path) -> "IgnorePatternList":
-        """Load ignore patterns from a YAML file."""
-        if not file_path.exists():
-            return cls([])
-
+    @staticmethod
+    def _read(file_path: Path) -> list:
+        """Read the raw 'ignore' pattern dicts from a YAML file (empty if missing)."""
+        if not file_path or not Path(file_path).exists():
+            return []
         with open(file_path) as f:
             data = yaml.safe_load(f) or {}
-
         patterns = data.get("ignore", [])
-        if not isinstance(patterns, list):
-            patterns = []
+        return patterns if isinstance(patterns, list) else []
 
-        return cls(patterns)
+    @classmethod
+    def from_file(cls, file_path: Path) -> "IgnorePatternList":
+        """Load ignore patterns from a single YAML file."""
+        return cls(cls._read(file_path))
+
+    @classmethod
+    def from_files(cls, *file_paths) -> "IgnorePatternList":
+        """
+        Load and MERGE ignore patterns from several YAML files (in order).
+
+        Used for layered profiles: a universal baseline (the agent's own
+        .drift-ignore) plus a per-landing-zone profile (the bicep repo's
+        .drift-ignore). Later files are appended; all patterns apply.
+        Missing files are skipped.
+        """
+        merged = []
+        for p in file_paths:
+            if p:
+                merged.extend(cls._read(Path(p)))
+        return cls(merged)
 
     def filter_drifts(self, drifts: list) -> tuple[list, list]:
         """

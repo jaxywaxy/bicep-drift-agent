@@ -108,18 +108,26 @@ def match_activity_for_resource(
     """
     resource_id_lower = (resource_id or "").lower()
     resource_type_lower = (resource_type or "").lower()
-    matched = []
-    for entry in rg_events:
-        log_id = (entry.get("resource_id") or "").lower()
+
+    # Primary: events for THIS resource or its sub-resources (exact id, or the
+    # event id is a child path 'id/...'). We do NOT match the reverse direction
+    # (our id starts with the event id) - that would wrongly match a child
+    # resource (e.g. a lock) to its parent's events (the storage account writes).
+    matched = [
+        e for e in rg_events
         if resource_id_lower and (
-            log_id == resource_id_lower
-            or log_id.startswith(resource_id_lower)
-            or resource_id_lower.startswith(log_id)
-        ):
-            matched.append(entry)
-        elif resource_type_lower and resource_type_lower in log_id:
-            matched.append(entry)
-    return matched
+            (e.get("resource_id") or "").lower() == resource_id_lower
+            or (e.get("resource_id") or "").lower().startswith(resource_id_lower + "/")
+        )
+    ]
+    if matched:
+        return matched
+
+    # Fallback ONLY for resources with no id match (e.g. deleted resources whose
+    # exact id can't be resolved): match by resource type substring.
+    if resource_type_lower:
+        return [e for e in rg_events if resource_type_lower in (e.get("resource_id") or "").lower()]
+    return []
 
 
 def get_change_history(
