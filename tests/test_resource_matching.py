@@ -1,0 +1,56 @@
+"""
+Unit tests for ResourceMatcher.match_resources — specifically the single-candidate
+fallback guard: a deleted resource's Bicep definition must NOT be paired with an
+unrelated, differently-named new resource of the same type (which would hide both
+a missing_in_azure and an extra_in_azure).
+"""
+
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from tools.property_drift import ResourceMatcher, DriftDetector
+
+
+def _res(rtype, name):
+    return {"type": rtype, "name": name, "properties": {}}
+
+
+class SingleCandidateGuardTests(unittest.TestCase):
+    ACR = "Microsoft.ContainerRegistry/registries"
+
+    def test_deleted_managed_plus_new_extra_are_not_matched(self):
+        # Bicep declares the managed ACR (uniqueString placeholder); the managed one
+        # was deleted and an unrelated ACR was created manually.
+        bicep = [_res(self.ACR, "acrtestdrift[86c9cbf6]")]
+        deployed = [_res(self.ACR, "acrshadow99999")]
+        matches = ResourceMatcher.match_resources(bicep, deployed)
+        self.assertEqual(matches, [], "unrelated ACR must not be matched to the deleted managed one")
+
+    def test_full_drift_reports_missing_and_extra(self):
+        bicep = [_res(self.ACR, "acrtestdrift[86c9cbf6]")]
+        deployed = [_res(self.ACR, "acrshadow99999")]
+        drifts = DriftDetector.detect_drift(bicep, deployed)
+        kinds = {(d.drift_type, d.resource_name) for d in drifts}
+        self.assertIn(("missing", "acrtestdrift[86c9cbf6]"), kinds)
+        self.assertIn(("extra", "acrshadow99999"), kinds)
+
+    def test_legit_uniquestring_resolution_still_matches(self):
+        # The real deployed name shares the static prefix -> must still match.
+        bicep = [_res(self.ACR, "acrtestdrift[86c9cbf6]")]
+        deployed = [_res(self.ACR, "acrtestdriftac7e6oa6bxbta")]
+        matches = ResourceMatcher.match_resources(bicep, deployed)
+        self.assertEqual(len(matches), 1)
+        self.assertEqual(matches[0][1]["name"], "acrtestdriftac7e6oa6bxbta")
+
+    def test_exact_literal_name_still_matches(self):
+        bicep = [_res("Microsoft.Web/serverfarms", "asp-test-drift")]
+        deployed = [_res("Microsoft.Web/serverfarms", "asp-test-drift")]
+        matches = ResourceMatcher.match_resources(bicep, deployed)
+        self.assertEqual(len(matches), 1)
+
+
+if __name__ == "__main__":
+    unittest.main()
