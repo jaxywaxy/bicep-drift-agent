@@ -49,6 +49,17 @@ class ClassifyChangeOriginTests(unittest.TestCase):
         self.assertTrue(info.expected)
         self.assertEqual(info.origin, ChangeOrigin.POLICY_MODIFY)
 
+    def test_policy_managed_identity_caller_is_expected(self):
+        # Real DINE/Modify writes: caller is the assignment's MSI GUID, no
+        # policyAssignmentId on the write. Mapping the principal id attributes it to policy.
+        msi = "4ba5674e-b9e7-46c1-9945-329f529f4512"
+        logs = _log("microsoft.authorization/locks/write", caller=msi)
+        # Without the principal set -> looks manual
+        self.assertFalse(classify_change_origin(logs).expected)
+        # With the principal set -> policy-enforced
+        info = classify_change_origin(logs, policy_principal_ids={msi})
+        self.assertTrue(info.expected)
+
     def test_dine_operation_is_policy_dine(self):
         info = classify_change_origin(_log(
             "microsoft.authorization/policies/deployIfNotExists/action",
