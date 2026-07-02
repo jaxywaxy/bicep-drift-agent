@@ -16,6 +16,7 @@ list``) so the logic stays unit-testable.
 """
 
 import fnmatch
+import re
 import sys
 from typing import List
 
@@ -26,6 +27,22 @@ _GLOB_CHARS = set("*?[]")
 def is_glob(pattern: str) -> bool:
     """True if the selector is a glob (contains wildcard characters)."""
     return any(c in _GLOB_CHARS for c in pattern)
+
+
+def rg_label(selector) -> str:
+    """A filesystem-safe label for an RG selector, used in report filenames.
+
+    A subscription-scoped scan may be driven by '*' (whole subscription) or a
+    glob ('jacquidev-*'), neither of which is a valid filename. Map:
+      None/''/'*'  -> 'subscription'
+      'jacquidev-*'-> 'jacquidev-all'
+      exact name   -> unchanged
+    """
+    if selector in (None, "", WILDCARD):
+        return "subscription"
+    if is_glob(selector):
+        return re.sub(r"[^A-Za-z0-9_.-]", "-", selector.replace("*", "all"))
+    return selector
 
 
 def needs_expansion(patterns: List[str]) -> bool:
