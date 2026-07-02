@@ -241,8 +241,15 @@ def classify_change_origin(
     caller = latest.get('caller', '').lower()
     operation = latest.get('operation', '').lower()
 
-    # Check for policy-enforced changes
-    if "azure policy" in caller or "policy" in operation:
+    # Check for policy-enforced changes. Besides caller/operation text, the most
+    # reliable signal is a policyAssignmentId/policyDefinitionId in the event
+    # properties - present on Modify/DINE remediation writes even when the caller
+    # is the policy's managed identity (a GUID) rather than the string "Azure Policy".
+    _props = latest.get('properties', {}) or {}
+    has_policy_prop = isinstance(_props, dict) and bool(
+        _props.get('policyAssignmentId') or _props.get('policyDefinitionId')
+    )
+    if "azure policy" in caller or "policy" in operation or has_policy_prop:
         return _classify_policy_change(latest, activity_logs)
 
     # Check for Azure service changes
@@ -343,15 +350,21 @@ def _classify_policy_change(
             reason=f"Auto-remediated by Azure Policy ({num_remediated} resource(s))",
         )
 
-    # Unknown policy action
+    # Confirmed policy-driven (policy caller or policyAssignmentId present) but the
+    # operation string didn't match a specific effect - e.g. a Modify remediation
+    # that writes '.../tags/write'. It is still policy-enforced, so treat it as a
+    # generic POLICY_MODIFY (expected) rather than unknown/actionable.
+    policy_name = _extract_policy_name(props)
     return ChangeOriginInfo(
-        origin=ChangeOrigin.UNKNOWN,
-        category=ChangeCategory.UNKNOWN,
-        severity=ChangeSeverity.MEDIUM,
-        expected=False,
+        origin=ChangeOrigin.POLICY_MODIFY,
+        category=ChangeCategory.COMPLIANCE_ENFORCED,
+        severity=ChangeSeverity.LOW,
+        expected=True,
         timestamp=timestamp,
-        changed_by="Azure Policy (unknown effect)",
-        reason="Policy-related change but couldn't determine effect type",
+        changed_by="Azure Policy",
+        policy_name=policy_name,
+        policy_id=props.get('policyAssignmentId') if isinstance(props, dict) else None,
+        reason=f"Policy-enforced change ({policy_name})" if policy_name != "Unknown Policy" else "Policy-enforced change",
     )
 
 

@@ -1,0 +1,63 @@
+"""
+Unit tests for change_origin.classify_change_origin — ensures policy / system
+changes are marked expected=True (so they get split into the policy-enforced
+section) while manual changes stay expected=False (actionable drift).
+"""
+
+import os
+import sys
+import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from tools.change_origin import classify_change_origin, ChangeOrigin
+
+
+def _log(operation, caller="user@example.com", properties=None):
+    return [{
+        "timestamp": "2026-07-02T01:00:00Z",
+        "operation": operation,
+        "caller": caller,
+        "status": "Succeeded",
+        "properties": properties or {},
+    }]
+
+
+class ClassifyChangeOriginTests(unittest.TestCase):
+
+    def test_no_events_is_unknown_not_expected(self):
+        info = classify_change_origin([])
+        self.assertEqual(info.origin, ChangeOrigin.UNKNOWN)
+        self.assertFalse(info.expected)
+
+    def test_manual_change_not_expected(self):
+        info = classify_change_origin(_log("microsoft.keyvault/vaults/write", caller="jane@corp.com"))
+        self.assertEqual(info.origin, ChangeOrigin.MANUAL_CHANGE)
+        self.assertFalse(info.expected)
+
+    def test_policy_caller_is_expected(self):
+        info = classify_change_origin(_log("microsoft.resources/tags/write", caller="Azure Policy"))
+        self.assertTrue(info.expected)
+
+    def test_policy_assignment_id_signal_is_expected(self):
+        # caller is a managed-identity GUID, but properties carry the policy assignment
+        info = classify_change_origin(_log(
+            "microsoft.resources/tags/write",
+            caller="8f3e...msi-guid",
+            properties={"policyAssignmentId": "/subscriptions/x/.../policyAssignments/add-tag"},
+        ))
+        self.assertTrue(info.expected)
+        self.assertEqual(info.origin, ChangeOrigin.POLICY_MODIFY)
+
+    def test_dine_operation_is_policy_dine(self):
+        info = classify_change_origin(_log(
+            "microsoft.authorization/policies/deployIfNotExists/action",
+            caller="Azure Policy",
+            properties={"policyAssignmentId": "/.../policyAssignments/deploy-diag"},
+        ))
+        self.assertTrue(info.expected)
+        self.assertEqual(info.origin, ChangeOrigin.POLICY_DINE)
+
+
+if __name__ == "__main__":
+    unittest.main()

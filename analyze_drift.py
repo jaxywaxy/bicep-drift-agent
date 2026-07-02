@@ -280,7 +280,8 @@ def main():
 
         # Emit the grep-able summary from the FILTERED drift set so the CI workflow
         # summary matches the HTML/JSON report (ignored drifts are excluded).
-        _print_drift_summary(report_data.get("drifts", []))
+        # NOTE: the grep-able summary is emitted AFTER Phase 3 below, once
+        # policy-enforced changes have been split out of the actionable set.
 
         # Perform property-level drift detection
         logger.info("Detecting property-level drift (comparing configurations)...")
@@ -477,6 +478,29 @@ def main():
                     }
 
             logger.info("Resource lifecycle detection completed")
+
+            # Split policy/system-enforced changes out of the actionable drift set.
+            # change_origin.expected is True for POLICY_DINE / POLICY_MODIFY /
+            # POLICY_REMEDIATION / SYSTEM_MANAGED. These are detected and shown in a
+            # dedicated governance section, but are NOT actionable drift.
+            actionable, policy_enforced = [], []
+            for drift in report_data.get("drifts", []):
+                if (drift.get("change_origin") or {}).get("expected") is True:
+                    policy_enforced.append(drift)
+                else:
+                    actionable.append(drift)
+            if policy_enforced:
+                logger.info(
+                    f"Split out {len(policy_enforced)} policy/system-enforced change(s) "
+                    f"(detected, not counted as actionable drift)"
+                )
+            report_data["drifts"] = actionable
+            report_data["policy_enforced_drifts"] = policy_enforced
+            drifts_to_analyze = actionable
+
+        # Emit the grep-able summary from the FINAL actionable set (post Phase 3 split),
+        # so the CI summary matches the report and excludes policy-enforced changes.
+        _print_drift_summary(report_data.get("drifts", []))
 
         # Generate per-drift recommendations (only when a key is available)
         if agent and len(drifts_to_analyze) > 0:
