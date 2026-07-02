@@ -3,12 +3,11 @@ ignore:
   - resource_type: "Microsoft.Network/networkWatchers"
     reason: "Auto-created by Azure in each region, not IaC-managed"
 
-  # Landing Zone infrastructure (deployed separately)
-  - resource_type: "Microsoft.Network/virtualNetworks"
-    reason: "VNets are part of LZ pattern, referenced by vm.bicep via 'existing' keyword"
-
-  - resource_type: "Microsoft.Network/virtualNetworks/subnets"
-    reason: "Subnets are part of LZ pattern, managed as part of VNet deployment"
+  # NOTE (Phase 4): platform network-fabric ignores (virtualNetworks,
+  # virtualNetworks/subnets, networkSecurityGroups, routeTables) have been MOVED
+  # OUT of this universal baseline into each *workload* landing zone's own
+  # .drift-ignore. They are referenced-as-existing in a workload LZ (ignore) but
+  # MANAGED in a platform LZ (surface) - so they must be per-LZ, not global.
 
   # Auto-managed by VMs and Compute
   - resource_type: "Microsoft.Compute/disks"
@@ -30,11 +29,6 @@ ignore:
   - resource_type: "Microsoft.Network/publicIPAddresses"
     reason: "Public IPs auto-created by LBs, App Gateways, or referenced as existing"
 
-  - resource_type: "Microsoft.Network/networkSecurityGroups"
-    reason: "NSGs often referenced as existing from shared networking"
-
-  - resource_type: "Microsoft.Network/routeTables"
-    reason: "Route tables often referenced as existing from shared networking"
 
   # Storage account auto-managed services
   - resource_type: "Microsoft.Storage/storageAccounts/blobServices"

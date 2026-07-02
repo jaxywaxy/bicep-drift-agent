@@ -256,8 +256,15 @@ def main():
             else:
                 logger.info("No successful smart matches")
 
-        # Load and apply ignore patterns
-        ignore_list = IgnorePatternList.from_file(Path(".drift-ignore"))
+        # Load and apply ignore patterns as a LAYERED profile:
+        #   1. the agent's own .drift-ignore = universal Azure noise baseline
+        #   2. the bicep repo's .drift-ignore = per-landing-zone profile
+        # This lets a workload LZ ignore its referenced network fabric while a
+        # platform LZ (whose repo omits those patterns) surfaces network drift.
+        repo_ignore = Path(bicep_file).parent.parent / ".drift-ignore"
+        ignore_list = IgnorePatternList.from_files(Path(".drift-ignore"), repo_ignore)
+        if repo_ignore.exists():
+            logger.info(f"Merged per-LZ ignore profile from {repo_ignore}")
         if ignore_list.patterns:
             logger.info("Loading ignore patterns...")
             ignore_list.log_summary()
