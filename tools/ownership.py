@@ -36,6 +36,12 @@ DEFAULT_PLATFORM_TYPES = {
     "microsoft.network/ddosprotectionplans",
     "microsoft.network/ipgroups",
     "microsoft.network/firewallpolicies",
+    "microsoft.network/natgateways",
+    # Public IPs in a connectivity/platform LZ front platform egress/ingress
+    # (NAT gateway, firewall, bastion, VPN/ER gateway). A workload rarely owns a
+    # standalone public IP (it fronts via App Gateway/Front Door), so default
+    # platform. Override via config platform_types if a workload LZ owns PIPs.
+    "microsoft.network/publicipaddresses",
 }
 
 # Types that look platform (nested under a platform resource) but whose drift is
