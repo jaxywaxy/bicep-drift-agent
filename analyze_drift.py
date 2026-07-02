@@ -109,6 +109,25 @@ def _print_drift_summary(drifts):
     print("=" * 60 + "\n")
 
 
+def _find_repo_ignore(bicep_file: str):
+    """Walk up from the bicep file to find the repo's .drift-ignore.
+
+    The bicep isn't always at <repo>/bicep/main.bicep - a landing zone may keep
+    it at envs/dev/main.bicep, etc. Search ancestor directories (stopping at a
+    .git dir or the filesystem root) so the per-LZ ignore profile is found
+    regardless of nesting depth.
+    """
+    d = Path(bicep_file).resolve().parent
+    for _ in range(8):
+        candidate = d / ".drift-ignore"
+        if candidate.exists():
+            return candidate
+        if (d / ".git").exists() or d.parent == d:
+            break
+        d = d.parent
+    return None
+
+
 def discover_resource_groups():
     """Query Azure for all resource groups in the current subscription."""
     try:
@@ -281,10 +300,12 @@ def main():
         #   2. the bicep repo's .drift-ignore = per-landing-zone profile
         # This lets a workload LZ ignore its referenced network fabric while a
         # platform LZ (whose repo omits those patterns) surfaces network drift.
-        repo_ignore = Path(bicep_file).parent.parent / ".drift-ignore"
-        ignore_list = IgnorePatternList.from_files(Path(".drift-ignore"), repo_ignore)
-        if repo_ignore.exists():
+        repo_ignore = _find_repo_ignore(bicep_file)
+        ignore_paths = [Path(".drift-ignore")]
+        if repo_ignore:
+            ignore_paths.append(repo_ignore)
             logger.info(f"Merged per-LZ ignore profile from {repo_ignore}")
+        ignore_list = IgnorePatternList.from_files(*ignore_paths)
         if ignore_list.patterns:
             logger.info("Loading ignore patterns...")
             ignore_list.log_summary()
