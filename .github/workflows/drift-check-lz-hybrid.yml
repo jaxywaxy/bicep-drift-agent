@@ -238,8 +238,17 @@ jobs:
           echo "========================================" >> "$DRIFT_FILE"
           echo "" >> "$DRIFT_FILE"
 
-          # Test each resource group (avoid subshell by using mapfile)
-          readarray -t RESOURCE_GROUPS < <(echo '${{ toJson(matrix.check.resource_groups) }}' | jq -r '.[]')
+          # Resolve resource-group selectors. These may include a '*' wildcard
+          # (whole subscription) or globs like 'rg-conn-*' (Phase 4 #4). Expand
+          # them against the live RG list BEFORE the loop so each resolved RG
+          # runs the full single-RG pipeline (owner tags + per-RG JSON report).
+          readarray -t SELECTORS < <(echo '${{ toJson(matrix.check.resource_groups) }}' | jq -r '.[]')
+          if echo "${SELECTORS[@]}" | grep -qE '[*?[]'; then
+            echo "Expanding resource-group selectors against the subscription: ${SELECTORS[*]}"
+            readarray -t RESOURCE_GROUPS < <(az group list --query "[].name" -o tsv | PYTHONPATH=drift-tools python3 -m tools.rg_selector "${SELECTORS[@]}")
+          else
+            RESOURCE_GROUPS=("${SELECTORS[@]}")
+          fi
           echo "Testing ${#RESOURCE_GROUPS[@]} resource group(s)..."
 
           for RG in "${RESOURCE_GROUPS[@]}"; do

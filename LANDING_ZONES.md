@@ -173,9 +173,29 @@ checks:
     branch: main                           # Optional: branch (default: main)
     path: bicep/main.bicep                 # Required: path to Bicep file
     resource_groups:                       # Required: RGs this Bicep deploys to
-      - rg-prod
+      - rg-prod                            # explicit name
       - rg-dr
 ```
+
+### Resource-group selectors (subscription scope)
+
+`resource_groups` entries can be explicit names, a **glob**, or the `*`
+wildcard for the whole subscription. Wildcards/globs are expanded against the
+live subscription before scanning, and each resolved RG runs the full pipeline
+(ignore filtering + owner tagging + per-RG report) — so owner routing still works.
+
+```yaml
+resource_groups: ["*"]              # every RG in the subscription
+resource_groups: ["rg-conn-*"]      # all RGs matching the glob (case-insensitive)
+resource_groups: ["rg-hub", "rg-*-spoke"]   # mix explicit + glob
+```
+
+- A **glob** only matches RGs that currently exist; a glob matching nothing is a no-op.
+- An **explicit** name is always checked even if the RG doesn't exist yet, so an
+  undeployed RG still surfaces as missing-resource drift.
+
+Common for a **platform** landing zone that owns many connectivity RGs — see
+[`examples/drift-lz-platform-config.yml`](examples/drift-lz-platform-config.yml).
 
 ---
 
