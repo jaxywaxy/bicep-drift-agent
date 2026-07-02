@@ -256,8 +256,12 @@ def classify_change_origin(
         _props.get('policyAssignmentId') or _props.get('policyDefinitionId')
     )
     caller_is_policy_msi = bool(policy_principal_ids) and caller in policy_principal_ids
+    # If we matched via the MSI principal map, we also know the policy's display name.
+    policy_name_hint = None
+    if isinstance(policy_principal_ids, dict):
+        policy_name_hint = policy_principal_ids.get(caller)
     if "azure policy" in caller or "policy" in operation or has_policy_prop or caller_is_policy_msi:
-        return _classify_policy_change(latest, activity_logs)
+        return _classify_policy_change(latest, activity_logs, policy_name_hint)
 
     # Check for Azure service changes
     if _is_system_managed(caller):
@@ -299,16 +303,23 @@ def classify_change_origin(
 
 def _classify_policy_change(
     entry: Dict[str, Any],
-    all_entries: List[Dict[str, Any]]
+    all_entries: List[Dict[str, Any]],
+    policy_name_hint: Optional[str] = None,
 ) -> ChangeOriginInfo:
-    """Classify Azure Policy-enforced changes."""
+    """Classify Azure Policy-enforced changes. policy_name_hint names the policy
+    when known from the assignment's managed identity (the resource write itself
+    usually lacks a policyAssignmentId)."""
     operation = entry.get('operation', '').lower()
     props = entry.get('properties', {})
     timestamp = entry.get('timestamp')
 
+    def _name(p):
+        n = _extract_policy_name(p)
+        return policy_name_hint if (n == "Unknown Policy" and policy_name_hint) else n
+
     # DEPLOYIFNOTEXISTS - creates resources
     if "deployifnotexists" in operation:
-        policy_name = _extract_policy_name(props)
+        policy_name = _name(props)
         return ChangeOriginInfo(
             origin=ChangeOrigin.POLICY_DINE,
             category=ChangeCategory.COMPLIANCE_ENFORCED,
@@ -326,7 +337,7 @@ def _classify_policy_change(
         modified = props.get('modifiedProperties', {})
 
         if modified:
-            policy_name = _extract_policy_name(props)
+            policy_name = _name(props)
             modified_list = list(modified.keys())
             return ChangeOriginInfo(
                 origin=ChangeOrigin.POLICY_MODIFY,
@@ -343,7 +354,7 @@ def _classify_policy_change(
 
     # REMEDIATION - fixes non-compliant resources
     if "remediationtasks" in operation or "remediation" in operation:
-        policy_name = _extract_policy_name(props)
+        policy_name = _name(props)
         num_remediated = props.get('numRemediatedResources', 1)
         return ChangeOriginInfo(
             origin=ChangeOrigin.POLICY_REMEDIATION,
@@ -361,7 +372,7 @@ def _classify_policy_change(
     # operation string didn't match a specific effect - e.g. a Modify remediation
     # that writes '.../tags/write'. It is still policy-enforced, so treat it as a
     # generic POLICY_MODIFY (expected) rather than unknown/actionable.
-    policy_name = _extract_policy_name(props)
+    policy_name = _name(props)
     return ChangeOriginInfo(
         origin=ChangeOrigin.POLICY_MODIFY,
         category=ChangeCategory.COMPLIANCE_ENFORCED,

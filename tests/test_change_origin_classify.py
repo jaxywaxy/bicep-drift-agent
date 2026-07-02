@@ -59,6 +59,10 @@ class ClassifyChangeOriginTests(unittest.TestCase):
         # With the principal set -> policy-enforced
         info = classify_change_origin(logs, policy_principal_ids={msi})
         self.assertTrue(info.expected)
+        # With a principal->name map -> the policy name is surfaced
+        info2 = classify_change_origin(logs, policy_principal_ids={msi: "DINE storage lock (drift test)"})
+        self.assertTrue(info2.expected)
+        self.assertEqual(info2.policy_name, "DINE storage lock (drift test)")
 
     def test_dine_operation_is_policy_dine(self):
         info = classify_change_origin(_log(

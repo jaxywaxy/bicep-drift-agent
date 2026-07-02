@@ -14,22 +14,23 @@ from azure.identity import DefaultAzureCredential
 logger = logging.getLogger(__name__)
 
 
-def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[str] = None) -> set:
+def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[str] = None) -> dict:
     """
-    Return the set of managed-identity principalIds used by policy assignments.
+    Return a map of managed-identity principalId -> policy display name for all
+    policy assignments in the subscription.
 
     DeployIfNotExists / Modify policies act through the assignment's managed
     identity, so the Activity Log 'caller' for a policy-driven change is that
     identity's GUID (not the string 'Azure Policy', and often without a
-    policyAssignmentId on the resource write). Mapping those principalIds lets us
-    correctly attribute such changes to policy. Returns lowercased GUIDs; never raises.
+    policyAssignmentId on the resource write). Mapping principalId -> policy name
+    lets us both attribute the change to policy AND name the responsible policy.
+    Keys are lowercased GUIDs. Never raises (returns {} on failure).
     """
     import json as _json
     import urllib.request
 
     try:
         token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
-        # Subscription-scoped list returns assignments at sub + all RGs.
         url = (
             f"https://management.azure.com/subscriptions/{subscription_id}"
             f"/providers/Microsoft.Authorization/policyAssignments?api-version=2022-06-01"
@@ -37,16 +38,18 @@ def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[st
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = _json.load(resp)
-        ids = set()
+        mapping = {}
         for a in data.get("value", []):
             pid = (a.get("identity") or {}).get("principalId")
             if pid:
-                ids.add(pid.lower())
-        logger.info(f"Found {len(ids)} policy-assignment managed identity principal(s)")
-        return ids
+                props = a.get("properties", {}) or {}
+                name = props.get("displayName") or a.get("name") or "Azure Policy"
+                mapping[pid.lower()] = name
+        logger.info(f"Found {len(mapping)} policy-assignment managed identity principal(s)")
+        return mapping
     except Exception as e:
         logger.warning(f"Could not fetch policy assignment principals: {e}")
-        return set()
+        return {}
 
 
 def fetch_resource_group_activity(
