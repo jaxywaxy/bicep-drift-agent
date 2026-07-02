@@ -35,9 +35,22 @@ class OwnershipTests(unittest.TestCase):
         drift = {"details": {"changed_properties": {"properties.provisioningState": {}}}}
         self.assertEqual(classify_owner("Microsoft.Network/networkSecurityGroups", drift), PLATFORM)
 
+    def test_route_table_and_natgateway_are_platform(self):
+        self.assertEqual(classify_owner("Microsoft.Network/routeTables"), PLATFORM)
+        self.assertEqual(classify_owner("Microsoft.Network/natGateways"), PLATFORM)
+        self.assertEqual(classify_owner("Microsoft.Network/publicIPAddresses"), PLATFORM)
+
+    def test_private_endpoint_is_workload(self):
+        # A private endpoint is the app's connection to a PaaS resource -> workload,
+        # even though it is a Microsoft.Network type.
+        self.assertEqual(classify_owner("Microsoft.Network/privateEndpoints"), WORKLOAD)
+
     def test_workload_resource_defaults_to_workload(self):
         self.assertEqual(classify_owner("Microsoft.Storage/storageAccounts"), WORKLOAD)
         self.assertEqual(classify_owner("Microsoft.KeyVault/vaults"), WORKLOAD)
+        self.assertEqual(classify_owner("Microsoft.Web/serverfarms"), WORKLOAD)
+        self.assertEqual(classify_owner("Microsoft.Web/sites"), WORKLOAD)
+        self.assertEqual(classify_owner("Microsoft.DocumentDB/databaseAccounts"), WORKLOAD)
 
     def test_config_override_of_platform_types(self):
         # A config can declare its own platform-owned set.
