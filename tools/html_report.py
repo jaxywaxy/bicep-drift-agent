@@ -858,22 +858,32 @@ def _render_policy_enforced_section(data: dict) -> str:
     if not items:
         return ""
 
+    # Map drift type -> a clear human action phrase.
+    action_by_drift = {
+        "extra_in_azure": "Added by",
+        "missing_in_azure": "Removed by",
+        "property_drift": "Modified by",
+    }
+    # Distinguish policy vs Azure-service (system-managed) origin for the "by" label.
+    def _agent(origin: str) -> str:
+        return "an Azure service" if origin == "system_managed" else "Azure Policy"
+
     rows = ""
     for d in items:
         co = d.get("change_origin", {}) or {}
-        origin = (co.get("origin") or "unknown").replace("_", " ").title()
-        who = co.get("changed_by") or "Unknown"
-        policy = co.get("policy_name") or "-"
-        when = (co.get("timestamp") or "").split("T")[0] or "-"
+        origin = co.get("origin") or "unknown"
         drift_type = d.get("drift_type", "")
+        action = action_by_drift.get(drift_type, "Changed by")
+        policy = co.get("policy_name")
+        agent = _agent(origin)
+        # e.g. "Added by Azure Policy: DINE CanNotDelete lock on storage"
+        summary = f"{action} {agent}" + (f": {policy}" if policy and policy != "Unknown Policy" else "")
+        when = (co.get("timestamp") or "").split("T")[0] or "-"
         rows += f"""
                 <tr>
                     <td><strong>{html.escape(str(d.get('type', '')))}</strong></td>
                     <td><code>{html.escape(str(d.get('name', '')))}</code></td>
-                    <td>{html.escape(drift_type)}</td>
-                    <td><span class="badge origin-policy">✅ {html.escape(origin)}</span></td>
-                    <td>{html.escape(str(policy))}</td>
-                    <td>{html.escape(str(who))}</td>
+                    <td><span class="badge origin-policy">🛡️ {html.escape(summary)}</span></td>
                     <td>{html.escape(str(when))}</td>
                 </tr>
         """
@@ -881,13 +891,13 @@ def _render_policy_enforced_section(data: dict) -> str:
     return f"""
             <div class="section">
                 <h2>🛡️ Policy / System-Enforced Changes ({len(items)})</h2>
-                <p>These changes were made by Azure Policy or an Azure service, not manual/out-of-band.
-                   They are detected for audit but excluded from the actionable drift count.</p>
+                <p>These resources were <strong>added, modified, or removed by Azure Policy or an
+                   Azure service</strong> — not manual/out-of-band changes. They are detected for
+                   audit/governance but are <strong>not counted as actionable drift</strong>.</p>
                 <table>
                     <thead>
                         <tr>
-                            <th>Resource Type</th><th>Name</th><th>Change</th>
-                            <th>Origin</th><th>Policy</th><th>By</th><th>When</th>
+                            <th>Resource Type</th><th>Name</th><th>What happened</th><th>When</th>
                         </tr>
                     </thead>
                     <tbody>
