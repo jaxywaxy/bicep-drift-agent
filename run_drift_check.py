@@ -24,6 +24,7 @@ from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detec
 from tools.get_live_state import get_live_state
 from tools.diff_states import diff_states, format_drift_report
 from tools.ignore_patterns import IgnorePatternList
+from tools.rg_selector import rg_label
 
 logger = get_logger(__name__)
 
@@ -139,13 +140,15 @@ def run(bicep_file: str, resource_group: str):
     logger.info("Drift Report Summary")
     logger.info(format_drift_report(drifts, resource_group))
 
-    # Dump raw data for inspection
+    # Dump raw data for inspection. A subscription-scope scan may use '*' or a
+    # glob selector (e.g. 'jacquidev-*'); use a filesystem-safe label for the file.
     try:
-        output_file = Path(f"reports/{resource_group}-drift.json")
+        label = rg_label(resource_group)
+        output_file = Path(f"reports/{label}-drift.json")
         output_file.parent.mkdir(exist_ok=True)
         with open(output_file, "w") as f:
             json.dump({
-                "resource_group": resource_group,
+                "resource_group": label,
                 "bicep_file": bicep_file,
                 "arm_resources": arm_resources,
                 "live_resources": live_resources,

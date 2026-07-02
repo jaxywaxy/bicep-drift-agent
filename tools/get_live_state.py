@@ -11,12 +11,42 @@ import os
 import json
 import logging
 import time
+import fnmatch
 from typing import Optional, List, Dict, Callable, TypeVar
 from functools import wraps
 from azure.identity import DefaultAzureCredential
 from azure.core.exceptions import HttpResponseError
 
 logger = logging.getLogger(__name__)
+
+# Resource-group selectors that mean "the whole subscription" (no filter).
+_ALL_RG_SELECTORS = {None, "", "*"}
+
+
+def _is_rg_glob(selector: Optional[str]) -> bool:
+    """True if the selector is a glob (e.g. 'jacquidev-*') needing multi-RG match."""
+    return bool(selector) and any(c in selector for c in "*?[")
+
+
+def _rg_of(resource: Dict) -> str:
+    """Return a resource's resource-group name (from the field or its id)."""
+    rg = resource.get("resource_group")
+    if rg:
+        return rg
+    return _extract_resource_group_from_id(resource.get("id", "")) or ""
+
+
+def _filter_by_rg_selector(resources: List[Dict], selector: Optional[str]) -> List[Dict]:
+    """Keep only resources whose RG matches a glob selector (case-insensitive).
+
+    Used for a subscription-scoped scan restricted to a set of RGs (e.g. one
+    landing-zone instance, 'jacquidev-*'). A None/'*'/exact selector is handled
+    by the KQL query itself, so this is a no-op for those.
+    """
+    if not _is_rg_glob(selector):
+        return resources
+    sel = selector.lower()
+    return [r for r in resources if fnmatch.fnmatch(_rg_of(r).lower(), sel)]
 
 try:
     from azure.mgmt.resourcegraph import ResourceGraphClient
@@ -125,10 +155,14 @@ def get_live_state(
             raise ValueError("resource_group required for resource_group scope")
         kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
     else:
-        if resource_group:
-            kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
-        else:
+        # Subscription scope (landing zones). The selector can be:
+        #   None/''/'*'  -> whole subscription
+        #   a glob        -> query broad, filter to matching RGs in Python (below)
+        #   an exact name -> filter to that one RG in KQL
+        if resource_group in _ALL_RG_SELECTORS or _is_rg_glob(resource_group):
             kql_query = "Resources"
+        else:
+            kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
 
     logger.info(f"Querying Azure Resource Graph: {kql_query}")
     start_time = time.time()
@@ -161,6 +195,8 @@ def get_live_state(
             resources.append(resource_dict)
 
     _augment_untracked_resources(resources, resource_group, sub_id, scope)
+    if scope == "subscription":
+        resources = _filter_by_rg_selector(resources, resource_group)
     logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
     return resources
 
@@ -186,7 +222,13 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
 
     # Process resources
     for resource in resource_iterator:
-        if scope == "subscription" and resource_group:
+        # Sub scope with an exact RG name: filter to it. Globs/'*'/None are
+        # handled by _filter_by_rg_selector after augmentation (below).
+        if (
+            scope == "subscription"
+            and resource_group not in _ALL_RG_SELECTORS
+            and not _is_rg_glob(resource_group)
+        ):
             rg_from_id = _extract_resource_group_from_id(resource.id)
             if rg_from_id and rg_from_id.lower() != resource_group.lower():
                 continue
@@ -205,6 +247,8 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
         resources.append(resource_dict)
 
     _augment_untracked_resources(resources, resource_group, sub_id, scope)
+    if scope == "subscription":
+        resources = _filter_by_rg_selector(resources, resource_group)
     elapsed = time.time() - start_time
     logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
     return resources

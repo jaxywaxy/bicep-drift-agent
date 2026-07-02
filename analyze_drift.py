@@ -34,6 +34,8 @@ from tools.smart_matching import (
 from tools.property_drift import DriftDetector
 from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
+from tools.compile_bicep import compile_bicep, detect_deployment_scope
+from tools.rg_selector import rg_label
 from tools.azure_resource_graph import ResourceGraphClient
 from tools.activity_log import (
     fetch_resource_group_activity,
@@ -137,8 +139,17 @@ def main():
 
     logger.info("Bicep Drift Agent - Phase 1 + Phase 2")
 
-    # Handle wildcard resource group (discover all RGs in subscription)
-    if resource_group == "*":
+    # Detect template scope. A subscription-scoped landing zone spans several
+    # resource groups from ONE template, so it is scanned as a SINGLE pass
+    # (optionally filtered to an RG glob like 'jacquidev-*'). Only an RG-scoped
+    # template treats '*' as "discover and scan each RG separately".
+    try:
+        is_sub_scoped = detect_deployment_scope(compile_bicep(bicep_file)) == "subscription"
+    except Exception as e:
+        logger.warning(f"Could not detect deployment scope ({e}); assuming resource-group scope")
+        is_sub_scoped = False
+
+    if resource_group == "*" and not is_sub_scoped:
         logger.info(f"Processing: {bicep_file} (discovering all resource groups in subscription)")
         discovered_rgs = discover_resource_groups()
         if not discovered_rgs:
@@ -147,7 +158,13 @@ def main():
         logger.info(f"Found {len(discovered_rgs)} resource group(s): {', '.join(discovered_rgs)}")
         resource_groups_to_test = discovered_rgs
     else:
-        logger.info(f"Processing: {bicep_file} (resource group: {resource_group})")
+        if is_sub_scoped:
+            logger.info(
+                f"Processing: {bicep_file} (subscription-scoped landing zone; "
+                f"RG selector: {resource_group})"
+            )
+        else:
+            logger.info(f"Processing: {bicep_file} (resource group: {resource_group})")
         resource_groups_to_test = [resource_group]
 
     # Phase 1: Run drift check for each resource group
@@ -200,6 +217,9 @@ def main():
 
     # Single RG mode - continue with Phase 2
     resource_group = resource_groups_to_test[0]
+    # A subscription-scope scan may use '*' or a glob selector; report files use a
+    # filesystem-safe label (matching what Phase 1 / run_drift_check wrote).
+    report_label = rg_label(resource_group)
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
@@ -221,7 +241,7 @@ def main():
             logger.info("No ANTHROPIC_API_KEY - running drift filtering/detection without Claude analysis")
 
         # Load the drift report from Phase 1
-        report_file = Path(f"reports/{resource_group}-drift.json")
+        report_file = Path(f"reports/{report_label}-drift.json")
         if not report_file.exists():
             logger.error(f"Report file not found: {report_file}")
             sys.exit(1)
@@ -557,7 +577,7 @@ def main():
 
         # Save analysis
         if agent_analysis:
-            analysis_file = Path(f"reports/{resource_group}-analysis.md")
+            analysis_file = Path(f"reports/{report_label}-analysis.md")
             analysis_file.parent.mkdir(parents=True, exist_ok=True)
             with open(analysis_file, "w") as f:
                 f.write(f"# Drift Analysis: {resource_group}\n\n")
@@ -588,11 +608,11 @@ def main():
         logger.warning("Phase 2 failed, but will still generate HTML report with Phase 1 data")
 
     # Always generate HTML report, even if Phase 2 fails
-    html_file = Path(f"reports/{resource_group}-drift.html")
+    html_file = Path(f"reports/{report_label}-drift.html")
     logger.info(f"Generating HTML report to {html_file}...")
     try:
         generate_html_report(
-            drift_json_file=Path(f"reports/{resource_group}-drift.json"),
+            drift_json_file=Path(f"reports/{report_label}-drift.json"),
             output_file=html_file,
             resource_group=resource_group,
             bicep_file=bicep_file,
