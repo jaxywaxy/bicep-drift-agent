@@ -49,6 +49,39 @@ Control which events trigger notifications:
 | `drift,extra` | DRIFT + EXTRA | Config changes or orphaned |
 | `extra,missing` | EXTRA + MISSING | Resource issues only |
 
+### Owner-Based Routing (CAF/ALZ)
+
+In a Cloud Adoption Framework landing zone, the **platform team** owns the network
+fabric (VNets, subnets, NSG resources, route tables) while **app teams** own their
+workloads. The agent tags every drift with an `owner` (`platform` or `workload`), so
+you can route each owner's drift to the team that can actually fix it.
+
+Add `owners` to a team's notification config:
+
+```yaml
+notifications:
+  platform-team:
+    teams: https://outlook.webhook.office.com/.../platform
+    owners: [platform]          # only platform-owned drift (network fabric)
+  app-team:
+    slack: https://hooks.slack.com/services/XXX/app
+    owners: [workload]          # only workload-owned drift
+```
+
+| `owners` value | Team receives |
+| --- | --- |
+| *(omitted)* | **All** owners (backward compatible — pre-Phase-4 behavior) |
+| `[platform]` | Only platform-owned drift (network fabric) |
+| `[workload]` | Only workload-owned drift |
+| `[platform, workload]` | Both (same as omitting) |
+
+`owners` combines with `filter` (AND): a team with `owners: [platform]` and
+`filter: drift` receives only property-drift on platform-owned resources.
+
+> Owner tags are only present when notifying from the **JSON** report
+> (`reports/<rg>-drift.json`). Text-parsed events have no owner and route to every
+> team (owners defaults to "all").
+
 ---
 
 ## Examples
@@ -272,6 +305,7 @@ notifications:
 - `{{ resource_type }}` → e.g., Microsoft.Storage/storageAccounts
 - `{{ resource_name }}` → Resource name
 - `{{ details }}` → Additional details
+- `{{ owner }}` → platform, workload, or unknown (Phase 4 owner-routing)
 - `{{ report_url }}` → Link to GitHub Actions run
 - `{{ drift_count }}` → Number of DRIFT events
 - `{{ extra_count }}` → Number of EXTRA events

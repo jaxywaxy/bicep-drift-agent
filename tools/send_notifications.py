@@ -28,6 +28,7 @@ class DriftEvent:
     resource_type: str
     resource_name: str
     details: str = ""
+    owner: str = "unknown"  # platform, workload, or unknown (Phase 4 owner-routing)
 
 
 class NotificationFilter:
@@ -56,6 +57,36 @@ class NotificationFilter:
     def should_notify(self, event: DriftEvent) -> bool:
         """Check if event matches filter."""
         return event.event_type.lower() in self.filters
+
+
+class OwnerFilter:
+    """Filter drift events by owner so each team gets only what it owns (Phase 4).
+
+    A CAF/ALZ platform team owns network fabric (VNets, subnets, NSG resources,
+    route tables); app teams own their workloads. analyze_drift tags each drift
+    with an ``owner`` (platform/workload); this routes it to the matching team's
+    channel. Omitting ``owners`` in a team config means 'receive every owner'
+    (backward compatible with pre-Phase-4 configs).
+    """
+
+    def __init__(self, owners_config: Any = None):
+        """Initialize from a team's ``owners`` config value.
+
+        Args:
+            owners_config: a list (["platform"]) or comma-separated string
+                ("platform,workload"). None/empty => accept all owners.
+        """
+        self.owners = set()
+        if isinstance(owners_config, str):
+            owners_config = [o.strip() for o in owners_config.split(",")]
+        if owners_config:
+            self.owners = {str(o).strip().lower() for o in owners_config if str(o).strip()}
+
+    def should_notify(self, event: DriftEvent) -> bool:
+        """True if this team should receive the event (empty set => all)."""
+        if not self.owners:
+            return True
+        return (event.owner or "unknown").lower() in self.owners
 
 
 class MessageTemplate:
@@ -212,10 +243,17 @@ class NotificationRouter:
         # Get filter for this team (default: all)
         filter_str = config.get("filter", "all")
         notification_filter = NotificationFilter(filter_str)
-        filtered_events = [e for e in events if notification_filter.should_notify(e)]
+        # Phase 4: owner routing - a team only receives events for the owner(s) it
+        # handles (platform vs workload). Absent 'owners' => all owners.
+        owner_filter = OwnerFilter(config.get("owners"))
+        filtered_events = [
+            e for e in events
+            if notification_filter.should_notify(e) and owner_filter.should_notify(e)
+        ]
 
         if not filtered_events:
-            logger.info(f"{team_name}: No events match filter '{filter_str}'")
+            owners_str = ",".join(sorted(owner_filter.owners)) or "all"
+            logger.info(f"{team_name}: No events match filter '{filter_str}' / owners '{owners_str}'")
             return True
 
         # Get template (use platform-specific default if not provided)
@@ -226,7 +264,7 @@ class NotificationRouter:
         if slack_url:
             template = MessageTemplate(template_str, platform="slack")
             for event in filtered_events:
-                event_context = {**context, "event_type": event.event_type, "resource_type": event.resource_type, "resource_name": event.resource_name, "details": event.details}
+                event_context = {**context, "event_type": event.event_type, "resource_type": event.resource_type, "resource_name": event.resource_name, "details": event.details, "owner": event.owner}
                 message = template.render(event_context)
                 success = self._send_to_slack(slack_url, message) and success
             if success:
@@ -239,7 +277,7 @@ class NotificationRouter:
         if teams_url:
             template = MessageTemplate(template_str, platform="teams")
             for event in filtered_events:
-                event_context = {**context, "event_type": event.event_type, "resource_type": event.resource_type, "resource_name": event.resource_name, "details": event.details}
+                event_context = {**context, "event_type": event.event_type, "resource_type": event.resource_type, "resource_name": event.resource_name, "details": event.details, "owner": event.owner}
                 message = template.render(event_context)
                 success = self._send_to_teams(teams_url, message) and success
             if success:
@@ -341,6 +379,59 @@ def get_html_report_url() -> str:
     return ""
 
 
+_DRIFT_TYPE_TO_EVENT = {
+    "missing_in_azure": "MISSING",
+    "extra_in_azure": "EXTRA",
+    "property_drift": "DRIFT",
+}
+
+
+def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
+    """Build a DriftEvent from a JSON-report drift dict (carries owner)."""
+    drift_type = drift.get("drift_type", "")
+    event_type = _DRIFT_TYPE_TO_EVENT.get(drift_type, "DRIFT")
+    if drift_type == "property_drift":
+        changed = drift.get("details", {}).get("changed_properties", {})
+        details = "properties differ: " + ", ".join(changed.keys()) if changed else ""
+    elif drift_type == "extra_in_azure":
+        details = "deployed but not in Bicep"
+    elif drift_type == "missing_in_azure":
+        details = "in Bicep but not deployed"
+    else:
+        details = ""
+    rec = drift.get("recommendation")
+    if rec:
+        details = f"{details}\n💡 {rec}" if details else f"💡 {rec}"
+    return DriftEvent(
+        event_type=event_type,
+        resource_type=drift.get("type", "Unknown"),
+        resource_name=drift.get("name", "Unknown"),
+        details=details,
+        owner=drift.get("owner", "unknown"),
+    )
+
+
+def events_from_report(report_path: str) -> List[DriftEvent]:
+    """Build DriftEvents from a JSON drift report, preserving the owner tag.
+
+    This is the owner-aware path (Phase 4): unlike parse_drift_output (text),
+    the JSON report written by analyze_drift carries each drift's ``owner``
+    (platform/workload), which owner-routing needs. Policy/system-enforced
+    changes (report['policy_enforced_drifts']) are governance, not actionable
+    drift, so they are intentionally NOT turned into notification events.
+    """
+    events: List[DriftEvent] = []
+    try:
+        with open(report_path, "r") as f:
+            report = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.warning(f"Could not read drift report {report_path}: {e}")
+        return events
+    for drift in report.get("drifts", []):
+        events.append(_event_from_drift(drift))
+    return events
+
+
 def parse_drift_output(output_file: str) -> List[DriftEvent]:
     """Parse drift check output to extract events.
 
@@ -417,8 +508,15 @@ if __name__ == "__main__":
     output_file = sys.argv[1]
     report_url = sys.argv[2] if len(sys.argv) > 2 else "See GitHub Actions run"
 
-    logger.info("Parsing drift output...")
-    events = parse_drift_output(output_file)
+    # Prefer the JSON report: it carries each drift's owner tag, which enables
+    # owner-based routing (Phase 4). Text output has no owner, so those events
+    # route to every team (owners filter defaults to 'all').
+    if output_file.endswith(".json"):
+        logger.info("Reading drift report (owner-aware JSON)...")
+        events = events_from_report(output_file)
+    else:
+        logger.info("Parsing drift output (text)...")
+        events = parse_drift_output(output_file)
 
     logger.info("Extracting AI recommendations from reports...")
     recommendations = extract_recommendations_from_reports()
