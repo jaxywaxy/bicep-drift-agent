@@ -72,6 +72,7 @@ def generate_html_report(
         # Get change origin info
         change_origin = drift.get("change_origin", {})
         origin_badge = _get_origin_badge(change_origin)
+        owner_badge = _get_owner_badge(drift.get("owner"))
 
         # Get lifecycle info
         lifecycle = drift.get("lifecycle", {})
@@ -82,6 +83,7 @@ def generate_html_report(
             <td><strong>{html.escape(drift['type'])}</strong></td>
             <td><code>{html.escape(drift['name'])}</code></td>
             <td>{type_badge}</td>
+            <td>{owner_badge}</td>
             <td>{origin_badge}</td>
             <td>
                 <pre>{html.escape(details)}</pre>
@@ -763,6 +765,15 @@ def _get_type_badge(drift_type: str) -> str:
         return '<span class="badge modified">Modified</span>'
 
 
+def _get_owner_badge(owner) -> str:
+    """Get HTML badge for the responsible owner (platform vs workload)."""
+    if owner == "platform":
+        return '<span class="badge origin-policy" title="Owned by the platform team">🏛️ Platform</span>'
+    if owner == "workload":
+        return '<span class="badge modified" title="Owned by the application/workload team">📦 Workload</span>'
+    return '<span class="badge origin-unknown">—</span>'
+
+
 def _get_origin_badge(change_origin: dict) -> str:
     """Get HTML badge for change origin."""
     if not change_origin:
@@ -929,6 +940,7 @@ def _render_drift_section(total: int, drift_rows: str) -> str:
                     <th>Resource Type</th>
                     <th>Resource Name</th>
                     <th>Drift Type</th>
+                    <th>Owner</th>
                     <th>Change Origin</th>
                     <th>Details</th>
                 </tr>

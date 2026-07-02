@@ -40,6 +40,7 @@ from tools.activity_log import (
     match_activity_for_resource,
     fetch_policy_principal_ids,
 )
+from tools.ownership import classify_owner
 from tools.change_origin import (
     classify_change_origin,
     build_resource_lifecycle,
@@ -495,6 +496,16 @@ def main():
             report_data["drifts"] = actionable
             report_data["policy_enforced_drifts"] = policy_enforced
             drifts_to_analyze = actionable
+
+            # Phase 4: tag each actionable drift with its owner (platform vs workload)
+            # so the report can group and notifications can route per owner.
+            for drift in actionable:
+                drift["owner"] = classify_owner(drift.get("type", ""), drift)
+            owner_counts = {}
+            for drift in actionable:
+                owner_counts[drift["owner"]] = owner_counts.get(drift["owner"], 0) + 1
+            if owner_counts:
+                logger.info(f"Actionable drift by owner: {owner_counts}")
 
         # Emit the grep-able summary from the FINAL actionable set (post Phase 3 split),
         # so the CI summary matches the report and excludes policy-enforced changes.
