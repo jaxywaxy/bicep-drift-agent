@@ -5,7 +5,6 @@ env:
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Every hour for testing
   workflow_dispatch:
     inputs:
       subscription_id:
