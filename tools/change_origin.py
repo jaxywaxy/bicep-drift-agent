@@ -216,13 +216,19 @@ def select_relevant_activity(
 
 
 def classify_change_origin(
-    activity_logs: Optional[List[Dict[str, Any]]]
+    activity_logs: Optional[List[Dict[str, Any]]],
+    policy_principal_ids: Optional[set] = None,
 ) -> ChangeOriginInfo:
     """
     Classify the origin of a drift based on Activity Log entries.
 
     Args:
         activity_logs: Activity log entries from query_activity_log()
+        policy_principal_ids: managed-identity principalIds belonging to policy
+            assignments. A change whose caller is one of these is policy-enforced
+            (DINE/Modify act through the assignment's identity - the caller is a
+            GUID, not "Azure Policy", and the resource write often lacks a
+            policyAssignmentId).
 
     Returns:
         ChangeOriginInfo with classification and metadata
@@ -249,7 +255,8 @@ def classify_change_origin(
     has_policy_prop = isinstance(_props, dict) and bool(
         _props.get('policyAssignmentId') or _props.get('policyDefinitionId')
     )
-    if "azure policy" in caller or "policy" in operation or has_policy_prop:
+    caller_is_policy_msi = bool(policy_principal_ids) and caller in policy_principal_ids
+    if "azure policy" in caller or "policy" in operation or has_policy_prop or caller_is_policy_msi:
         return _classify_policy_change(latest, activity_logs)
 
     # Check for Azure service changes

@@ -14,6 +14,41 @@ from azure.identity import DefaultAzureCredential
 logger = logging.getLogger(__name__)
 
 
+def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[str] = None) -> set:
+    """
+    Return the set of managed-identity principalIds used by policy assignments.
+
+    DeployIfNotExists / Modify policies act through the assignment's managed
+    identity, so the Activity Log 'caller' for a policy-driven change is that
+    identity's GUID (not the string 'Azure Policy', and often without a
+    policyAssignmentId on the resource write). Mapping those principalIds lets us
+    correctly attribute such changes to policy. Returns lowercased GUIDs; never raises.
+    """
+    import json as _json
+    import urllib.request
+
+    try:
+        token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
+        # Subscription-scoped list returns assignments at sub + all RGs.
+        url = (
+            f"https://management.azure.com/subscriptions/{subscription_id}"
+            f"/providers/Microsoft.Authorization/policyAssignments?api-version=2022-06-01"
+        )
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = _json.load(resp)
+        ids = set()
+        for a in data.get("value", []):
+            pid = (a.get("identity") or {}).get("principalId")
+            if pid:
+                ids.add(pid.lower())
+        logger.info(f"Found {len(ids)} policy-assignment managed identity principal(s)")
+        return ids
+    except Exception as e:
+        logger.warning(f"Could not fetch policy assignment principals: {e}")
+        return set()
+
+
 def fetch_resource_group_activity(
     subscription_id: str,
     resource_group: str,

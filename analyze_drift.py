@@ -35,7 +35,11 @@ from tools.property_drift import DriftDetector
 from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 from tools.azure_resource_graph import ResourceGraphClient
-from tools.activity_log import fetch_resource_group_activity, match_activity_for_resource
+from tools.activity_log import (
+    fetch_resource_group_activity,
+    match_activity_for_resource,
+    fetch_policy_principal_ids,
+)
 from tools.change_origin import (
     classify_change_origin,
     build_resource_lifecycle,
@@ -45,41 +49,37 @@ from tools.change_origin import (
 logger = get_logger(__name__)
 
 
-def _find_deployed_resource_name(resource_type: str, bicep_name: str, live_resources: list) -> str:
+def _find_deployed_resource(resource_type: str, bicep_name: str, live_resources: list) -> dict:
     """
-    Find actual deployed resource name given bicep template name.
+    Find the deployed resource dict matching a Bicep resource.
 
-    Bicep names may contain placeholders like [uniqueString] that are resolved
-    to actual names during deployment. This function finds the deployed resource
-    that matches the bicep resource.
-
-    Args:
-        resource_type: Azure resource type (e.g., 'Microsoft.Storage/storageAccounts')
-        bicep_name: Name from bicep template (may contain placeholders)
-        live_resources: List of live resources from deployment
-
-    Returns:
-        Actual deployed resource name, or empty string if not found
+    Bicep names may contain placeholders like [uniqueString] that resolve to
+    actual names at deploy time. Returns the live resource dict (so callers can
+    use its real .id / .name), or None if not found.
     """
     type_lower = resource_type.lower()
 
     # First try: exact name match
     for resource in live_resources:
         if (resource.get("type", "").lower() == type_lower and
-            resource.get("name", "") == bicep_name):
-            return resource.get("name", "")
+                resource.get("name", "") == bicep_name):
+            return resource
 
-    # Second try: match by type and prefix (for resources with uniqueString placeholders)
-    # Extract the prefix before any [ or ] characters
+    # Second try: match by type + static prefix (for uniqueString placeholder names)
     name_prefix = bicep_name.split("[")[0] if "[" in bicep_name else bicep_name
     if name_prefix:
         for resource in live_resources:
-            deployed_name = resource.get("name", "")
             if (resource.get("type", "").lower() == type_lower and
-                deployed_name.startswith(name_prefix)):
-                return deployed_name
+                    resource.get("name", "").startswith(name_prefix)):
+                return resource
 
-    return ""
+    return None
+
+
+def _find_deployed_resource_name(resource_type: str, bicep_name: str, live_resources: list) -> str:
+    """Backward-compatible wrapper: return the deployed name (or empty string)."""
+    r = _find_deployed_resource(resource_type, bicep_name, live_resources)
+    return r.get("name", "") if r else ""
 
 
 def _print_drift_summary(drifts):
@@ -404,32 +404,30 @@ def main():
 
             # Fetch the resource group's Activity Log ONCE and match each drift against
             # it in memory (the $filter can't target a single resource, so a per-drift
-            # query would re-scan the whole RG N times).
+            # query would re-scan the whole RG N times). Also fetch the policy-assignment
+            # managed-identity principals once, so policy (DINE/Modify) changes - whose
+            # caller is the assignment's identity GUID - are attributed to policy.
             rg_activity_events = fetch_resource_group_activity(
                 subscription_id, resource_group, days=30
             )
+            policy_principal_ids = fetch_policy_principal_ids(subscription_id, resource_group)
 
             for drift in drifts_to_analyze:
                 try:
-                    # Build resource ID for Activity Log query
                     resource_type = drift.get("type", "")
                     bicep_name = drift.get("name", "")
 
-                    # Find actual deployed resource name (not bicep template name with placeholders)
-                    deployed_name = _find_deployed_resource_name(
-                        resource_type, bicep_name, live_resources
-                    )
-
-                    if not deployed_name:
-                        # Fallback to bicep name if no deployed resource found
-                        deployed_name = bicep_name
-                        logger.debug(f"No live resource found for {resource_type}/{bicep_name}, using bicep name")
-
-                    # Extract resource group from context (needed for resource ID)
-                    # IMPORTANT: resource_type is already in "Namespace/type" form (e.g.
-                    # "Microsoft.Storage/storageAccounts"). Do NOT replace '.' with '/' -
-                    # that breaks the provider namespace (Microsoft.Storage -> Microsoft/Storage).
-                    resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type}/{deployed_name}"
+                    # Prefer the deployed resource's REAL id (e.g. a lock's id is nested
+                    # under its target: .../storageAccounts/X/providers/.../locks/Y). Fall
+                    # back to a constructed flat id only when the resource isn't in live.
+                    live = _find_deployed_resource(resource_type, bicep_name, live_resources)
+                    if live and live.get("id"):
+                        resource_id = live["id"]
+                    else:
+                        deployed_name = (live or {}).get("name") or bicep_name
+                        # resource_type is already "Namespace/type" (e.g.
+                        # "Microsoft.Storage/storageAccounts") - do NOT replace '.' with '/'.
+                        resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type}/{deployed_name}"
 
                     # Match this resource against the pre-fetched RG events. resource_type
                     # enables matching deleted resources whose exact ID can't be built.
@@ -447,7 +445,7 @@ def main():
                     lifecycle = build_resource_lifecycle(resource_id, relevant_logs)
                     drift["lifecycle"] = lifecycle.to_dict()
 
-                    origin_info = classify_change_origin(relevant_logs)
+                    origin_info = classify_change_origin(relevant_logs, policy_principal_ids)
                     drift["change_origin"] = origin_info.to_dict()
 
                     logger.info(
