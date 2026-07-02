@@ -268,9 +268,11 @@ def main():
         with open(report_file) as f:
             report_data = json.load(f)
 
-        # Detect unresolvable expressions in Bicep
+        # Detect unresolvable expressions in Bicep. The Phase 1 report stores the
+        # flattened resource list ("arm_resources"), not the raw template, so wrap
+        # it in the {'resources': [...]} shape detect_unresolvable_expressions wants.
         logger.info("Detecting unresolvable expressions in Bicep template...")
-        arm_template = report_data.get("arm_template", {})
+        arm_template = report_data.get("arm_template") or {"resources": report_data.get("arm_resources", [])}
         unresolvable = detect_unresolvable_expressions(arm_template)
         if unresolvable:
             unresolvable_count = sum(len(v) for v in unresolvable.values())

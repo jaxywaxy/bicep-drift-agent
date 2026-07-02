@@ -547,6 +547,13 @@ class PropertyComparator:
                 if deployed_value is None:
                     continue
 
+                # Skip when the bicep value is None - typically an unresolved
+                # cross-module reference (e.g. a nested subnet id passed from
+                # another module's output that the analyzer can't resolve). Can't
+                # meaningfully compare None against a live value.
+                if bicep_value is None:
+                    continue
+
                 # Skip null vs empty string comparisons (functionally equivalent)
                 if (bicep_value is None and deployed_value == "") or (bicep_value == "" and deployed_value is None):
                     continue
@@ -565,7 +572,16 @@ class PropertyComparator:
                 if not bicep_value and not deployed_value:
                     continue
 
-                if bicep_value != deployed_value:
+                # Arrays of objects (securityRules, subnets, routes) and nested
+                # dicts are compared with SUBSET semantics: Azure augments them with
+                # read-only fields, so only the fields the bicep specifies must
+                # match. Scalars compare directly (IDs case-insensitively).
+                if isinstance(bicep_value, (list, dict)) and isinstance(deployed_value, (list, dict)):
+                    is_drift = not PropertyComparator._value_matches(bicep_value, deployed_value)
+                else:
+                    is_drift = not PropertyComparator._scalar_equal(bicep_value, deployed_value)
+
+                if is_drift:
                     severity = PropertyComparator._get_severity(key)
                     diffs.append(
                         PropertyDiff(
@@ -632,12 +648,78 @@ class PropertyComparator:
             if isinstance(v, dict):
                 items.extend(PropertyComparator._flatten_dict(v, new_key, sep=sep).items())
             elif isinstance(v, (list, tuple)):
-                # Serialize arrays as JSON for semantic comparison
-                # This preserves element order and type while avoiding string conversion issues
-                items.append((new_key, json.dumps(v, sort_keys=True, default=str)))
+                # Keep arrays as native lists so they can be compared with SUBSET
+                # semantics (see _value_matches). Azure augments array-of-object
+                # properties (securityRules, subnets, routes) with read-only fields
+                # (provisioningState, etc.); serializing to JSON here would make the
+                # bicep array never equal the augmented live array (false drift).
+                items.append((new_key, list(v)))
             else:
                 items.append((new_key, v))
         return dict(items)
+
+    @staticmethod
+    def _scalar_equal(bicep_val: Any, deployed_val: Any) -> bool:
+        """Compare two scalars, treating Azure resource IDs case-insensitively.
+
+        Azure returns resource IDs with inconsistent casing (e.g. '/resourceGroups/'
+        vs '/resourcegroups/'), which is not real drift.
+        """
+        if isinstance(bicep_val, str) and isinstance(deployed_val, str):
+            if "/subscriptions/" in bicep_val.lower() and "/subscriptions/" in deployed_val.lower():
+                return bicep_val.lower() == deployed_val.lower()
+        return bicep_val == deployed_val
+
+    @staticmethod
+    def _value_matches(bicep_val: Any, deployed_val: Any) -> bool:
+        """Deep SUBSET match: every field the bicep specifies must be present and
+        equal in the deployed value. Deployed-only fields (Azure read-only
+        augmentation like provisioningState) are ignored.
+        """
+        # An unresolved bicep expression (resourceId(), uniqueString(), etc.,
+        # often a NESTED id like publicIpAddresses[].id) resolves at deploy time
+        # and can't be compared - treat as a match rather than false drift.
+        if PropertyComparator._has_unresolved_expressions(bicep_val):
+            return True
+        if isinstance(bicep_val, dict) and isinstance(deployed_val, dict):
+            for k, v in bicep_val.items():
+                # Case-insensitive key lookup (Azure may vary key casing).
+                match_key = k if k in deployed_val else next(
+                    (dk for dk in deployed_val if dk.lower() == k.lower()), None
+                )
+                if match_key is None:
+                    # An empty/None bicep sub-value that Azure omits is not drift.
+                    if v in (None, "", {}, []):
+                        continue
+                    return False
+                if not PropertyComparator._value_matches(v, deployed_val[match_key]):
+                    return False
+            return True
+        if isinstance(bicep_val, list) and isinstance(deployed_val, list):
+            return PropertyComparator._list_is_subset(bicep_val, deployed_val)
+        return PropertyComparator._scalar_equal(bicep_val, deployed_val)
+
+    @staticmethod
+    def _list_is_subset(bicep_list: list, deployed_list: list) -> bool:
+        """True if every bicep element subset-matches some deployed element.
+
+        Elements with a 'name' (NSG rules, subnets, routes) are matched by name;
+        otherwise an element must subset-match some deployed element positionally.
+        """
+        for b in bicep_list:
+            if isinstance(b, dict) and "name" in b:
+                bname = str(b.get("name", "")).lower()
+                cand = next(
+                    (d for d in deployed_list
+                     if isinstance(d, dict) and str(d.get("name", "")).lower() == bname),
+                    None,
+                )
+                if cand is None or not PropertyComparator._value_matches(b, cand):
+                    return False
+            else:
+                if not any(PropertyComparator._value_matches(b, d) for d in deployed_list):
+                    return False
+        return True
 
     @staticmethod
     def _has_unresolved_expressions(value: Any) -> bool:
@@ -654,6 +736,14 @@ class PropertyComparator:
         unresolved_markers = [
             'uniquestring(',
             'subscription().',
+            # Placeholder tokens emitted by resolve_expression when a
+            # subscription()/tenant()/deployment() or cross-module reference can't
+            # be resolved at analysis time (e.g. a subnet id from another module).
+            'subscription-tenant-id',
+            'subscription-id',
+            'subscription-context',
+            'deployment-location',
+            'tenant(',
             'resourceid(',
             'format(',
             'variables(',
@@ -662,6 +752,7 @@ class PropertyComparator:
             'listkeys(',
             'concat(',
             'string(',
+            'take(',
         ]
 
         return any(marker in value_lower for marker in unresolved_markers)

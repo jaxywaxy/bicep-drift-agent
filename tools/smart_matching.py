@@ -17,6 +17,11 @@ UNRESOLVABLE_FUNCTIONS = {
     'deployment',
     'reference',
     'listKeys',
+    'take',
+    'toLower',
+    'concat',
+    'format',
+    'substring',
 }
 
 
@@ -43,17 +48,19 @@ def detect_unresolvable_expressions(arm_template: Dict) -> Dict[str, List[str]]:
 
 
 def _has_unresolvable_expression(name_str: str) -> bool:
-    """Check if a string contains unresolvable ARM functions."""
+    """Check if a string contains an unresolvable ARM function call.
+
+    The analyzer partially resolves names, so an unresolvable name may keep its
+    bracket form ([format(...)]) OR appear as a bare call
+    (jacquidevstgtake(uniqueString(resourceGroup().id), 6)). Detect either: a
+    known function immediately followed by '(' is unresolvable.
+    """
     if not isinstance(name_str, str):
         return False
 
-    # Check for ARM function syntax
-    if not ('[' in name_str and ']' in name_str):
-        return False
-
-    # Check for known unresolvable functions
+    lowered = name_str.lower()
     for func in UNRESOLVABLE_FUNCTIONS:
-        if func in name_str:
+        if f"{func.lower()}(" in lowered:
             return True
 
     return False
@@ -89,8 +96,11 @@ def smart_match_resources(
         if not _has_unresolvable_expression(resource_name):
             continue
 
-        # Find unmatched Azure resources of the same type
-        candidates = [r for r in unmatched_azure if r.get('type') == resource_type]
+        # Find unmatched Azure resources of the same type. Compare case-
+        # insensitively: Resource Graph returns lowercase types
+        # (microsoft.storage/storageaccounts) but Bicep is PascalCase.
+        rtype_lower = resource_type.lower()
+        candidates = [r for r in unmatched_azure if (r.get('type') or '').lower() == rtype_lower]
 
         if len(candidates) == 1:
             # Perfect match: one unresolvable Bicep resource and one unmatched Azure resource of same type
@@ -137,10 +147,29 @@ def _find_best_match(bicep_resource: Dict, candidates: List[Dict]) -> Dict:
     if not candidates:
         return None
 
-    # Simple heuristic: prefer most recently created (if metadata available)
-    # For now, just return the first candidate
-    # In a real implementation, could use more sophisticated matching
-    return candidates[0]
+    # Prefer the candidate sharing the longest name prefix with the Bicep name.
+    # The Bicep name is partially resolved (e.g. 'jacquidevstgtake(uniqueString(
+    # ...))'); its literal lead ('jacquidevstg') still distinguishes a 'general'
+    # storage from a 'logging' one ('jacquidevstl') when several of the same type
+    # exist. Longest-common-prefix is robust to the glued-on function tokens.
+    bicep_name = (bicep_resource.get('name') or '').lower()
+
+    def _common_prefix_len(a: str, b: str) -> int:
+        n = 0
+        for ca, cb in zip(a, b):
+            if ca != cb:
+                break
+            n += 1
+        return n
+
+    best, best_len = None, 0
+    for c in candidates:
+        n = _common_prefix_len(bicep_name, (c.get('name') or '').lower())
+        if n > best_len:
+            best_len, best = n, c
+
+    # Require a meaningful shared prefix; otherwise fall back to the first.
+    return best if best_len >= 3 else candidates[0]
 
 
 def annotate_drifts_with_matches(
@@ -155,17 +184,19 @@ def annotate_drifts_with_matches(
     """
     annotated = []
 
-    # Create a map of matched deployments
+    # Create a map of matched deployments. Key on (lowercased type, name): the
+    # matched resource carries the Bicep PascalCase type while the drift carries
+    # the live lowercase type, so a case-sensitive key would never match.
     matched_map = {}
     for resource in matched_resources:
-        key = (resource.get('type'), resource.get('matched_to'))
+        key = ((resource.get('type') or '').lower(), resource.get('matched_to'))
         matched_map[key] = resource
 
     for drift in drifts:
         drift_copy = drift.copy()
 
         # Check if this drift is a matched resource
-        key = (drift.get('type'), drift.get('name'))
+        key = ((drift.get('type') or '').lower(), drift.get('name'))
         if key in matched_map:
             matched = matched_map[key]
             drift_copy['is_matched'] = True
