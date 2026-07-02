@@ -19,6 +19,8 @@ from tools.send_notifications import (
     OwnerFilter,
     NotificationRouter,
     events_from_report,
+    events_from_reports_dir,
+    build_team_notifications,
 )
 
 
@@ -78,6 +80,42 @@ class EventsFromReportTests(unittest.TestCase):
 
     def test_missing_file_returns_empty(self):
         self.assertEqual(events_from_report("/no/such/report.json"), [])
+
+
+class BuildTeamNotificationsTests(unittest.TestCase):
+    def test_flat_config_is_wrapped_under_lz_name(self):
+        flat = {"slack": "https://x", "filter": "all", "owners": ["platform"]}
+        result = build_team_notifications(flat, "platform-lz")
+        self.assertEqual(result, {"platform-lz": flat})
+
+    def test_multi_team_config_is_passed_through(self):
+        multi = {
+            "platform-team": {"teams": "https://x", "owners": ["platform"]},
+            "app-teams": {"slack": "https://y", "owners": ["workload"]},
+        }
+        self.assertEqual(build_team_notifications(multi, "ignored-name"), multi)
+
+    def test_empty_config_returns_empty(self):
+        self.assertEqual(build_team_notifications({}, "lz"), {})
+        self.assertEqual(build_team_notifications(None, "lz"), {})
+
+
+class EventsFromReportsDirTests(unittest.TestCase):
+    def test_aggregates_every_report_in_dir(self):
+        d = tempfile.mkdtemp()
+        for i, owner in enumerate(["platform", "workload"]):
+            with open(os.path.join(d, f"rg{i}-drift.json"), "w") as f:
+                json.dump({"drifts": [
+                    {"type": "t", "name": f"r{i}", "drift_type": "property_drift", "owner": owner}
+                ]}, f)
+        # a non-report file should be ignored
+        with open(os.path.join(d, "notes.txt"), "w") as f:
+            f.write("ignore me")
+        events = events_from_reports_dir(d)
+        self.assertEqual(sorted(e.owner for e in events), ["platform", "workload"])
+
+    def test_missing_dir_returns_empty(self):
+        self.assertEqual(events_from_reports_dir("/no/such/dir"), [])
 
 
 class RouterOwnerRoutingTests(unittest.TestCase):

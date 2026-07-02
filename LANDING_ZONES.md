@@ -319,6 +319,27 @@ checks:
 
 ---
 
+## Platform vs Workload Landing Zones
+
+In a CAF/ALZ topology there are two kinds of landing zone, and the same agent
+scans both — the difference is entirely in the LZ config + its `.drift-ignore`:
+
+| | **Workload LZ** | **Platform LZ** |
+| --- | --- | --- |
+| Owns | Its app resources | Shared network fabric (VNets, subnets, NSG *resources*, route tables, peering) |
+| Network fabric | Referenced-as-existing → **ignored** via `.drift-ignore` | **In scope** (no network ignores) so its drift surfaces |
+| Notifications | Single team channel | **Owner-routed**: `owners: [platform]` → platform team, leaked `owners: [workload]` → app channel |
+
+The agent tags every drift with `owner` = `platform` or `workload` (network
+fabric ⇒ platform; NSG `securityRules` ⇒ workload even though the NSG resource
+is platform-owned). Notification configs route on that tag — see
+[Owner-Based Routing](TEAM_NOTIFICATIONS.md#owner-based-routing-cafalz).
+
+A ready-to-copy platform LZ config is in
+[`examples/drift-lz-platform-config.yml`](examples/drift-lz-platform-config.yml).
+
+---
+
 ## Troubleshooting
 
 ### "Landing Zone not found in lz-index.yml"
