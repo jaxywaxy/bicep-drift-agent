@@ -42,23 +42,21 @@ notifications:
     filter: all
 
 # ---- What to scan -----------------------------------------------------------
-# Point at the platform network deployment. resource_groups are the connectivity
-# / hub RGs the platform team deploys into.
+# Point at the platform network deployment. resource_groups accepts explicit
+# names, a glob ("rg-connectivity-*"), or "*" for the whole subscription
+# (Phase 4 #4 subscription-scope). Globs/wildcards are expanded against the live
+# subscription before scanning, and each resolved RG runs the full pipeline
+# (ignore filtering + owner tagging + per-RG report), so owner routing still works.
 checks:
-  - name: Hub Networking
+  - name: Connectivity Fabric
     repo: myorg/platform-connectivity-bicep
     branch: main
     path: bicep/network/main.bicep
     resource_groups:
-      - rg-connectivity-hub
-      - rg-connectivity-dns
+      - "rg-connectivity-*"     # all connectivity RGs (hub, dns, fw, ...)
 
-  - name: Route & Firewall
-    repo: myorg/platform-connectivity-bicep
-    branch: main
-    path: bicep/routing/main.bicep
-    resource_groups:
-      - rg-connectivity-fw
+  # Alternatively, scan every resource group in the platform subscription:
+  #   resource_groups: ["*"]
 
 # =============================================================================
 # Register in the agent repo's .github/lz-index.yml:
