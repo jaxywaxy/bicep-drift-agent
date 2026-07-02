@@ -411,6 +411,44 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
     )
 
 
+def build_team_notifications(notif_config: Any, lz_name: str) -> Dict[str, Dict[str, Any]]:
+    """Normalize a landing zone's ``notifications`` block into the team structure
+    that DRIFT_NOTIFICATIONS expects.
+
+    Two shapes are supported:
+      * Flat (single team): ``{slack: url, filter: all, owners: [...]}`` — wrapped
+        as ``{lz_name: {...}}``. This is the historic single-channel form.
+      * Multi-team (owner routing): ``{platform-team: {teams: url, owners:
+        [platform]}, app-team: {slack: url, owners: [workload]}}`` — passed through
+        unchanged. Detected when every value is itself a dict.
+
+    Returns {} for an empty/None config.
+    """
+    if not notif_config or not isinstance(notif_config, dict):
+        return {}
+    # Multi-team when every value is a dict (each a per-team config).
+    if all(isinstance(v, dict) for v in notif_config.values()):
+        return notif_config
+    return {lz_name: notif_config}
+
+
+def events_from_reports_dir(reports_dir: str) -> List[DriftEvent]:
+    """Aggregate DriftEvents from every ``*-drift.json`` report in a directory.
+
+    Used by CI to notify from the owner-tagged JSON reports (one per resource
+    group) rather than the concatenated text report, so owner routing works.
+    """
+    import pathlib
+
+    events: List[DriftEvent] = []
+    d = pathlib.Path(reports_dir)
+    if not d.is_dir():
+        return events
+    for json_file in sorted(d.glob("*-drift.json")):
+        events.extend(events_from_report(str(json_file)))
+    return events
+
+
 def events_from_report(report_path: str) -> List[DriftEvent]:
     """Build DriftEvents from a JSON drift report, preserving the owner tag.
 
@@ -508,10 +546,14 @@ if __name__ == "__main__":
     output_file = sys.argv[1]
     report_url = sys.argv[2] if len(sys.argv) > 2 else "See GitHub Actions run"
 
-    # Prefer the JSON report: it carries each drift's owner tag, which enables
-    # owner-based routing (Phase 4). Text output has no owner, so those events
+    # Prefer JSON: it carries each drift's owner tag, which enables owner-based
+    # routing (Phase 4). A directory => aggregate every *-drift.json in it (CI's
+    # per-resource-group reports). Text output has no owner, so those events
     # route to every team (owners filter defaults to 'all').
-    if output_file.endswith(".json"):
+    if os.path.isdir(output_file):
+        logger.info(f"Reading drift reports from directory (owner-aware JSON): {output_file}")
+        events = events_from_reports_dir(output_file)
+    elif output_file.endswith(".json"):
         logger.info("Reading drift report (owner-aware JSON)...")
         events = events_from_report(output_file)
     else:

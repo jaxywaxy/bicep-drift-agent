@@ -380,9 +380,13 @@ jobs:
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           PYTHONUNBUFFERED: '1'
         run: |
-          # Extract notifications from config and wrap in team structure
+          # Normalize the config's notifications block into the team structure
+          # DRIFT_NOTIFICATIONS expects. Supports both a flat single-channel block
+          # and a multi-team owner-routing block (build_team_notifications).
           NOTIFICATIONS=$(python3 << 'PYTHON_SCRIPT'
           import sys, yaml, json, os
+          sys.path.insert(0, ".")
+          from tools.send_notifications import build_team_notifications
 
           config_path = os.environ.get('CONFIG_PATH', '.github/drift-lz-config.yml')
           lz_name = os.environ.get('LZ_NAME', 'default')
@@ -395,9 +399,7 @@ jobs:
           try:
             with open(config_file) as f:
               config = yaml.safe_load(f)
-            notif_config = config.get('notifications', {})
-            # Wrap notifications in team-based structure
-            team_notifications = {lz_name: notif_config} if notif_config else {}
+            team_notifications = build_team_notifications(config.get('notifications', {}), lz_name)
             print(json.dumps(team_notifications))
           except Exception as e:
             print(f"❌ Error reading config: {e}", file=sys.stderr)
@@ -415,7 +417,14 @@ jobs:
 
           REPORT_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           echo "Sending notifications to configured channels..."
-          python3 tools/send_notifications.py consolidated_drift_report.txt "$REPORT_URL"
+          # Prefer the owner-tagged JSON reports (enables owner routing); the
+          # per-resource-group *-drift.json land in the downloaded artifact dir.
+          # Fall back to the concatenated text report if no JSON is present.
+          if ls *-drift.json >/dev/null 2>&1; then
+            python3 tools/send_notifications.py . "$REPORT_URL"
+          else
+            python3 tools/send_notifications.py consolidated_drift_report.txt "$REPORT_URL"
+          fi
 
       - name: Publish summary to GitHub
         if: always()

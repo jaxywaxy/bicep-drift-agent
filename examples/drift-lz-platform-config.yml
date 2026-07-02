@@ -1,0 +1,76 @@
+# =============================================================================
+# Platform Landing Zone — drift config (EXAMPLE / REFERENCE)
+# =============================================================================
+# Drop this in a PLATFORM landing zone's Bicep repo as
+#   .github/drift-lz-config.yml
+# and register the LZ in the agent's .github/lz-index.yml (see bottom of file).
+#
+# A platform LZ owns the shared network fabric — VNets, subnets, NSG *resources*,
+# route tables, peering. App teams own their workloads (and NSG securityRules).
+# Two things make this a "platform" config rather than a workload one:
+#
+#   1. It does NOT carry the network-fabric .drift-ignore patterns. A *workload*
+#      LZ ignores VNets/subnets/NSGs/routeTables (they're referenced-as-existing,
+#      owned elsewhere). A platform LZ leaves them IN scope so their drift
+#      surfaces here. (See the platform vs workload .drift-ignore split.)
+#
+#   2. Notifications use OWNER ROUTING: platform-owned drift (the network fabric)
+#      goes to the platform team's channel; any workload-owned drift that leaked
+#      into this repo is routed to an app channel instead of paging the platform
+#      team. The agent tags every drift with owner=platform|workload.
+# =============================================================================
+
+name: platform-connectivity
+subscription_id: "00000000-0000-0000-0000-000000000000"   # platform/connectivity sub
+
+# ---- Owner-routed notifications (Phase 4) -----------------------------------
+# Multi-team form: each key is a team, each with its own channel + `owners`.
+# `owners` filters by the drift's owner tag; omit it to receive every owner.
+# `filter` (all|drift|extra|missing) still applies and AND's with `owners`.
+notifications:
+  platform-team:
+    teams: "https://outlook.webhook.office.com/webhookb2/REPLACE/platform"
+    owners: [platform]        # VNets, subnets, NSG resources, route tables, peering
+    filter: all
+
+  # Safety net: workload-owned drift that shows up in the platform repo goes to
+  # the app teams' channel, not the platform on-call. Remove if you want the
+  # platform team to see everything.
+  app-teams:
+    slack: "https://hooks.slack.com/services/REPLACE/workload"
+    owners: [workload]
+    filter: all
+
+# ---- What to scan -----------------------------------------------------------
+# Point at the platform network deployment. resource_groups are the connectivity
+# / hub RGs the platform team deploys into.
+checks:
+  - name: Hub Networking
+    repo: myorg/platform-connectivity-bicep
+    branch: main
+    path: bicep/network/main.bicep
+    resource_groups:
+      - rg-connectivity-hub
+      - rg-connectivity-dns
+
+  - name: Route & Firewall
+    repo: myorg/platform-connectivity-bicep
+    branch: main
+    path: bicep/routing/main.bicep
+    resource_groups:
+      - rg-connectivity-fw
+
+# =============================================================================
+# Register in the agent repo's .github/lz-index.yml:
+#
+#   landing_zones:
+#     platform-connectivity:
+#       repo: myorg/platform-connectivity-bicep
+#       config_path: .github/drift-lz-config.yml
+#       workflow: drift-lz-platform-connectivity.yml
+#       schedule: '0 8 * * *'
+#
+# Then copy .github/workflows/drift-lz-template.yml to
+# drift-lz-platform-connectivity.yml and set its landing_zone to
+# "platform-connectivity".
+# =============================================================================
