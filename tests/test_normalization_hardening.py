@@ -43,6 +43,29 @@ class SubsetArrayComparisonTests(unittest.TestCase):
         diffs = PropertyComparator.compare_properties(bicep, deployed)
         self.assertEqual(diffs, [])
 
+    def test_manually_added_route_is_drift(self):
+        # Bicep defines one route; someone added 'to-onprem' by hand. Azure never
+        # adds elements to these named collections itself, so the extra element
+        # is drift even though the bicep-defined element still matches.
+        bicep = {"properties": {"routes": [
+            {"name": "to-hub", "properties": {"addressPrefix": "10.0.0.0/16"}}]}}
+        deployed = {"properties": {"routes": [
+            {"name": "to-hub", "properties": {"addressPrefix": "10.0.0.0/16",
+                                              "provisioningState": "Succeeded"}},
+            {"name": "to-onprem", "properties": {"addressPrefix": "192.168.0.0/16"}},
+        ]}}
+        diffs = PropertyComparator.compare_properties(bicep, deployed)
+        self.assertTrue(any("routes" in d.property_path for d in diffs),
+                        "a manually added named element must be drift")
+
+    def test_unnamed_array_extra_elements_stay_subset(self):
+        # Unnamed arrays (e.g. natGateway publicIpAddresses by id) keep pure
+        # subset semantics - extra deployed entries are not flagged here.
+        bicep = {"properties": {"publicIpAddresses": [{"id": "/subscriptions/s/x"}]}}
+        deployed = {"properties": {"publicIpAddresses": [
+            {"id": "/subscriptions/s/x"}, {"id": "/subscriptions/s/y"}]}}
+        self.assertEqual(PropertyComparator.compare_properties(bicep, deployed), [])
+
     def test_changed_rule_value_is_drift(self):
         bicep = {"properties": {"securityRules": [
             {"name": "Allow-HTTPS", "properties": {"destinationPortRange": "443"}}]}}
