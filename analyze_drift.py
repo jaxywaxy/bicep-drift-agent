@@ -285,7 +285,7 @@ def main():
             logger.info("Attempting smart resource matching...")
             bicep_resources = report_data.get("arm_resources", [])
             azure_resources = report_data.get("live_resources", [])
-            matched, _, _ = smart_match_resources(
+            matched, unmatched_bicep, _ = smart_match_resources(
                 bicep_resources, azure_resources, unresolvable
             )
 
@@ -294,6 +294,16 @@ def main():
                 for m in matched:
                     logger.debug(f"  {m.get('type')}: {m.get('name')} → {m.get('matched_to')}")
                 report_data["smart_matched"] = matched
+                # Build the property-comparison bicep set from the match PAIRS so
+                # smart-matched (unresolvable-name) resources are property-checked
+                # too - otherwise a real change on a uniqueString-named resource
+                # (e.g. storage SKU) is never detected. Each matched entry already
+                # knows its live counterpart, so remap its name to matched_to (no
+                # name-keyed dict -> no collision when two resources share an
+                # identical name expression, e.g. two storage accounts).
+                report_data["comparison_bicep_resources"] = unmatched_bicep + [
+                    {**m, "name": m.get("matched_to")} for m in matched if m.get("matched_to")
+                ]
             else:
                 logger.info("No successful smart matches")
 
@@ -334,9 +344,11 @@ def main():
         # NOTE: the grep-able summary is emitted AFTER Phase 3 below, once
         # policy-enforced changes have been split out of the actionable set.
 
-        # Perform property-level drift detection
+        # Perform property-level drift detection. Prefer the smart-match-aware
+        # comparison set (unresolvable-named resources remapped to their live
+        # name) so their properties are compared; fall back to the raw resources.
         logger.info("Detecting property-level drift (comparing configurations)...")
-        bicep_resources = report_data.get("arm_resources", [])
+        bicep_resources = report_data.get("comparison_bicep_resources") or report_data.get("arm_resources", [])
         deployed_resources = report_data.get("live_resources", [])
 
         if bicep_resources and deployed_resources:
@@ -407,6 +419,48 @@ def main():
                 }
                 for d in property_drifts
             ]
+
+            # Merge "modified" results into the main drift list. Phase 1 skips
+            # unresolvable-named resources, so a smart-matched resource's property
+            # drift (e.g. a storage SKU change on a uniqueString-named account) is
+            # detected ONLY here - without this merge it never reaches the report
+            # summary, owner tagging, or notifications.
+            existing = {
+                ((d.get("type") or "").lower(), d.get("name")): d
+                for d in report_data.get("drifts", [])
+            }
+            for d in property_drifts:
+                if d.drift_type != "modified" or not d.property_diffs:
+                    continue
+                name = d.deployed_name or d.resource_name
+                changed = {
+                    diff.property_path: {
+                        "desired": diff.desired_value,
+                        "actual": diff.actual_value,
+                        "severity": diff.severity,
+                    }
+                    for diff in d.property_diffs
+                }
+                prior = existing.get(((d.resource_type or "").lower(), name))
+                if prior is not None:
+                    if prior.get("drift_type") == "matched_unresolvable":
+                        # The smart-match reconciled this resource's EXISTENCE, but
+                        # its properties drifted - upgrade to a real property drift.
+                        prior["drift_type"] = "property_drift"
+                        prior.setdefault("details", {})["changed_properties"] = changed
+                    else:
+                        continue  # already reported by Phase 1
+                else:
+                    report_data.setdefault("drifts", []).append({
+                        "type": d.resource_type,
+                        "name": name,
+                        "drift_type": "property_drift",
+                        "details": {"changed_properties": changed},
+                    })
+                logger.info(
+                    f"Merged smart-matched property drift: {d.resource_type}/{name} "
+                    f"({', '.join(changed)})"
+                )
 
         # Build DriftReport object
         drifts = [

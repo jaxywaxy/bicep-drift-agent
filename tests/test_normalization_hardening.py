@@ -10,12 +10,21 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.property_drift import PropertyComparator
+from tools.property_drift import PropertyComparator, DriftDetector
 from tools.smart_matching import (
     _has_unresolvable_expression,
     smart_match_resources,
     annotate_drifts_with_matches,
 )
+
+
+def _build_comparison_set(arm, live):
+    """Mirror analyze_drift: remap smart-matched (unresolvable-name) bicep
+    resources to their live name so their properties are compared."""
+    matched, unmatched_bicep, _ = smart_match_resources(arm, live, {})
+    return unmatched_bicep + [
+        {**m, "name": m.get("matched_to")} for m in matched if m.get("matched_to")
+    ]
 
 
 class SubsetArrayComparisonTests(unittest.TestCase):
@@ -106,6 +115,48 @@ class SmartMatchCaseInsensitiveTests(unittest.TestCase):
         pairs = {m["name"][:12]: m["matched_to"] for m in matched}
         self.assertEqual(pairs["jacquidevstg"], "jacquidevstgm4fg23")
         self.assertEqual(pairs["jacquidevstl"], "jacquidevstla7m6et")
+
+
+class UniqueStringPropertyDriftTests(unittest.TestCase):
+    """A uniqueString-named resource must still be PROPERTY-checked, not just
+    existence-matched (else e.g. a storage SKU change goes undetected)."""
+
+    def _storage(self, name, sku):
+        return {"type": "Microsoft.Storage/storageAccounts", "name": name,
+                "sku": {"name": sku}, "properties": {}}
+
+    def test_sku_change_on_uniquestring_storage_is_detected(self):
+        arm = [self._storage(
+            "toLower(format('{0}stg{1}', parameters('prefix'), take(uniqueString(x),6)))", "Standard_LRS")]
+        live = [{"type": "microsoft.storage/storageaccounts", "name": "jacquidevstgm4fg23",
+                 "sku": {"name": "Standard_GRS"}, "properties": {}}]
+        comparison = _build_comparison_set(arm, live)
+        # The remapped resource now carries the live name.
+        self.assertEqual(comparison[-1]["name"], "jacquidevstgm4fg23")
+        drifts = DriftDetector.detect_drift(comparison, live)
+        modified = [d for d in drifts if d.drift_type == "modified"]
+        self.assertTrue(any(
+            any("sku" in pd.property_path for pd in d.property_diffs) for d in modified
+        ), "storage SKU change on a uniqueString-named account should be detected")
+
+    def test_two_storage_identical_name_expr_no_collision(self):
+        # Both storage accounts share the SAME name expression (same module,
+        # different purpose) - the pair-based remap must not collide.
+        expr = "toLower(format('{0}st{1}', parameters('prefix'), take(uniqueString(x),6)))"
+        arm = [self._storage(expr, "Standard_LRS"), self._storage(expr, "Standard_LRS")]
+        live = [
+            {"type": "microsoft.storage/storageaccounts", "name": "jacquidevstgm4fg23",
+             "sku": {"name": "Standard_GRS"}, "properties": {}},
+            {"type": "microsoft.storage/storageaccounts", "name": "jacquidevstla7m6et",
+             "sku": {"name": "Standard_LRS"}, "properties": {}},
+        ]
+        comparison = _build_comparison_set(arm, live)
+        names = sorted(c["name"] for c in comparison)
+        self.assertEqual(names, ["jacquidevstgm4fg23", "jacquidevstla7m6et"])  # both, no collision
+        drifts = DriftDetector.detect_drift(comparison, live)
+        modified = [d for d in drifts if d.drift_type == "modified"]
+        # Exactly the GRS account drifts (the other matches LRS==LRS).
+        self.assertEqual(len(modified), 1)
 
 
 if __name__ == "__main__":
