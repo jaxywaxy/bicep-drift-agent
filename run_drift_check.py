@@ -67,6 +67,25 @@ def run(bicep_file: str, resource_group: str):
             except Exception as e:
                 logger.warning(f"Could not load {bicepparam_file.name}: {e}")
 
+        # Fall back to an ARM parameters.json next to the bicep file (the standard
+        # `az deployment ... --parameters envs/dev/parameters.json` layout). Flatten
+        # {parameters: {k: {value: v}}} -> {k: v}; keeps dict/list values intact so
+        # object params (tags) resolve as real objects.
+        if not param_overrides:
+            params_json = Path(bicep_file).parent / "parameters.json"
+            if params_json.exists():
+                try:
+                    with open(params_json) as f:
+                        raw = json.load(f).get("parameters", {})
+                    param_overrides = {
+                        k: v.get("value") for k, v in raw.items()
+                        if isinstance(v, dict) and "value" in v
+                    }
+                    if param_overrides:
+                        logger.info(f"Parameters loaded from {params_json}: {sorted(param_overrides)}")
+                except Exception as e:
+                    logger.warning(f"Could not load {params_json}: {e}")
+
     # Step 1: Compile Bicep → ARM JSON
     logger.info("Step 1: Compiling Bicep template...")
     try:
