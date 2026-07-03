@@ -36,7 +36,6 @@ from tools.diff_states import _should_compare_resource
 from run_drift_check import run as run_phase1
 from tools.compile_bicep import compile_bicep, detect_deployment_scope
 from tools.rg_selector import rg_label
-from tools.azure_resource_graph import ResourceGraphClient
 from tools.activity_log import (
     fetch_resource_group_activity,
     match_activity_for_resource,
@@ -77,12 +76,6 @@ def _find_deployed_resource(resource_type: str, bicep_name: str, live_resources:
                 return resource
 
     return None
-
-
-def _find_deployed_resource_name(resource_type: str, bicep_name: str, live_resources: list) -> str:
-    """Backward-compatible wrapper: return the deployed name (or empty string)."""
-    r = _find_deployed_resource(resource_type, bicep_name, live_resources)
-    return r.get("name", "") if r else ""
 
 
 def _print_drift_summary(drifts):
@@ -129,12 +122,24 @@ def _find_repo_ignore(bicep_file: str):
 
 
 def discover_resource_groups():
-    """Query Azure for all resource groups in the current subscription."""
+    """Query Azure for all resource groups in the current subscription.
+
+    Uses the Resource Graph SDK (same auth/client as get_live_state) rather than
+    shelling out to `az graph query`, which required the az 'graph' CLI extension.
+    """
     try:
-        client = ResourceGraphClient()
-        query = "Resources | summarize by resourceGroup | project name = resourceGroup | distinct name"
-        results = client.query(query)
-        rgs = [result["name"] for result in results if result.get("name")]
+        from azure.identity import DefaultAzureCredential
+        from azure.mgmt.resourcegraph import ResourceGraphClient
+        from azure.mgmt.resourcegraph.models import QueryRequest
+
+        sub_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
+        client = ResourceGraphClient(DefaultAzureCredential())
+        request = QueryRequest(
+            subscriptions=[sub_id] if sub_id else [],
+            query="Resources | distinct resourceGroup",
+        )
+        response = client.resources(request)
+        rgs = [row["resourceGroup"] for row in (response.data or []) if row.get("resourceGroup")]
         return sorted(rgs)
     except Exception as e:
         logger.error(f"Failed to discover resource groups: {e}")

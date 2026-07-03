@@ -7,11 +7,13 @@ Returns the parsed ARM template as a dict.
 Phase 1 goal: get this returning real data before touching the agent loop.
 """
 
+import copy
 import json
 import subprocess
 import tempfile
 import re
 import logging
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict
 
@@ -36,6 +38,29 @@ def compile_bicep(bicep_file_path: str) -> dict:
 
     Shells out to `az bicep build` — requires Azure CLI with Bicep extension.
     Check with: az bicep version
+
+    Cached per path for the life of the process: analyze_drift compiles once for
+    scope detection and Phase 1 compiles the same file again (once per RG in
+    wildcard mode) - each az invocation costs seconds. Source files don't change
+    mid-run, so caching is safe. Returns a deep copy so callers can't taint the
+    cached template.
+
+    Args:
+        bicep_file_path: Absolute or relative path to the .bicep file.
+
+    Returns:
+        Parsed ARM template as a dict.
+
+    Raises:
+        FileNotFoundError: If the Bicep file doesn't exist.
+        RuntimeError: If az bicep build fails.
+    """
+    return copy.deepcopy(_compile_bicep_cached(str(bicep_file_path)))
+
+
+@lru_cache(maxsize=8)
+def _compile_bicep_cached(bicep_file_path: str) -> dict:
+    """Run `az bicep build` once per path; see compile_bicep().
 
     Args:
         bicep_file_path: Absolute or relative path to the .bicep file.
@@ -148,7 +173,6 @@ def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = N
 if __name__ == "__main__":
     # Quick smoke test — point at any .bicep file you have handy
     import sys
-    from pathlib import Path
     try:
         from .logger import setup_logging
     except ImportError:

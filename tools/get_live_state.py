@@ -10,9 +10,10 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 import os
 import json
 import logging
+import re
 import time
 import fnmatch
-from typing import Optional, List, Dict, Callable, TypeVar
+from typing import Any, Optional, List, Dict, Callable, TypeVar
 from functools import wraps
 from azure.identity import DefaultAzureCredential
 from azure.core.exceptions import HttpResponseError
@@ -21,6 +22,22 @@ logger = logging.getLogger(__name__)
 
 # Resource-group selectors that mean "the whole subscription" (no filter).
 _ALL_RG_SELECTORS = {None, "", "*"}
+
+# Legal Azure resource-group name: alphanumerics, underscores, parentheses,
+# hyphens, periods (can't end in a period). Anything else is rejected before
+# being interpolated into a KQL query - RG names arrive from LZ configs and
+# workflow inputs, so this closes the KQL-injection surface.
+_RG_NAME_RE = re.compile(r"^[\w\-\.\(\)]{1,90}$")
+
+
+def _kql_rg_filter(resource_group: str) -> str:
+    """Build the KQL RG filter clause, validating the name first."""
+    if not _RG_NAME_RE.match(resource_group or ""):
+        raise ValueError(
+            f"Invalid resource group name for query: {resource_group!r} "
+            "(allowed: alphanumerics, '_', '-', '.', '(', ')')"
+        )
+    return f"Resources | where resourceGroup =~ '{resource_group}'"
 
 
 def _is_rg_glob(selector: Optional[str]) -> bool:
@@ -153,7 +170,7 @@ def get_live_state(
     if scope == "resource_group":
         if not resource_group:
             raise ValueError("resource_group required for resource_group scope")
-        kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
+        kql_query = _kql_rg_filter(resource_group)
     else:
         # Subscription scope (landing zones). The selector can be:
         #   None/''/'*'  -> whole subscription
@@ -162,7 +179,7 @@ def get_live_state(
         if resource_group in _ALL_RG_SELECTORS or _is_rg_glob(resource_group):
             kql_query = "Resources"
         else:
-            kql_query = f"Resources | where resourceGroup =~ '{resource_group}'"
+            kql_query = _kql_rg_filter(resource_group)
 
     logger.info(f"Querying Azure Resource Graph: {kql_query}")
     start_time = time.time()
@@ -194,7 +211,7 @@ def get_live_state(
             }
             resources.append(resource_dict)
 
-    _augment_untracked_resources(resources, resource_group, sub_id, scope)
+    _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential)
     if scope == "subscription":
         resources = _filter_by_rg_selector(resources, resource_group)
     logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
@@ -246,7 +263,7 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
         }
         resources.append(resource_dict)
 
-    _augment_untracked_resources(resources, resource_group, sub_id, scope)
+    _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential)
     if scope == "subscription":
         resources = _filter_by_rg_selector(resources, resource_group)
     elapsed = time.time() - start_time
@@ -254,7 +271,13 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> Li
     return resources
 
 
-def _augment_untracked_resources(resources: List[Dict], resource_group: Optional[str], sub_id: str, scope: str) -> None:
+def _augment_untracked_resources(
+    resources: List[Dict],
+    resource_group: Optional[str],
+    sub_id: str,
+    scope: str,
+    credential: Optional[Any] = None,
+) -> None:
     """
     Add resources not indexed by Resource Graph / the resource list API, and
     normalize known false-positive properties. Mutates `resources` in place.
@@ -264,9 +287,10 @@ def _augment_untracked_resources(resources: List[Dict], resource_group: Optional
     - Cosmos account location normalization
     """
     # Share one credential+token across the ARM REST helpers instead of each
-    # creating its own (avoids repeated auth round-trips).
+    # creating its own (avoids repeated auth round-trips). Callers that already
+    # authenticated pass their credential in.
     try:
-        credential = DefaultAzureCredential()
+        credential = credential or DefaultAzureCredential()
         token = credential.get_token("https://management.azure.com/.default").token
     except Exception as e:
         logger.warning(f"Could not acquire token for untracked-resource queries: {e}")

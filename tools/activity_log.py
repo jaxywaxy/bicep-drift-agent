@@ -130,27 +130,6 @@ def match_activity_for_resource(
     return []
 
 
-def get_change_history(
-    resource_id: str,
-    subscription_id: str,
-    days: int = 30,
-    resource_type: Optional[str] = None,
-    resource_group: Optional[str] = None,
-) -> Optional[List[Dict[str, Any]]]:
-    """
-    Convenience single-resource query (fetches the RG window, then matches).
-
-    Prefer fetch_resource_group_activity() + match_activity_for_resource() when
-    processing multiple resources in the same RG to avoid repeated API scans.
-    """
-    rg = resource_group or _extract_rg_from_resource_id(resource_id)
-    if not rg:
-        logger.warning(f"Could not determine resource group for {resource_id}; skipping activity log")
-        return []
-    rg_events = fetch_resource_group_activity(subscription_id, rg, days)
-    return match_activity_for_resource(rg_events, resource_id, resource_type)
-
-
 def _entry_from_log(log: Any) -> Dict[str, Any]:
     """Normalize an Azure Monitor activity-log record into our dict shape."""
     props = log.properties if log.properties else {}

@@ -373,7 +373,7 @@ def get_html_report_url() -> str:
         html_files = list(reports_dir.glob("*-drift.html"))
         if html_files:
             return f"See attached HTML report: {html_files[0].name}"
-    except:
+    except Exception:
         pass
 
     return ""
@@ -535,10 +535,9 @@ if __name__ == "__main__":
     try:
         from .logger import setup_logging
     except ImportError:
-        # When run as standalone script, add parent directory to path
-        import sys
-        from pathlib import Path
-        sys.path.insert(0, str(Path(__file__).parent))
+        # When run as standalone script, add this directory to the path
+        # (sys and os are already imported at module level)
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         from logger import setup_logging
 
     setup_logging(level="INFO")

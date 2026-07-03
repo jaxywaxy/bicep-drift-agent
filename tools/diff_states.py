@@ -9,7 +9,7 @@ Generates a drift report showing missing, extra, and modified resources.
 
 import logging
 from dataclasses import dataclass, field
-from .normalizer import normalize_live_resources, resource_key
+from .normalizer import normalize_live_resources
 from .property_drift import DriftDetector
 
 logger = logging.getLogger(__name__)
