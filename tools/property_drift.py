@@ -700,11 +700,22 @@ class PropertyComparator:
 
     @staticmethod
     def _list_is_subset(bicep_list: list, deployed_list: list) -> bool:
-        """True if every bicep element subset-matches some deployed element.
+        """Compare arrays with subset semantics on FIELDS but not on ELEMENTS.
 
-        Elements with a 'name' (NSG rules, subnets, routes) are matched by name;
-        otherwise an element must subset-match some deployed element positionally.
+        Elements with a 'name' (NSG rules, subnets, routes) are matched by name
+        and each must field-subset-match its deployed counterpart (Azure augments
+        elements with read-only fields like provisioningState - not drift).
+
+        For a NAMED collection, deployed elements that aren't in the bicep ARE
+        drift: Azure never adds elements to these user-managed arrays itself
+        (default NSG rules live in the separate defaultSecurityRules property),
+        so an extra element means someone added a route/rule/subnet by hand.
+        Only enforced when the bicep side establishes the named convention (has
+        at least one named element), so unnamed/empty arrays keep pure subset.
+
+        Unnamed elements must subset-match some deployed element positionally.
         """
+        bicep_named = [b for b in bicep_list if isinstance(b, dict) and "name" in b]
         for b in bicep_list:
             if isinstance(b, dict) and "name" in b:
                 bname = str(b.get("name", "")).lower()
@@ -718,6 +729,14 @@ class PropertyComparator:
             else:
                 if not any(PropertyComparator._value_matches(b, d) for d in deployed_list):
                     return False
+
+        # Named collection: flag manually-ADDED elements (deployed name not in bicep).
+        if bicep_named:
+            bicep_names = {str(b.get("name", "")).lower() for b in bicep_named}
+            for d in deployed_list:
+                if isinstance(d, dict) and "name" in d:
+                    if str(d.get("name", "")).lower() not in bicep_names:
+                        return False
         return True
 
     @staticmethod
