@@ -6,7 +6,6 @@ This allows operators to customize behavior without changing code.
 """
 
 import os
-from typing import Optional
 
 # ===== Azure SDK Retry Configuration =====
 # Controls exponential backoff retry behavior for transient Azure API failures

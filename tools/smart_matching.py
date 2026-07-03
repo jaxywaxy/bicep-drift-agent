@@ -208,28 +208,3 @@ def annotate_drifts_with_matches(
         annotated.append(drift_copy)
 
     return annotated
-
-
-def generate_match_report(matched: List[Dict]) -> str:
-    """Generate a human-readable report of matched resources."""
-    if not matched:
-        return ""
-
-    report = "## 🔗 Smart-Matched Resources\n\n"
-    report += "These resources are defined in Bicep but have runtime-generated names:\n\n"
-
-    for resource in matched:
-        bicep_name = resource.get('name', 'unknown')
-        azure_name = resource.get('matched_to', 'unknown')
-        confidence = resource.get('match_confidence', 'unknown')
-        reason = resource.get('match_reason', '')
-
-        report += f"- **{resource.get('type')}**\n"
-        report += f"  - Bicep name: `{bicep_name}`\n"
-        report += f"  - Deployed as: `{azure_name}`\n"
-        report += f"  - Confidence: {confidence}\n"
-        if reason:
-            report += f"  - Reason: {reason}\n"
-        report += "\n"
-
-    return report

@@ -2,7 +2,6 @@
 Parse and apply .drift-ignore patterns to filter drift results.
 """
 
-import re
 import logging
 import fnmatch
 from pathlib import Path

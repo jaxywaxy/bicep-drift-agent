@@ -972,7 +972,7 @@ def _render_property_drift_section(data: dict) -> str:
 
     # Modified resources section
     if modified:
-        html += f"""
+        html += """
             <div class="section">
                 <h2>⚙️ Modified Configuration</h2>
                 <p>These resources exist in both Bicep and Azure, but their configuration has changed:</p>
@@ -1023,7 +1023,7 @@ def _render_property_drift_section(data: dict) -> str:
 
     # Missing resources section
     if missing:
-        html += f"""
+        html += """
             <div class="section">
                 <h2>❌ Missing Resources</h2>
                 <p>Defined in Bicep but not deployed to Azure:</p>
@@ -1040,7 +1040,7 @@ def _render_property_drift_section(data: dict) -> str:
 
     # Extra resources section
     if extra:
-        html += f"""
+        html += """
             <div class="section">
                 <h2>⚠️ Extra Resources</h2>
                 <p>Deployed to Azure but not defined in Bicep (orphaned or out-of-band changes):</p>

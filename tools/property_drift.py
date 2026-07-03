@@ -5,7 +5,6 @@ Compares resource properties between Bicep (desired) and deployed (actual)
 to detect configuration changes outside of IaC.
 """
 
-import json
 import logging
 from typing import Dict, List, Tuple, Any
 from dataclasses import dataclass
@@ -835,13 +834,8 @@ class ConfigurationValidator:
                 if is_attached:
                     break
 
-            # If disk is not attached, it's orphaned
+            # If disk is not attached, it is orphaned
             if not is_attached:
-                # Determine if it's an OS disk or data disk
-                disk_type = "OS disk"
-                if "_DataDisk_" in disk_name or "_datadisk_" in disk_name.lower():
-                    disk_type = "Data disk"
-
                 drifts.append(
                     ResourceDrift(
                         resource_type="Microsoft.Compute/disks",
