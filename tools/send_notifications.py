@@ -466,6 +466,11 @@ def events_from_report(report_path: str) -> List[DriftEvent]:
         logger.warning(f"Could not read drift report {report_path}: {e}")
         return events
     for drift in report.get("drifts", []):
+        # Only actionable drift types become notifications. Informational entries
+        # (matched_unresolvable = runtime-named resource reconciled to its deployed
+        # counterpart) are not drift and must not page anyone.
+        if drift.get("drift_type") not in _DRIFT_TYPE_TO_EVENT:
+            continue
         events.append(_event_from_drift(drift))
     return events
 

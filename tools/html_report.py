@@ -37,7 +37,12 @@ def generate_html_report(
         logger.error(f"Failed to read drift report {drift_json_file}: {e}")
         raise
 
-    drifts = data.get("drifts", [])
+    # matched_unresolvable entries are NOT drift: they record that a runtime-named
+    # resource (uniqueString/format) was reconciled to its deployed counterpart.
+    # They already render in the dedicated "🔗 Smart-Matched Resources" section;
+    # including them here painted empty 'Modified {}' rows in the drift table and
+    # inflated the totals/status.
+    drifts = [d for d in data.get("drifts", []) if d.get("drift_type") != "matched_unresolvable"]
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])

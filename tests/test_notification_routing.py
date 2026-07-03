@@ -70,6 +70,21 @@ class EventsFromReportTests(unittest.TestCase):
         self.assertEqual([e.event_type for e in events], ["DRIFT", "EXTRA", "MISSING"])
         self.assertIn("addressSpace", events[0].details)
 
+    def test_matched_unresolvable_is_not_notified(self):
+        # Informational reconciliation entries (runtime-named resource matched to
+        # its deployed counterpart) are not drift and must not create events.
+        path = self._write_report({
+            "drifts": [
+                {"type": "microsoft.storage/storageaccounts", "name": "stgabc123",
+                 "drift_type": "matched_unresolvable", "owner": "workload"},
+                {"type": "Microsoft.Storage/storageAccounts", "name": "stgdrifted",
+                 "drift_type": "property_drift", "owner": "workload",
+                 "details": {"changed_properties": {"sku.name": {}}}},
+            ]
+        })
+        events = events_from_report(path)
+        self.assertEqual([e.resource_name for e in events], ["stgdrifted"])
+
     def test_policy_enforced_drifts_are_not_notified(self):
         path = self._write_report({
             "drifts": [{"type": "t", "name": "n", "drift_type": "property_drift", "owner": "platform"}],

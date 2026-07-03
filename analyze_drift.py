@@ -603,10 +603,14 @@ def main():
 
             # Phase 4: tag each actionable drift with its owner (platform vs workload)
             # so the report can group and notifications can route per owner.
+            # matched_unresolvable entries are informational (reconciled runtime-named
+            # resources), not drift - keep them out of the owner counts.
             for drift in actionable:
                 drift["owner"] = classify_owner(drift.get("type", ""), drift)
             owner_counts = {}
             for drift in actionable:
+                if drift.get("drift_type") == "matched_unresolvable":
+                    continue
                 owner_counts[drift["owner"]] = owner_counts.get(drift["owner"], 0) + 1
             if owner_counts:
                 logger.info(f"Actionable drift by owner: {owner_counts}")
