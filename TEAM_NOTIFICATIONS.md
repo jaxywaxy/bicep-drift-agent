@@ -211,6 +211,17 @@ The system sends three types of drift events:
 
 → Resource defined in Bicep but not deployed to Azure (undeployed)
 
+### What never triggers a notification
+
+Two report entry types are informational and deliberately excluded from events:
+
+- **Policy-enforced changes** (`policy_enforced_drifts`) — changes made by Azure
+  Policy (DINE/Modify). They appear in the report's governance section but are
+  not actionable drift, so they never page anyone.
+- **Smart-matched resources** (`matched_unresolvable`) — bookkeeping that a
+  runtime-named resource (`uniqueString()` etc.) was reconciled to its deployed
+  counterpart. Shown in the report's "🔗 Smart-Matched Resources" section only.
+
 ---
 
 ## Getting Webhook URLs

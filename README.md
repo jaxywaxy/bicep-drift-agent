@@ -49,7 +49,7 @@ landing_zones:
 
 1. Add landing zone to `.github/lz-index.yml`
 2. Team creates `.github/drift-lz-config.yml` in their Bicep repo
-3. Create workflow (copy `drift-lz-frontend.yml`, update schedule)
+3. Create workflow (copy `drift-lz-template.yml`, update schedule)
 4. Set Azure secrets
 
 ### Run
@@ -66,63 +66,85 @@ See [LANDING_ZONES.md](LANDING_ZONES.md) for complete setup.
 
 ## Features
 
-✅ **Enterprise-ready**
+✅ **Enterprise-ready (CAF-aligned)**
 
 - Multiple teams, multiple repos, multiple RGs
-- Parallel drift checks
-- Consolidated notifications
+- **Subscription-scoped landing zones**: scan a whole subscription (one sub = one LZ) or an RG glob in a single pass — see [LANDING_ZONES.md](LANDING_ZONES.md)
+- Parallel drift checks, consolidated notifications
 
 ✅ **Accurate drift detection**
 
 - Property-level comparison
 - Bicep module support
 - Expression resolution (parameters, variables, format, concat)
-- Resource type normalization (handles Azure SDK casing)
-- Write-only property filtering
+- Parameter files auto-discovered (`.bicepparam` or `parameters.json` next to the bicep)
+- Azure read-only augmentation ignored (subset comparison of fields), but manually **added** routes/NSG-rules/subnets ARE flagged
+- Resource type normalization (handles Azure SDK casing), write-only property filtering
 
 ✅ **Smart resource matching**
 
-- Fuzzy prefix matching for `[uniqueString()]` names
-- 0.95 confidence for exact matches
-- 0.85 confidence for prefix matches
-- Contextual matching via parent resource references
+- Runtime-generated names (`uniqueString()`, `format()`, …) matched to their deployed resources — and still **property-compared** (a SKU change on a uniqueString-named storage account is detected)
+- Matched resources render in their own report section, never as drift noise
+
+✅ **Owner routing (platform vs workload)**
+
+- Every drift is classified `platform` (network fabric: VNets, subnets, NSGs, route tables, NAT gateways, …) or `workload` (apps, data, keyvaults, private endpoints)
+- NSG nuance handled: the NSG *resource* is platform-owned, its *securityRules* route to the app team
+- Notifications route per owner so the right team gets paged
+
+✅ **Change origin (who/what/when)**
+
+- Activity Log lifecycle: manual change vs Azure Policy (DINE/Modify, attributed by the assignment's managed identity) vs system-managed
+- Policy-enforced changes are split into a governance section — detected, never counted as actionable drift
+- Attribution window: 30 days (by design; drift *detection* itself has no time limit)
 
 ✅ **Critical resource protection**
 
 - Lock detection and removal alerts (CanNotDelete/CanNotModify)
-- IaC-managed locks for key resources
-- Automatic drift alerts on lock removal
+- Locks & Cosmos child resources fetched via ARM REST (not indexed by Resource Graph)
 
 ✅ **Flexible notifications**
 
-- Slack and/or Teams
-- Per-team filtering (drift only, extra only, missing only)
-- Custom message templates
+- Slack and/or Teams, custom message templates
+- Per-team filtering by drift type (drift/extra/missing) **and** by owner (`owners: [platform]`)
+- Policy-enforced and smart-matched entries never page anyone
 
 ---
 
 ## Architecture
 
-```
+```text
 bicep-drift-agent/ (central tool)
 ├── .github/
 │   ├── lz-index.yml                    # Maps LZs to external repos
 │   └── workflows/
 │       ├── drift-check-lz-hybrid.yml   # Orchestrator (reusable)
-│       ├── drift-lz-frontend.yml       # Team triggers
-│       ├── drift-lz-backend.yml
-│       └── drift-lz-database.yml
+│       ├── drift-lz-landingzone.yml    # Per-LZ triggers (one per landing zone)
+│       ├── drift-lz-test.yml
+│       ├── drift-lz-database.yml
+│       └── drift-lz-template.yml       # Copy me for a new LZ
 ├── tools/
-│   ├── compile_bicep.py                # Bicep → ARM JSON
-│   ├── get_live_state.py               # Query Azure resources
-│   ├── property_drift.py                # Compare & diff
-│   ├── normalizer.py                   # Resolve expressions
-│   └── send_notifications.py           # Slack/Teams
+│   ├── compile_bicep.py                # Bicep → ARM JSON (cached)
+│   ├── get_live_state.py               # Resource Graph + ARM REST (locks, cosmos)
+│   ├── property_drift.py               # Compare & diff (subset semantics)
+│   ├── normalizer.py                   # Expression/parameter resolution
+│   ├── smart_matching.py               # uniqueString-name ↔ live resource matching
+│   ├── ownership.py                    # platform vs workload classification
+│   ├── rg_selector.py                  # '*' / glob RG selector resolution
+│   ├── activity_log.py                 # Activity Log fetch + per-resource matching
+│   ├── change_origin.py                # manual / policy / system attribution
+│   ├── ignore_patterns.py              # layered .drift-ignore profiles
+│   ├── html_report.py                  # HTML report generation
+│   └── send_notifications.py           # Slack/Teams owner-routed delivery
+├── examples/
+│   └── drift-lz-platform-config.yml    # Platform-LZ reference config
 └── requirements.txt
 
 myorg/frontend-bicep/ (team's Bicep repo)
-├── bicep/
-│   └── main.bicep
+├── bicep/  (or envs/dev/, any depth)
+│   ├── main.bicep
+│   └── parameters.json                 # Auto-discovered next to the bicep
+├── .drift-ignore                       # Per-LZ ignore profile (repo root)
 └── .github/
     └── drift-lz-config.yml             # Team owns this
 ```
@@ -181,7 +203,7 @@ checks:
 
 ### Step 4: Create team workflows
 
-Copy `drift-lz-frontend.yml`, update:
+Copy `drift-lz-template.yml`, update:
 
 - Schedule (cron expression)
 - Landing zone name
@@ -207,14 +229,22 @@ cp .env.example .env
 ### Run drift check locally
 
 ```bash
+# Full pipeline (detection + smart matching + owner tagging + change origin + reports)
+python analyze_drift.py ./path/to/main.bicep your-resource-group
+
+# Subscription-scoped landing zone: scan the whole subscription in one pass
+python analyze_drift.py ./envs/dev/main.bicep "*"
+
+# Phase 1 only (raw detection, no report enrichment)
 python run_drift_check.py ./path/to/main.bicep your-resource-group
 ```
 
-With parameters:
+Parameters are auto-discovered from a `parameters.json` next to the bicep (or a
+`.bicepparam`); to override explicitly:
 
 ```bash
 export ARM_PARAMETERS='{"environment":"prod"}'
-python run_drift_check.py ./main.bicep my-rg
+python analyze_drift.py ./main.bicep my-rg
 ```
 
 ### Test individual tools
@@ -243,32 +273,37 @@ az bicep build --file main.bicep --outfile template.json
 ### 2. Extract Desired State
 
 - Parse ARM template
-- Resolve parameters and variables
-- Handle expressions: `[parameters('foo')]`, `[format('x-{0}', param)]`
-- Flatten nested deployments
-- Extract resource definitions
+- Load parameters: `ARM_PARAMETERS` env var → `parameters/<env>.bicepparam` → `parameters.json` next to the bicep (auto-discovered)
+- Resolve expressions: `[parameters('foo')]`, `[format('x-{0}', param)]` — object/array params resolve to real values
+- Flatten nested deployments (modules)
 
 ### 3. Query Live State
 
 - Connect to Azure via `DefaultAzureCredential`
 - Use Azure Resource Graph (KQL) for efficient querying
-- Query resources by resource group
-- Get actual resource properties and state
+- Resource-group scope, or **subscription scope** for landing zones (`*` / RG glob selectors)
+- Augment with locks + Cosmos child resources via ARM REST (not in Resource Graph)
 
 ### 4. Normalize & Compare
 
 - Normalize resource types to lowercase (Azure SDK inconsistency)
-- Match deployed resources to Bicep definitions
-- Fuzzy prefix matching for runtime-generated names
-- Filter out write-only/immutable properties
-- Compare property by property
+- Smart-match runtime-generated names (`uniqueString()` etc.) to deployed resources, then property-compare them too
+- Subset comparison of fields (Azure's read-only augmentation like `provisioningState` isn't drift) — but manually **added** elements in named collections (routes, securityRules, subnets) are
+- Filter out write-only/immutable properties and unresolvable expressions
 
-### 5. Generate Report
+### 5. Classify & Attribute
+
+- Tag each drift with an **owner**: `platform` (network fabric) or `workload` (apps/data) — see [LANDING_ZONES.md](LANDING_ZONES.md#platform-vs-workload-landing-zones)
+- Query the Activity Log (30-day window) for **change origin**: manual, Azure Policy (DINE/Modify via the assignment's managed identity), or system
+- Split policy-enforced changes into a governance section (not actionable drift)
+
+### 6. Generate Report & Notify
 
 - [DRIFT] = resource exists but config changed
 - [EXTRA] = resource deployed but not in Bicep
 - [MISSING] = resource in Bicep but not deployed
-- Send to Slack/Teams
+- HTML report: drift table with owner + origin badges, policy-enforced section, smart-matched section
+- Notifications routed per team by drift type and owner
 
 ---
 
@@ -304,40 +339,24 @@ See `.drift-ignore` for complete list of patterns and reasoning.
 
 ## Limitations
 
-- Runtime functions (`uniqueString()`, `copyIndex()`) are fuzzy-matched, not fully resolved
-- Complex nested ARM expressions may be partially unresolved
+- Runtime functions (`uniqueString()`, `copyIndex()`) are smart-matched (and property-compared), not fully resolved — an ambiguous match falls back to longest-common-name-prefix
+- Complex nested ARM expressions may be partially unresolved (skipped rather than false-flagged)
+- Change-origin attribution covers the last 30 days of Activity Log (Azure platform max is 90; detection itself has no time limit)
+- For a multi-RG landing-zone scan, change-origin attribution is best-effort (Activity Log is fetched per RG)
 - Drift checks don't run on PRs (Azure federated identity only configured for push/manual)
 
 ## Roadmap
 
-- Agent-based analysis for unresolvable expressions
 - Drift remediation suggestions
 - PR comments with detailed findings
 - Terraform support
 
 ---
 
-## Project structure
+## Testing
 
-```text
-bicep-drift-agent/
-├── tools/
-│   ├── compile_bicep.py        # bicep build
-│   ├── get_live_state.py       # Query Azure ARM API
-│   ├── property_drift.py        # Diff & comparison
-│   ├── normalizer.py            # Expression resolution
-│   ├── send_notifications.py    # Slack/Teams posting
-│   └── models.py                # Data models
-├── run_drift_check.py           # Local CLI entry point
-├── requirements.txt
-├── .env.example
-└── .github/
-    ├── lz-index.yml
-    └── workflows/
-        ├── drift-check-lz-hybrid.yml
-        ├── drift-lz-frontend.yml
-        ├── drift-lz-backend.yml
-        └── drift-lz-database.yml
+```bash
+python -m unittest discover -s tests   # 100 stdlib unittest tests, no pytest needed
 ```
 
 ---
