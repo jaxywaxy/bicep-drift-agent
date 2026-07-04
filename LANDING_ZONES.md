@@ -4,7 +4,7 @@ Enterprise drift detection where **teams own their LZ configuration** in their B
 
 ## Architecture
 
-```
+```text
 bicep-drift-agent/  (Central drift detection tool)
 ├── .github/
 │   ├── lz-index.yml                    ← Maps LZs to external repos
@@ -77,7 +77,7 @@ checks:
 
 ### 3. Execution Flow
 
-```
+```text
 1. Workflow triggers (e.g., drift-lz-frontend.yml)
    ↓
 2. Hybrid orchestrator reads lz-index.yml in drift-agent
@@ -166,26 +166,60 @@ notifications:
   slack: https://hooks.slack.com/...       # Optional: Slack webhook
   teams: https://outlook.webhook.office.com/... # Optional: Teams webhook
   filter: all|drift|extra|missing          # Optional: filter events (default: all)
+  # or the multi-team owner-routed form - see TEAM_NOTIFICATIONS.md
 
 checks:
   - name: Check Display Name               # Required: human-readable name (what this Bicep deploys)
     repo: org/repo-name                    # Required: GitHub repo with Bicep
     branch: main                           # Optional: branch (default: main)
     path: bicep/main.bicep                 # Required: path to Bicep file
+    subscription_scoped: true              # Optional: template uses targetScope='subscription'
     resource_groups:                       # Required: RGs this Bicep deploys to
       - rg-prod                            # explicit name
       - rg-dr
 ```
 
-### Resource-group selectors (subscription scope)
+**Parameter files** are auto-discovered: `ARM_PARAMETERS` env var, then
+`parameters/<env>.bicepparam`, then a `parameters.json` next to the bicep file
+(the standard `az deployment ... --parameters envs/dev/parameters.json` layout).
 
-`resource_groups` entries can be explicit names, a **glob**, or the `*`
-wildcard for the whole subscription. Wildcards/globs are expanded against the
-live subscription before scanning, and each resolved RG runs the full pipeline
-(ignore filtering + owner tagging + per-RG report) — so owner routing still works.
+**Per-LZ `.drift-ignore`** lives at the Bicep repo's **root** (found by walking up
+from the bicep file, so `envs/dev/main.bicep` works) and is merged with the
+agent's universal baseline.
+
+### Subscription-scoped landing zones (CAF: one sub = one LZ)
+
+In CAF, a landing zone **is** a subscription (one workload per sub; platform
+capabilities segmented into their own subs). For a template with
+`targetScope = 'subscription'` that fans out to several resource groups, set
+`subscription_scoped: true` — the agent then scans the LZ in a **single pass**
+(the whole template against the whole subscription) instead of comparing the
+full template per-RG, which would flag every other RG's resources as missing:
 
 ```yaml
-resource_groups: ["*"]              # every RG in the subscription
+checks:
+  - name: Workload Landing Zone
+    repo: myorg/my-landingzone-bicep
+    path: envs/dev/main.bicep
+    subscription_scoped: true
+    resource_groups:
+      - "*"              # the whole subscription = this landing zone
+      # or "jacquidev-*" # one LZ instance's RGs, if several share a sub
+```
+
+Owner routing then splits what's found *within* the sub: platform-owned spoke
+fabric → platform team, workload resources → app team.
+
+### Resource-group selectors (RG-scoped templates)
+
+For a normal RG-scoped template (no `subscription_scoped`), `resource_groups`
+entries can be explicit names, a **glob**, or the `*` wildcard. Wildcards/globs
+are expanded against the live subscription before scanning, and **each resolved
+RG runs its own full pipeline** (the template is compared per RG — right for a
+template that deploys one RG's worth of resources):
+
+```yaml
+resource_groups: ["*"]              # every RG in the subscription, one check each
 resource_groups: ["rg-conn-*"]      # all RGs matching the glob (case-insensitive)
 resource_groups: ["rg-hub", "rg-*-spoke"]   # mix explicit + glob
 ```
@@ -194,8 +228,11 @@ resource_groups: ["rg-hub", "rg-*-spoke"]   # mix explicit + glob
 - An **explicit** name is always checked even if the RG doesn't exist yet, so an
   undeployed RG still surfaces as missing-resource drift.
 
-Common for a **platform** landing zone that owns many connectivity RGs — see
-[`examples/drift-lz-platform-config.yml`](examples/drift-lz-platform-config.yml).
+> **Which mode do I want?** If ONE template deploys MANY RGs
+> (`targetScope = 'subscription'`), use `subscription_scoped: true` above —
+> per-RG expansion would compare the whole template to each RG and false-flag
+> everything else as missing. If one template = one RG's resources, use the
+> selectors here. See [`examples/drift-lz-platform-config.yml`](examples/drift-lz-platform-config.yml).
 
 ---
 
