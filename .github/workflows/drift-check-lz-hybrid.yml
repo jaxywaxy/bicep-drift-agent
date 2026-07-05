@@ -395,6 +395,10 @@ jobs:
           LZ_NAME: ${{ needs.load-config.outputs.lz-name }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+          # Full secrets context for ${DRIFT_WEBHOOK_*} placeholder expansion in
+          # LZ configs; send_notifications.py only ever reads DRIFT_WEBHOOK_*
+          # names from this blob (LZ config is untrusted, see expand_webhook_secrets).
+          WEBHOOK_SECRETS: ${{ toJSON(secrets) }}
           PYTHONUNBUFFERED: '1'
         run: |
           # Normalize the config's notifications block into the team structure
