@@ -122,6 +122,12 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
             elif "(" in arg and ")" in arg:
                 # It's a function call - try to resolve it
                 arg = _resolve_function_call(arg, parameters, variables)
+            elif len(arg) >= 2 and arg.startswith("'") and arg.endswith("'"):
+                # Plain string literal: strip the ARM quotes. Otherwise a child
+                # resource name like format('{0}/{1}', vnet, 'spoke-to-hub')
+                # resolves to "vnet/'spoke-to-hub'" and never matches the live
+                # child's name.
+                arg = arg[1:-1]
 
             resolved_args.append(arg)
 

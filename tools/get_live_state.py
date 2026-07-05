@@ -306,6 +306,38 @@ def _augment_untracked_resources(
         logger.warning(f"Failed to query Cosmos child resources: {e}")
     _normalize_cosmos_account_locations(resources)
     _normalize_aci_container_groups(resources)
+    _expand_vnet_peerings(resources)
+
+
+def _expand_vnet_peerings(resources: List[Dict]) -> None:
+    """Expand VNet peerings into child resources (mutates `resources` in place).
+
+    Peerings are NOT separate rows in Resource Graph - they're embedded in the
+    vnet's properties.virtualNetworkPeerings. Bicep declares them as child
+    resources ('vnet/peering'), so without expansion they can never be matched:
+    they show as missing and their properties (allowForwardedTraffic, etc.) are
+    never compared. No extra API call - the data is already in the vnet.
+    """
+    children = []
+    for r in resources:
+        if (r.get("type") or "").lower() != "microsoft.network/virtualnetworks":
+            continue
+        vnet_name = r.get("name", "")
+        for p in (r.get("properties") or {}).get("virtualNetworkPeerings", []) or []:
+            children.append({
+                "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
+                "name": f"{vnet_name}/{p.get('name', '')}",
+                "location": None,  # peerings have no location; None is skipped by the comparator
+                "tags": {},
+                "sku": None,
+                "kind": None,
+                "properties": p.get("properties", {}),
+                "id": p.get("id"),
+                "resource_group": r.get("resource_group"),
+            })
+    if children:
+        logger.info(f"Expanded {len(children)} VNet peering child resource(s)")
+        resources.extend(children)
 
 
 def _query_locks(resource_group: Optional[str], sub_id: str, scope: str, token: Optional[str] = None) -> List[Dict]:
