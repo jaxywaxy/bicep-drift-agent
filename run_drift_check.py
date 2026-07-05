@@ -21,7 +21,7 @@ load_dotenv()
 
 from tools.logger import setup_logging, get_logger
 from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detect_deployment_scope
-from tools.get_live_state import get_live_state
+from tools.get_live_state import get_live_state, fetch_cross_subscription_resources
 from tools.diff_states import diff_states, format_drift_report
 from tools.ignore_patterns import IgnorePatternList
 from tools.rg_selector import rg_label
@@ -124,6 +124,13 @@ def run(bicep_file: str, resource_group: str):
         raise
 
     logger.info(f"✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
+
+    # Step 2b: Cross-subscription verification. A vending template may deploy
+    # resources into ANOTHER subscription (e.g. hub-side peering from a spoke
+    # template). The scanned sub's live state can't see them - fetch each one
+    # directly from its target subscription so it's matched and property-compared
+    # instead of false-flagged missing.
+    live_resources.extend(fetch_cross_subscription_resources(arm_resources))
 
     # Step 3: Load ignore patterns
     logger.info("Step 3: Loading ignore patterns...")

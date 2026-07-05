@@ -548,6 +548,18 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
                 )
                 nested_vars = extract_variables(nested_template)
                 nested_resources = flatten_resources(nested_template, nested_params, nested_vars)
+                # Cross-scope module (scope: resourceGroup(otherSub, rg)): stamp the
+                # target so the scan can verify these resources in THEIR subscription
+                # instead of flagging them missing in the scanned one.
+                target_sub = resource.get("subscriptionId")
+                target_rg = resource.get("resourceGroup")
+                if target_sub:
+                    target_sub = _resolve_value(target_sub, parameters, variables)
+                    target_rg = _resolve_value(target_rg, parameters, variables) if target_rg else None
+                    for nr in nested_resources:
+                        nr.setdefault("_target_subscription", target_sub)
+                        if target_rg:
+                            nr.setdefault("_target_rg", target_rg)
                 flattened.extend(nested_resources)
         else:
             # Regular resource — normalize and add
