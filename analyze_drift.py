@@ -434,6 +434,26 @@ def main():
                 ((d.get("type") or "").lower(), d.get("name")): d
                 for d in report_data.get("drifts", [])
             }
+
+            def _phase1_reported(rtype: str, deployed_name: str):
+                """Find a Phase 1 drift for this resource, tolerating placeholder names.
+
+                Phase 1 may report the SAME resource under its bicep placeholder
+                name (e.g. 'sttestdrift[86c9cbf6]' prefix-matched to
+                'sttestdrift3s7c...'), so an exact-name dedup alone would double-
+                report the drift once per name.
+                """
+                exact = existing.get((rtype, deployed_name))
+                if exact is not None:
+                    return exact
+                for (etype, ename), drift in existing.items():
+                    if etype != rtype or not ename or "[" not in ename:
+                        continue
+                    prefix = ename.split("[", 1)[0]
+                    if prefix and deployed_name.lower().startswith(prefix.lower()):
+                        return drift
+                return None
+
             for d in property_drifts:
                 if d.drift_type != "modified" or not d.property_diffs:
                     continue
@@ -446,7 +466,7 @@ def main():
                     }
                     for diff in d.property_diffs
                 }
-                prior = existing.get(((d.resource_type or "").lower(), name))
+                prior = _phase1_reported((d.resource_type or "").lower(), name)
                 if prior is not None:
                     if prior.get("drift_type") == "matched_unresolvable":
                         # The smart-match reconciled this resource's EXISTENCE, but
