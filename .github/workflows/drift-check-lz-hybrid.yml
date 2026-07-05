@@ -399,6 +399,11 @@ jobs:
           # LZ configs; send_notifications.py only ever reads DRIFT_WEBHOOK_*
           # names from this blob (LZ config is untrusted, see expand_webhook_secrets).
           WEBHOOK_SECRETS: ${{ toJSON(secrets) }}
+          # Bridge pre-existing secret names into the expandable DRIFT_WEBHOOK_*
+          # namespace (env vars take precedence over the blob). New secrets
+          # should just be created with the DRIFT_WEBHOOK_ prefix instead.
+          DRIFT_WEBHOOK_PLATFORM: ${{ secrets.PLATFORM_SLACK_WEBHOOK }}
+          DRIFT_WEBHOOK_WORKLOAD: ${{ secrets.WORKLOAD_SLACK_WEBHOOK }}
           PYTHONUNBUFFERED: '1'
         run: |
           # Normalize the config's notifications block into the team structure
