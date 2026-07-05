@@ -22,6 +22,11 @@ landing_zones:
     config_path: .github/drift-lz-config.yml
     workflow: drift-lz-landingzone.yml
 
+  spoke-drifttest:
+    repo: jaxywaxy/azure-landingzone-bicep
+    config_path: .github/drift-lz-spoke-config.yml
+    workflow: drift-lz-spoke.yml
+
   test-resources:
     repo: jaxywaxy/drift-test-resources
     config_path: .github/drift-lz-config.yml
