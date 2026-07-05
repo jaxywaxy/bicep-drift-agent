@@ -21,6 +21,7 @@ from tools.send_notifications import (
     events_from_report,
     events_from_reports_dir,
     build_team_notifications,
+    expand_webhook_secrets,
 )
 
 
@@ -170,6 +171,108 @@ class RouterOwnerRoutingTests(unittest.TestCase):
         with mock.patch.object(router, "_send_to_slack", side_effect=lambda u, m: sent.append(m) or True):
             router.send_notifications(self.events, {"report_url": "r"})
         self.assertEqual(len(sent), 2)  # both events, backward compatible
+
+
+class WebhookSecretExpansionTests(unittest.TestCase):
+    """${DRIFT_WEBHOOK_*} placeholder expansion in configured webhook URLs.
+
+    LZ-repo configs are untrusted data, so only DRIFT_WEBHOOK_* names may be
+    expanded, and an unresolved placeholder must fail (empty result) rather
+    than send to a literal ${...} URL or silently skip the channel.
+    """
+
+    def test_plain_url_passes_through(self):
+        url = "https://hooks.slack.com/services/plain"
+        self.assertEqual(expand_webhook_secrets(url), url)
+
+    def test_expands_from_environment(self):
+        with mock.patch.dict(os.environ, {"DRIFT_WEBHOOK_PLATFORM": "https://hooks.slack/env"}):
+            self.assertEqual(
+                expand_webhook_secrets("${DRIFT_WEBHOOK_PLATFORM}"), "https://hooks.slack/env"
+            )
+
+    def test_expands_from_webhook_secrets_json(self):
+        blob = json.dumps({"DRIFT_WEBHOOK_APP": "https://hooks.slack/ci"})
+        with mock.patch.dict(os.environ, {"WEBHOOK_SECRETS": blob}, clear=True):
+            self.assertEqual(
+                expand_webhook_secrets("${DRIFT_WEBHOOK_APP}"), "https://hooks.slack/ci"
+            )
+
+    def test_env_var_wins_over_json_blob(self):
+        blob = json.dumps({"DRIFT_WEBHOOK_APP": "https://hooks.slack/ci"})
+        with mock.patch.dict(
+            os.environ,
+            {"WEBHOOK_SECRETS": blob, "DRIFT_WEBHOOK_APP": "https://hooks.slack/local"},
+            clear=True,
+        ):
+            self.assertEqual(
+                expand_webhook_secrets("${DRIFT_WEBHOOK_APP}"), "https://hooks.slack/local"
+            )
+
+    def test_placeholder_embedded_in_longer_url(self):
+        with mock.patch.dict(os.environ, {"DRIFT_WEBHOOK_TOKEN": "T00/B00/xyz"}):
+            self.assertEqual(
+                expand_webhook_secrets("https://hooks.slack.com/services/${DRIFT_WEBHOOK_TOKEN}"),
+                "https://hooks.slack.com/services/T00/B00/xyz",
+            )
+
+    def test_non_prefixed_name_is_refused_even_if_set(self):
+        # Exfiltration guard: config may not reference arbitrary CI secrets.
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-secret"}):
+            self.assertEqual(
+                expand_webhook_secrets("https://attacker.example/${ANTHROPIC_API_KEY}"), ""
+            )
+
+    def test_json_blob_only_exposes_prefixed_names(self):
+        blob = json.dumps({"AZURE_CLIENT_ID": "abc", "DRIFT_WEBHOOK_X": "https://ok"})
+        with mock.patch.dict(os.environ, {"WEBHOOK_SECRETS": blob}, clear=True):
+            self.assertEqual(expand_webhook_secrets("${DRIFT_WEBHOOK_X}"), "https://ok")
+            self.assertEqual(expand_webhook_secrets("${AZURE_CLIENT_ID}"), "")
+
+    def test_unset_secret_fails_expansion(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(expand_webhook_secrets("${DRIFT_WEBHOOK_MISSING}"), "")
+
+    def test_invalid_webhook_secrets_json_is_ignored(self):
+        with mock.patch.dict(
+            os.environ,
+            {"WEBHOOK_SECRETS": "not-json", "DRIFT_WEBHOOK_A": "https://hooks.slack/a"},
+            clear=True,
+        ):
+            self.assertEqual(expand_webhook_secrets("${DRIFT_WEBHOOK_A}"), "https://hooks.slack/a")
+
+    def test_router_fails_team_when_secret_unresolved(self):
+        config = {"team": {"slack": "${DRIFT_WEBHOOK_MISSING}"}}
+        with mock.patch.dict(
+            os.environ, {"DRIFT_NOTIFICATIONS": json.dumps(config)}, clear=True
+        ):
+            router = NotificationRouter()
+        sent = []
+        with mock.patch.object(router, "_send_to_slack", side_effect=lambda u, m: sent.append(u) or True):
+            ok = router.send_notifications(
+                [DriftEvent("DRIFT", "t", "n", owner="workload")], {"report_url": "r"}
+            )
+        self.assertFalse(ok)      # misconfiguration is a hard failure (CI step exits 1)
+        self.assertEqual(sent, [])  # nothing sent to a literal ${...} URL
+
+    def test_router_expands_secret_before_sending(self):
+        config = {"team": {"slack": "${DRIFT_WEBHOOK_TEAM}"}}
+        with mock.patch.dict(
+            os.environ,
+            {
+                "DRIFT_NOTIFICATIONS": json.dumps(config),
+                "DRIFT_WEBHOOK_TEAM": "https://hooks.slack/real",
+            },
+            clear=True,
+        ):
+            router = NotificationRouter()
+            sent = []
+            with mock.patch.object(router, "_send_to_slack", side_effect=lambda u, m: sent.append(u) or True):
+                ok = router.send_notifications(
+                    [DriftEvent("DRIFT", "t", "n", owner="workload")], {"report_url": "r"}
+                )
+        self.assertTrue(ok)
+        self.assertEqual(sent, ["https://hooks.slack/real"])
 
 
 if __name__ == "__main__":

@@ -27,9 +27,14 @@ subscription_id: "00000000-0000-0000-0000-000000000000"   # platform/connectivit
 # Multi-team form: each key is a team, each with its own channel + `owners`.
 # `owners` filters by the drift's owner tag; omit it to receive every owner.
 # `filter` (all|drift|extra|missing) still applies and AND's with `owners`.
+#
+# Webhook URLs are bearer secrets — don't commit them. Reference a GitHub
+# secret in the DRIFT AGENT repo via a ${DRIFT_WEBHOOK_*} placeholder (only
+# names with that prefix are expandable):
+#   gh secret set DRIFT_WEBHOOK_PLATFORM --body "https://outlook.webhook.office.com/..."
 notifications:
   platform-team:
-    teams: "https://outlook.webhook.office.com/webhookb2/REPLACE/platform"
+    teams: "${DRIFT_WEBHOOK_PLATFORM}"
     owners: [platform]        # VNets, subnets, NSG resources, route tables, peering
     filter: all
 
@@ -37,7 +42,7 @@ notifications:
   # the app teams' channel, not the platform on-call. Remove if you want the
   # platform team to see everything.
   app-teams:
-    slack: "https://hooks.slack.com/services/REPLACE/workload"
+    slack: "${DRIFT_WEBHOOK_APPTEAMS}"
     owners: [workload]
     filter: all
 

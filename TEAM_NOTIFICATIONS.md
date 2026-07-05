@@ -36,6 +36,44 @@ notifications:
 
 **At least one webhook (Slack or Teams) is required for notifications.**
 
+### Webhook URLs as Secrets (recommended)
+
+A webhook URL is a bearer secret: anyone holding it can post to your channel, and
+Slack revokes webhook URLs it finds committed in public repos. Instead of putting
+the URL in the config, reference a GitHub secret with a `${DRIFT_WEBHOOK_*}`
+placeholder:
+
+```yaml
+notifications:
+  platform-team:
+    teams: "${DRIFT_WEBHOOK_PLATFORM}"
+    owners: [platform]
+  app-team:
+    slack: "${DRIFT_WEBHOOK_APPTEAM}"
+    owners: [workload]
+```
+
+Then create the secret in the **drift agent repo** (where the workflows run —
+not the LZ repo):
+
+```bash
+gh secret set DRIFT_WEBHOOK_PLATFORM --body "https://outlook.webhook.office.com/webhookb2/..."
+gh secret set DRIFT_WEBHOOK_APPTEAM --body "https://hooks.slack.com/services/..."
+```
+
+Rules:
+
+- **Only names prefixed `DRIFT_WEBHOOK_` are expandable.** The notifications
+  block lives in the scanned LZ repo, which the agent treats as untrusted data —
+  the prefix stops a config from smuggling other CI secrets (e.g.
+  `${ANTHROPIC_API_KEY}`) into a webhook URL.
+- Placeholders resolve from environment variables first (handy for local runs),
+  then from the CI secrets context the workflow injects.
+- An unresolved placeholder **fails the notification step** (exit 1) rather than
+  silently delivering nothing — a missing secret should be visible.
+- Plain URLs still work unchanged (backward compatible), and placeholders can be
+  embedded in a longer value if needed.
+
 ### Filtering Options
 
 Control which events trigger notifications:
