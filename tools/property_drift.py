@@ -476,6 +476,8 @@ class PropertyComparator:
         "properties.accesspolicies",
         "properties.enablerbacauthorization",
         "properties.publicnetworkaccess",
+        # AI content filters - loosening one is a governance event
+        "properties.contentfilters",
     }
 
     # Types whose networkAcls default to open when never configured: Azure
