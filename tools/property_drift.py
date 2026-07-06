@@ -469,6 +469,29 @@ class PropertyComparator:
         # App Service-specific
         "properties.reserved",
         "properties.workerSize",
+        # Data-plane exposure (Key Vault / storage firewalls, vault access grants).
+        # NOTE: _get_severity matches these against a LOWERCASED path, so they
+        # must be lowercase here.
+        "properties.networkacls",
+        "properties.accesspolicies",
+        "properties.enablerbacauthorization",
+        "properties.publicnetworkaccess",
+    }
+
+    # Types whose networkAcls default to open when never configured: Azure
+    # returns null/absent, while templates commonly spell out the equivalent
+    # explicit default. Injecting the default on the DEPLOYED side (only) makes
+    # those compare equal without suppressing real ACL drift. Bicep-side is
+    # never injected: an unspecified bicep property is simply not compared.
+    _NETWORK_ACL_DEFAULT_TYPES = {
+        "microsoft.keyvault/vaults",
+        "microsoft.storage/storageaccounts",
+    }
+    _DEFAULT_OPEN_NETWORK_ACLS = {
+        "bypass": "AzureServices",
+        "defaultAction": "Allow",
+        "ipRules": [],
+        "virtualNetworkRules": [],
     }
 
     WRITE_ONLY_PROPERTIES = {
@@ -507,6 +530,12 @@ class PropertyComparator:
         """
         diffs = []
 
+        # Null networkAcls on a vault/storage account means "default open" -
+        # materialize that default on the deployed side so a template spelling
+        # out the same default doesn't false-drift (and so a template demanding
+        # Deny DOES drift against a never-configured-open live resource).
+        deployed_properties = PropertyComparator._inject_default_network_acls(deployed_properties)
+
         # Flatten both property dicts for comparison
         bicep_flat = PropertyComparator._flatten_dict(bicep_properties)
         deployed_flat = PropertyComparator._flatten_dict(deployed_properties)
@@ -540,6 +569,25 @@ class PropertyComparator:
 
                 deployed_value = deployed_flat[key]
 
+                # Security-list properties (KV access policies, networkAcls
+                # allowlists) get exact-set semantics: the generic subset
+                # comparison would never flag a LIVE-ADDED element (an
+                # out-of-band access grant or firewall opening) because it only
+                # checks that bicep elements exist in the deployed list.
+                semantic = PropertyComparator._compare_security_list(key, bicep_value, deployed_value)
+                if semantic is not None:
+                    if not semantic:
+                        diffs.append(
+                            PropertyDiff(
+                                property_path=key,
+                                desired_value=bicep_value,
+                                actual_value=deployed_value,
+                                change_type="modified",
+                                severity=PropertyComparator._get_severity(key),
+                            )
+                        )
+                    continue
+
                 # Skip properties where Azure returns None (not exposed by API)
                 # This prevents false positives when Bicep has explicit values but
                 # the property isn't available in the Azure API response
@@ -565,6 +613,14 @@ class PropertyComparator:
                 # Normalize type comparisons (Azure may return different casing)
                 if key == "type" and isinstance(bicep_value, str) and isinstance(deployed_value, str):
                     if bicep_value.lower() == deployed_value.lower():
+                        continue
+
+                # networkAcls enums compare case-insensitively ('Allow' vs 'allow'),
+                # and bypass is a comma-separated set ('AzureServices, Logging' ==
+                # 'Logging,AzureServices').
+                if ".networkacls." in key.lower() and isinstance(bicep_value, str) and isinstance(deployed_value, str):
+                    canon = lambda v: {p.strip().lower() for p in v.split(",") if p.strip()}
+                    if canon(bicep_value) == canon(deployed_value):
                         continue
 
                 # Skip if both values are empty (null, empty string, empty list, etc.)
@@ -632,6 +688,127 @@ class PropertyComparator:
         # Only report properties that are explicitly defined in Bicep template.
 
         return diffs
+
+    @staticmethod
+    def _inject_default_network_acls(deployed_properties: Dict) -> Dict:
+        """Return a copy with default-open networkAcls when the live value is null.
+
+        Only for vault/storage types, only on the deployed side (see
+        _NETWORK_ACL_DEFAULT_TYPES). Does not mutate the input.
+        """
+        rtype = str(deployed_properties.get("type", "")).lower()
+        if rtype not in PropertyComparator._NETWORK_ACL_DEFAULT_TYPES:
+            return deployed_properties
+        props = deployed_properties.get("properties")
+        if not isinstance(props, dict) or props.get("networkAcls") is not None:
+            return deployed_properties
+        return {
+            **deployed_properties,
+            "properties": {
+                **props,
+                "networkAcls": dict(PropertyComparator._DEFAULT_OPEN_NETWORK_ACLS),
+            },
+        }
+
+    @staticmethod
+    def _compare_security_list(key: str, bicep_value: Any, deployed_value: Any):
+        """Exact-set comparison for security-sensitive list properties.
+
+        Returns True/False (match / drift) when the key is one of the handled
+        properties and both sides are lists; None to fall through to the
+        generic comparison. Handled:
+          * properties.accessPolicies        (Key Vault) - keyed by principal
+          * properties.networkAcls.ipRules / .virtualNetworkRules - allowlists
+        """
+        if not (isinstance(bicep_value, list) and isinstance(deployed_value, list)):
+            return None
+        kl = key.lower()
+        if kl.endswith("properties.accesspolicies"):
+            return PropertyComparator._access_policies_match(bicep_value, deployed_value)
+        if ".networkacls." in kl and (kl.endswith(".iprules") or kl.endswith(".virtualnetworkrules")):
+            return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
+        return None
+
+    @staticmethod
+    def _allowlist_matches(bicep_list: list, deployed_list: list) -> bool:
+        """Match firewall allowlists (ipRules / virtualNetworkRules) as exact sets.
+
+        Element identity is its 'value' (CIDR) or 'id' (subnet), compared
+        case-insensitively; other fields subset-match (Azure augments with
+        state/action defaults). Unlike the generic subset compare, a deployed
+        element with no bicep counterpart IS drift - that's a firewall opening
+        someone added by hand. Bicep elements whose identity is an unresolved
+        expression (a subnet id from another module) each excuse one otherwise
+        unmatched deployed element.
+        """
+        def identity(el: Any) -> str:
+            if not isinstance(el, dict):
+                return str(el).lower()
+            return str(el.get("value") or el.get("id") or "").lower()
+
+        unresolved_slots = 0
+        unmatched_deployed = list(deployed_list)
+        for b in bicep_list:
+            b_id = identity(b)
+            if PropertyComparator._has_unresolved_expressions(b_id):
+                unresolved_slots += 1
+                continue
+            hit = next((d for d in unmatched_deployed if identity(d) == b_id), None)
+            if hit is None or not PropertyComparator._value_matches(b, hit):
+                return False  # a bicep-declared rule is gone or altered
+            unmatched_deployed.remove(hit)
+        # Every leftover deployed rule must be covered by an unresolved slot;
+        # anything beyond that was added out-of-band.
+        return len(unmatched_deployed) <= unresolved_slots
+
+    @staticmethod
+    def _access_policies_match(bicep_list: list, deployed_list: list) -> bool:
+        """Match Key Vault accessPolicies keyed by principal, permissions as sets.
+
+        Identity is (objectId, applicationId), case-insensitive. Permissions
+        compare as case-insensitive sets across ALL four categories (keys/
+        secrets/certificates/storage) - a category the bicep omits is an empty
+        set, so a permission granted out-of-band in any category is drift.
+        A bicep policy whose objectId is a runtime expression (a managed
+        identity's principalId) excuses one otherwise unmatched deployed
+        policy, permissions unchecked - best-effort, like smart matching.
+        """
+        def perm_sets(policy: Dict) -> Dict[str, frozenset]:
+            perms = policy.get("permissions") or {}
+            if not isinstance(perms, dict):
+                perms = {}
+            return {
+                cat: frozenset(str(p).lower() for p in (perms.get(cat) or []))
+                for cat in ("keys", "secrets", "certificates", "storage")
+            }
+
+        def identity(policy: Dict) -> tuple:
+            return (
+                str(policy.get("objectId") or "").lower(),
+                str(policy.get("applicationId") or "").lower(),
+            )
+
+        unresolved_slots = 0
+        unmatched_deployed = [p for p in deployed_list if isinstance(p, dict)]
+        if len(unmatched_deployed) != len(deployed_list):
+            return False  # malformed live data - surface it rather than guess
+
+        for b in bicep_list:
+            if not isinstance(b, dict):
+                return False
+            obj_id = str(b.get("objectId") or "")
+            if PropertyComparator._has_unresolved_expressions(obj_id):
+                unresolved_slots += 1
+                continue
+            b_ident = identity(b)
+            hit = next((d for d in unmatched_deployed if identity(d) == b_ident), None)
+            if hit is None:
+                return False  # bicep-declared policy revoked
+            if perm_sets(b) != perm_sets(hit):
+                return False  # permissions changed (granted or revoked)
+            unmatched_deployed.remove(hit)
+
+        return len(unmatched_deployed) <= unresolved_slots
 
     @staticmethod
     def _flatten_dict(d: Dict, parent_key: str = "", sep: str = ".") -> Dict:

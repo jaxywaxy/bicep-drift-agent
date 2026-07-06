@@ -196,10 +196,10 @@ ignore:
   - resource_type: "Microsoft.OperationalInsights/workspaces/solutions"
     reason: "Child resource with parent name containing unresolved parameter expressions"
 
-  # Key Vault properties that are null on both sides (not functional drift)
-  - resource_type: "Microsoft.KeyVault/vaults"
-    property: "properties.networkAcls"
-    reason: "networkAcls is null when not specified; Azure returns null vs empty object - not functional drift"
+  # NOTE: Key Vault networkAcls is deliberately NOT ignored (it used to be).
+  # Null-vs-default noise is handled in the comparator instead (deployed-side
+  # default injection in property_drift.py), so real ACL drift - a
+  # defaultAction flip or a hand-added ipRule - surfaces as critical drift.
 
   - resource_type: "Microsoft.KeyVault/vaults"
     property: "properties.integrationAccount"
