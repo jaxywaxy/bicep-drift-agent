@@ -725,7 +725,11 @@ class PropertyComparator:
         kl = key.lower()
         if kl.endswith("properties.accesspolicies"):
             return PropertyComparator._access_policies_match(bicep_value, deployed_value)
-        if ".networkacls." in kl and (kl.endswith(".iprules") or kl.endswith(".virtualnetworkrules")):
+        if ".networkacls." in kl and (
+            kl.endswith(".iprules")
+            or kl.endswith(".virtualnetworkrules")
+            or kl.endswith(".resourceaccessrules")
+        ):
             return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
         return None
 
@@ -744,7 +748,27 @@ class PropertyComparator:
         def identity(el: Any) -> str:
             if not isinstance(el, dict):
                 return str(el).lower()
-            return str(el.get("value") or el.get("id") or "").lower()
+            v = el.get("value") or el.get("id")
+            if v is not None:
+                s = str(v).lower()
+                # Azure returns single-IP rules WITHOUT the /32 suffix that
+                # templates conventionally declare ("1.2.3.4/32" -> "1.2.3.4").
+                return s[:-3] if s.endswith("/32") else s
+            # storage resourceAccessRules have no value/id - identity is the
+            # (tenantId, resourceId) pair, joined so unresolved-expression
+            # markers in either part stay detectable by the caller.
+            return f"{str(el.get('tenantId', '')).lower()}|{str(el.get('resourceId', '')).lower()}"
+
+        # Identity fields are matched via identity() above (with /32
+        # canonicalization), so exclude them from the per-pair field-subset
+        # check - comparing them literally again would re-introduce the
+        # "1.2.3.4/32" vs "1.2.3.4" false positive.
+        _IDENTITY_KEYS = {"value", "id", "tenantid", "resourceid"}
+
+        def non_identity_fields(el: Any) -> Any:
+            if not isinstance(el, dict):
+                return el
+            return {k: v for k, v in el.items() if k.lower() not in _IDENTITY_KEYS}
 
         unresolved_slots = 0
         unmatched_deployed = list(deployed_list)
@@ -754,7 +778,7 @@ class PropertyComparator:
                 unresolved_slots += 1
                 continue
             hit = next((d for d in unmatched_deployed if identity(d) == b_id), None)
-            if hit is None or not PropertyComparator._value_matches(b, hit):
+            if hit is None or not PropertyComparator._value_matches(non_identity_fields(b), hit):
                 return False  # a bicep-declared rule is gone or altered
             unmatched_deployed.remove(hit)
         # Every leftover deployed rule must be covered by an unresolved slot;

@@ -462,9 +462,25 @@ security-aware semantics, flagged **critical**:
   policy, like smart matching. RBAC-mode vaults (`enableRbacAuthorization:
   true`) are covered by [RBAC drift](#rbac-role-assignment-drift) instead.
 
-**Caveat:** comparison is bicep-driven — if the template omits `ipRules`
-entirely, additions can't be detected. Declare `ipRules: []` explicitly to
-assert "no firewall exceptions allowed".
+**Caveats:**
+
+- Comparison is bicep-driven — if the template omits `ipRules` entirely,
+  additions can't be detected. Declare `ipRules: []` explicitly to assert
+  "no firewall exceptions allowed".
+- Azure returns single-IP rules **without** the `/32` suffix templates
+  conventionally declare; the comparator canonicalizes this (not drift).
+  Storage `resourceAccessRules` are covered too, keyed by
+  `(tenantId, resourceId)`.
+- Resource Graph indexes property changes with a short lag (~30–60s): a scan
+  immediately after configuring ACLs may still see `null` and report the
+  pre-change state. Re-scan rather than chasing a ghost.
+- A runtime-expression `objectId` (managed identity) excuses one live access
+  policy **without checking its permissions** — a permission change on that
+  identity's own policy is not detected. Use a resolved objectId (or RBAC
+  authorization) where that matters.
+- `bypass: "None"` with `defaultAction: Allow` compared against a
+  never-configured resource flags a bypass diff — technically a config
+  difference, functionally moot while the default action is Allow.
 
 ---
 
