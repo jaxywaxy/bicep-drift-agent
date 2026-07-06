@@ -5,9 +5,14 @@ Detects runtime-generated names in Bicep templates and attempts to match
 them to deployed resources by type.
 """
 
+import re
 from typing import List, Dict, Tuple
 from collections import defaultdict
 
+
+# The normalizer renders an unresolvable uniqueString() as a bracketed hex
+# placeholder ('sqldrift[86c9cbf6]/driftdb') - no function-call marker left.
+_PLACEHOLDER_RE = re.compile(r"\[[0-9a-fA-F]{6,}\]")
 
 UNRESOLVABLE_FUNCTIONS = {
     'uniqueString',
@@ -57,6 +62,13 @@ def _has_unresolvable_expression(name_str: str) -> bool:
     """
     if not isinstance(name_str, str):
         return False
+
+    # Normalizer placeholder form ('aidrift[86c9cbf6]', 'sql[hex]/db'): the
+    # function is gone but the name is still runtime-generated. Without this,
+    # placeholder-named CHILDREN double-report as missing+extra (parents happen
+    # to be rescued by the fuzzy-token matcher, slash-named children are not).
+    if _PLACEHOLDER_RE.search(name_str):
+        return True
 
     lowered = name_str.lower()
     for func in UNRESOLVABLE_FUNCTIONS:
@@ -162,11 +174,24 @@ def _find_best_match(bicep_resource: Dict, candidates: List[Dict]) -> Dict:
             n += 1
         return n
 
-    best, best_len = None, 0
+    def _common_suffix_len(a: str, b: str) -> int:
+        n = 0
+        for ca, cb in zip(reversed(a), reversed(b)):
+            if ca != cb:
+                break
+            n += 1
+        return n
+
+    # Prefix + suffix: a child name like 'sqldrift[86c9cbf6]/driftdb' shares
+    # the same prefix with every sibling of the same server ('.../driftdb' and
+    # '.../master'); the literal CHILD segment at the end disambiguates.
+    best, best_score, best_len = None, -1, 0
     for c in candidates:
-        n = _common_prefix_len(bicep_name, (c.get('name') or '').lower())
-        if n > best_len:
-            best_len, best = n, c
+        cname = (c.get('name') or '').lower()
+        p = _common_prefix_len(bicep_name, cname)
+        s = _common_suffix_len(bicep_name, cname)
+        if p + s > best_score:
+            best_score, best_len, best = p + s, p, c
 
     # Require a meaningful shared prefix; otherwise fall back to the first.
     return best if best_len >= 3 else candidates[0]

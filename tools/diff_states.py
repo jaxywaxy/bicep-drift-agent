@@ -74,6 +74,14 @@ def diff_states(
         "Microsoft.Compute/virtualMachines/extensions",  # Created by VMs
     }
     normalized_live = [r for r in normalized_live if r.get("type") not in auto_managed_types]
+    # System databases Azure creates on every SQL server - never in Bicep.
+    normalized_live = [
+        r for r in normalized_live
+        if not (
+            (r.get("type") or "").lower() == "microsoft.sql/servers/databases"
+            and (r.get("name") or "").split("/")[-1].lower() == "master"
+        )
+    ]
 
     # Use DriftDetector's intelligent matching (handles fuzzy matching for parameter-based names)
     detector_drifts = DriftDetector.detect_drift(filtered_arm, normalized_live)
@@ -174,6 +182,14 @@ def _should_compare_resource(resource: dict) -> bool:
 
     name_lower = res_name.lower()
     if any(indicator in name_lower for indicator in complex_unresolvable):
+        return False
+
+    # Normalizer placeholder form for unresolvable uniqueString ('sql[86c9cbf6]/db'):
+    # handled by smart matching in Phase 2; comparing here would emit a
+    # missing_in_azure that nothing later reconciles (child names especially -
+    # parent names happen to be rescued by fuzzy token matching).
+    import re
+    if re.search(r"\[[0-9a-fA-F]{6,}\]", res_name):
         return False
 
     # Skip empty or malformed names

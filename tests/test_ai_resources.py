@@ -231,6 +231,44 @@ class FirstContactNoiseTests(unittest.TestCase):
         _qualify_child_resource_names(rows)
         self.assertEqual(rows[0]["name"], "sqldrift1/driftdb")
 
+    def test_placeholder_child_names_are_smart_matched(self):
+        # 'sqldrift[86c9cbf6]/driftdb' has no function-call marker, but IS
+        # runtime-generated; without placeholder detection it double-reports.
+        from tools.smart_matching import (
+            detect_unresolvable_expressions, smart_match_resources,
+        )
+        arm = {"resources": [
+            {"type": "Microsoft.Sql/servers/databases", "name": "sqldrift[86c9cbf6]/driftdb"},
+        ]}
+        unresolvable = detect_unresolvable_expressions(arm)
+        self.assertIn("Microsoft.Sql/servers/databases", unresolvable)
+
+        azure = [
+            {"type": "microsoft.sql/servers/databases", "name": "sqldrift3s7c7weddxr3s/master"},
+            {"type": "microsoft.sql/servers/databases", "name": "sqldrift3s7c7weddxr3s/driftdb"},
+        ]
+        matched, _, _ = smart_match_resources(arm["resources"], azure, unresolvable)
+        self.assertEqual(len(matched), 1)
+        # Suffix tie-break: same-server siblings share the whole prefix; the
+        # literal child segment must pick driftdb, not master.
+        self.assertEqual(matched[0]["matched_to"], "sqldrift3s7c7weddxr3s/driftdb")
+
+    def test_placeholder_names_skipped_in_phase1(self):
+        from tools.diff_states import _should_compare_resource
+        self.assertFalse(_should_compare_resource(
+            {"type": "Microsoft.Sql/servers/databases", "name": "sqldrift[86c9cbf6]/driftdb"}
+        ))
+        self.assertTrue(_should_compare_resource(
+            {"type": "Microsoft.Sql/servers/databases", "name": "sqldrift1/driftdb"}
+        ))
+
+    def test_master_system_database_is_not_extra(self):
+        from tools.diff_states import diff_states
+        live = [{"type": "microsoft.sql/servers/databases", "name": "sqldrift1/master",
+                 "location": "australiaeast", "properties": {}}]
+        drifts = diff_states([], live)
+        self.assertEqual([d for d in drifts if "master" in d.resource_name], [])
+
     def test_already_qualified_and_top_level_names_untouched(self):
         rows = [
             {"type": "Microsoft.Sql/servers/databases", "name": "sqldrift1/driftdb",
