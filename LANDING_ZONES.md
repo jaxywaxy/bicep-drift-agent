@@ -436,6 +436,34 @@ can target a role (`Reader -> *`) or a principal (`* -> *:<guid>`).
 
 ---
 
+## Policy Assignment & Exemption Drift
+
+The governance twin of RBAC drift, matched on identity via Resource Graph's
+`policyresources` table (assignments' bicep names are often `guid(...)`):
+
+- **`extra_in_azure` assignment** — a policy assigned out-of-band. Details
+  carry the display name, definition reference, scope, enforcement mode, and
+  who assigned it / when from the assignment's own metadata (no activity-log
+  retention limit).
+- **`extra_in_azure` exemption** — someone waived a policy on a resource:
+  audit-critical, flagged `⚠️ policy EXEMPTION (<category>)` in notifications
+  with its expiry. Bicep-declared exemptions match by exempted assignment id.
+- **`missing_in_azure`** — a bicep-declared assignment that was deleted.
+
+Assignments match by literal name first, then by definition reference
+(trailing GUID/name of `policyDefinitionId`, surviving unresolved
+expressions). Scope filtering follows RBAC's rules (RG scan sees at/under-RG
+only; subscription scan adds sub-level; management-group level never).
+Ownership is always **platform** (governance). Disable with
+`INCLUDE_POLICY_ASSIGNMENTS=false`.
+
+Note the Phase 3 interplay: changes *enforced by* policy (DINE/Modify
+remediation writes) are still split out as expected governance, but a human
+*writing a policy object* (assignment/exemption/definition) is actionable
+drift — the classifier distinguishes the two.
+
+---
+
 ## Key Vault & Storage Firewall / Access-Policy Drift
 
 Key Vault `networkAcls` used to be blanket-ignored (null-vs-default noise);
