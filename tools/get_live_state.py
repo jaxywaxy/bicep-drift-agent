@@ -304,6 +304,10 @@ def _augment_untracked_resources(
         resources.extend(_query_cosmos_children(resources, sub_id, token=token))
     except Exception as e:
         logger.warning(f"Failed to query Cosmos child resources: {e}")
+    try:
+        resources.extend(_query_cognitive_deployments(resources, token=token))
+    except Exception as e:
+        logger.warning(f"Failed to query Cognitive Services deployments: {e}")
     _normalize_cosmos_account_locations(resources)
     _normalize_aci_container_groups(resources)
     _expand_vnet_peerings(resources)
@@ -570,6 +574,78 @@ def _query_cosmos_children(resources: List[Dict], sub_id: str, token: Optional[s
                 })
 
     logger.info(f"Found {len(children)} Cosmos SQL database/container resource(s) via ARM REST API")
+    return children
+
+
+def _cognitive_deployment_child(acct_name: str, rg: Optional[str], dep: Dict) -> Dict:
+    """Shape an AI model deployment as a live child resource ('{account}/{dep}').
+
+    sku is kept (name + capacity): capacity is the TPM quota, the classic
+    out-of-band bump. Azure-only augmentation in properties (capabilities,
+    rateLimits, provisioningState, ...) is tolerated by the bicep-driven
+    subset comparison, so properties pass through unmodified.
+    """
+    return {
+        "type": "Microsoft.CognitiveServices/accounts/deployments",
+        "name": f"{acct_name}/{dep.get('name', '')}",
+        "location": None,  # deployments carry no location; None is skipped by the comparator
+        "tags": {},
+        "sku": dep.get("sku"),
+        "kind": None,
+        "properties": dep.get("properties", {}) or {},
+        "id": dep.get("id"),
+        "resource_group": rg,
+    }
+
+
+def _query_cognitive_deployments(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
+    """Query AI model deployments (Azure OpenAI / AI Services) via ARM REST.
+
+    Resource Graph does not index Microsoft.CognitiveServices/accounts/
+    deployments, so without expansion the estate's most drift-prone AI state -
+    model name/VERSION (pinned vs upgraded) and sku.capacity (TPM quota) -
+    is never compared. Same pattern as the Cosmos children expansion.
+    """
+    import json as _json
+    import urllib.request
+
+    api_version = "2024-10-01"
+    accounts = [
+        r for r in resources
+        if (r.get("type") or "").lower() == "microsoft.cognitiveservices/accounts"
+    ]
+    if not accounts:
+        return []
+
+    try:
+        if not token:
+            token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
+    except Exception as e:
+        logger.warning(f"Could not acquire token for Cognitive Services query: {e}")
+        return []
+
+    children: List[Dict] = []
+    for acct in accounts:
+        acct_id = acct.get("id", "")
+        acct_name = acct.get("name", "")
+        rg = acct.get("resource_group") or _extract_resource_group_from_id(acct_id)
+        if not acct_id or not acct_name:
+            continue
+        try:
+            req = urllib.request.Request(
+                f"https://management.azure.com{acct_id}/deployments?api-version={api_version}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                deployments = _json.load(resp)
+        except Exception as e:
+            logger.debug(f"Could not list deployments for {acct_name}: {e}")
+            continue
+        for dep in deployments.get("value", []):
+            children.append(_cognitive_deployment_child(acct_name, rg, dep))
+
+    if children:
+        logger.info(f"Found {len(children)} AI model deployment(s) via ARM REST API")
     return children
 
 

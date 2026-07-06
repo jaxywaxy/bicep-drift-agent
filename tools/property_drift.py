@@ -486,6 +486,8 @@ class PropertyComparator:
     _NETWORK_ACL_DEFAULT_TYPES = {
         "microsoft.keyvault/vaults",
         "microsoft.storage/storageaccounts",
+        # AI/OpenAI accounts share the same null-means-default-open semantics.
+        "microsoft.cognitiveservices/accounts",
     }
     _DEFAULT_OPEN_NETWORK_ACLS = {
         "bypass": "AzureServices",
