@@ -25,6 +25,7 @@ from tools.get_live_state import get_live_state, fetch_cross_subscription_resour
 from tools.diff_states import diff_states, format_drift_report, ResourceDrift
 from tools.ignore_patterns import IgnorePatternList
 from tools.rbac import fetch_role_assignments, compare_role_assignments, rbac_enabled
+from tools.policy import fetch_policy_resources, compare_policy_resources, policy_drift_enabled
 from tools.rg_selector import rg_label
 
 logger = get_logger(__name__)
@@ -191,6 +192,34 @@ def run(bicep_file: str, resource_group: str):
             )
         except Exception as e:
             logger.warning(f"RBAC drift check failed (continuing without it): {e}")
+
+    # Step 4c: Policy assignment/exemption drift - the governance twin of 4b
+    # (policyresources table; identity-based matching; out-of-band exemptions
+    # are audit-critical). Disable with INCLUDE_POLICY_ASSIGNMENTS=false.
+    if policy_drift_enabled():
+        logger.info("Step 4c: Checking policy assignments and exemptions...")
+        try:
+            live_pol, live_exemptions = fetch_policy_resources(
+                subscription_id=os.environ.get("AZURE_SUBSCRIPTION_ID"),
+                resource_group=resource_group,
+                scope=deployment_scope if deployment_scope == "subscription" else "resource_group",
+            )
+            policy_drift_dicts = compare_policy_resources(arm_resources, live_pol, live_exemptions)
+            if ignore_patterns.patterns and policy_drift_dicts:
+                policy_drift_dicts, ignored = ignore_patterns.filter_drifts(policy_drift_dicts)
+                if ignored:
+                    logger.info(f"Ignoring {len(ignored)} policy drift(s) per ignore patterns")
+            drifts.extend(
+                ResourceDrift(
+                    resource_type=d["type"],
+                    resource_name=d["name"],
+                    drift_type=d["drift_type"],
+                    details=d.get("details", {}),
+                )
+                for d in policy_drift_dicts
+            )
+        except Exception as e:
+            logger.warning(f"Policy drift check failed (continuing without it): {e}")
 
     # Step 5: Report
     logger.info("Drift Report Summary")
