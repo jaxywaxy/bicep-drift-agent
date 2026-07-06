@@ -17,6 +17,7 @@ from tools.get_live_state import (
     _cognitive_child,
     _cognitive_deployment_child,
     _is_system_managed_rai_policy,
+    _qualify_child_resource_names,
 )
 from tools.property_drift import PropertyComparator
 
@@ -188,6 +189,58 @@ class RaiPolicyExpansionTests(unittest.TestCase):
             "aidrift/proj-drifttest", "rg", {"name": "conn-x", "properties": {}},
         )
         self.assertEqual(child["name"], "aidrift/proj-drifttest/conn-x")
+
+    def test_already_qualified_name_is_not_double_prefixed(self):
+        # The projects list API returns 'account/project' names already
+        # (live-caught: 'aidrift/aidrift/proj-drifttest' double prefix).
+        child = _cognitive_child(
+            "Microsoft.CognitiveServices/accounts/projects", "aidrift", "rg",
+            {"name": "aidrift/proj-drifttest", "properties": {}},
+        )
+        self.assertEqual(child["name"], "aidrift/proj-drifttest")
+
+
+class FirstContactNoiseTests(unittest.TestCase):
+    """Live-caught fixes from the SQL/monitoring/messaging first-contact scan."""
+
+    def test_sql_admin_password_is_write_only_and_never_reported(self):
+        # Azure never returns it - and comparing it LEAKED the desired value
+        # into the report.
+        bicep = {"type": "Microsoft.Sql/servers", "name": "sql1",
+                 "properties": {"administratorLogin": "driftadmin",
+                                "administratorLoginPassword": "S3cret!", "version": "12.0"}}
+        live = {"type": "Microsoft.Sql/servers", "name": "sql1",
+                "properties": {"administratorLogin": "driftadmin", "version": "12.0"}}
+        self.assertEqual(PropertyComparator.compare_properties(bicep, live), [])
+
+    def test_location_casing_is_not_drift(self):
+        bicep = {"type": "Microsoft.Insights/actionGroups", "name": "ag", "location": "Global",
+                 "properties": {"enabled": True}}
+        live = {"type": "Microsoft.Insights/actionGroups", "name": "ag", "location": "global",
+                "properties": {"enabled": True}}
+        self.assertEqual(PropertyComparator.compare_properties(bicep, live), [])
+
+    def test_graph_child_rows_get_parent_qualified_names(self):
+        # Resource Graph returns SQL databases with the BARE child name, so
+        # they double-report as missing+extra against 'server/db' bicep names.
+        rows = [{
+            "type": "Microsoft.Sql/servers/databases",
+            "name": "driftdb",
+            "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Sql/servers/sqldrift1/databases/driftdb",
+        }]
+        _qualify_child_resource_names(rows)
+        self.assertEqual(rows[0]["name"], "sqldrift1/driftdb")
+
+    def test_already_qualified_and_top_level_names_untouched(self):
+        rows = [
+            {"type": "Microsoft.Sql/servers/databases", "name": "sqldrift1/driftdb",
+             "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Sql/servers/sqldrift1/databases/driftdb"},
+            {"type": "Microsoft.Storage/storageAccounts", "name": "st1",
+             "id": "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/st1"},
+        ]
+        _qualify_child_resource_names(rows)
+        self.assertEqual(rows[0]["name"], "sqldrift1/driftdb")
+        self.assertEqual(rows[1]["name"], "st1")
 
 
 class PlaceholderPropertyValueTests(unittest.TestCase):

@@ -497,6 +497,9 @@ class PropertyComparator:
     }
 
     WRITE_ONLY_PROPERTIES = {
+        # SQL server admin password (never returned; comparing it would also
+        # LEAK the desired value into the drift report)
+        "properties.administratorloginpassword",
         # VM OS profile (not returned by Azure API for security/privacy)
         "properties.osprofile.adminusername",
         "properties.osprofile.adminpassword",
@@ -612,8 +615,9 @@ class PropertyComparator:
                     if not bicep_value and not deployed_value:
                         continue
 
-                # Normalize type comparisons (Azure may return different casing)
-                if key == "type" and isinstance(bicep_value, str) and isinstance(deployed_value, str):
+                # Normalize type/location comparisons (Azure normalizes casing:
+                # an action group's 'Global' comes back 'global')
+                if key in ("type", "location") and isinstance(bicep_value, str) and isinstance(deployed_value, str):
                     if bicep_value.lower() == deployed_value.lower():
                         continue
 
