@@ -275,5 +275,72 @@ class WebhookSecretExpansionTests(unittest.TestCase):
         self.assertEqual(sent, ["https://hooks.slack/real"])
 
 
+class WebhookRedirectTests(unittest.TestCase):
+    """A 3xx from a webhook must count as failure, not be silently followed.
+
+    Regression for a truncated Slack webhook secret: hooks.slack.com answered
+    the POST with 302, urllib followed it to a generic 200 page, and the agent
+    logged 'notification sent' while nothing reached the channel.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import http.server
+        import threading
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            posts = []
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                Handler.posts.append(self.path)
+                if self.path.startswith("/redirect"):
+                    self.send_response(302)
+                    self.send_header("Location", f"http://127.0.0.1:{cls.port}/landing")
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(b"ok")
+
+            def do_GET(self):  # where a followed redirect would land
+                Handler.posts.append("GET " + self.path)
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"generic page")
+
+            def log_message(self, *args):
+                pass
+
+        cls.handler = Handler
+        cls.server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+        cls.port = cls.server.server_address[1]
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+        cls.server.server_close()
+
+    def setUp(self):
+        self.handler.posts.clear()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            self.router = NotificationRouter()
+
+    def test_slack_redirect_is_failure(self):
+        ok = self.router._send_to_slack(f"http://127.0.0.1:{self.port}/redirect", "hi")
+        self.assertFalse(ok)
+        self.assertEqual(self.handler.posts, ["/redirect"])  # redirect not followed
+
+    def test_teams_redirect_is_failure(self):
+        ok = self.router._send_to_teams(f"http://127.0.0.1:{self.port}/redirect", "hi")
+        self.assertFalse(ok)
+        self.assertEqual(self.handler.posts, ["/redirect"])
+
+    def test_direct_200_still_succeeds(self):
+        ok = self.router._send_to_slack(f"http://127.0.0.1:{self.port}/hook", "hi")
+        self.assertTrue(ok)
+
+
 if __name__ == "__main__":
     unittest.main()

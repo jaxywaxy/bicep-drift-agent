@@ -222,6 +222,22 @@ def expand_webhook_secrets(url: str) -> str:
     return "" if unresolved else expanded
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Refuse to follow redirects when POSTing to a webhook.
+
+    A valid Slack/Teams webhook answers a POST with 200/201 directly. A 3xx
+    means the URL is wrong (e.g. a truncated secret) — following it lands on a
+    generic 200 page and turns a delivery failure into a false "sent" success.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # makes urlopen raise HTTPError with the 3xx code
+
+
+def _webhook_opener() -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(_NoRedirectHandler)
+
+
 class NotificationRouter:
     """Route notifications to teams based on configuration."""
 
@@ -379,8 +395,16 @@ class NotificationRouter:
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with _webhook_opener().open(req, timeout=10) as response:
                 return response.status == 200
+        except urllib.error.HTTPError as e:
+            if 300 <= e.code < 400:
+                logger.error(
+                    f"Slack webhook redirected (HTTP {e.code}) — the URL is likely truncated or invalid"
+                )
+            else:
+                logger.error(f"Slack error: HTTP {e.code}: {e.reason}")
+            return False
         except Exception as e:
             logger.error(f"Slack error: {type(e).__name__}: {e}", exc_info=True)
             return False
@@ -402,8 +426,16 @@ class NotificationRouter:
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=10) as response:
+            with _webhook_opener().open(req, timeout=10) as response:
                 return response.status in (200, 201)
+        except urllib.error.HTTPError as e:
+            if 300 <= e.code < 400:
+                logger.error(
+                    f"Teams webhook redirected (HTTP {e.code}) — the URL is likely truncated or invalid"
+                )
+            else:
+                logger.error(f"Teams error: HTTP {e.code}: {e.reason}")
+            return False
         except Exception as e:
             logger.error(f"Teams error: {type(e).__name__}: {e}", exc_info=True)
             return False
