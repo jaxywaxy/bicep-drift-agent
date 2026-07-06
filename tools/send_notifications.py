@@ -517,6 +517,20 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
             if d.get("created_on"):
                 granted += f" on {d['created_on']}"
             details = ("⚠️ PRIVILEGED " if d.get("privileged") else "") + granted
+        elif d.get("policy_display_name") or d.get("exemption_category"):
+            if d.get("exemption_category"):
+                details = (f"⚠️ out-of-band policy EXEMPTION ({d['exemption_category']}) "
+                           f"at {d.get('scope', 'unknown scope')}")
+                if d.get("expires_on"):
+                    details += f", expires {d['expires_on']}"
+            else:
+                details = (f"out-of-band policy assignment '{d.get('policy_display_name')}' "
+                           f"at {d.get('scope', 'unknown scope')}")
+            by = d.get("assigned_by") or d.get("created_by")
+            if by:
+                details += f", by {by}"
+            if d.get("created_on"):
+                details += f" on {d['created_on']}"
     elif drift_type == "missing_in_azure":
         details = "in Bicep but not deployed"
     else:

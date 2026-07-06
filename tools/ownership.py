@@ -82,6 +82,13 @@ def classify_owner(
     rtype = (resource_type or "").lower()
     types = {t.lower() for t in platform_types} if platform_types else DEFAULT_PLATFORM_TYPES
 
+    # 0a. Policy assignments/exemptions are governance, full stop - platform.
+    if rtype in (
+        "microsoft.authorization/policyassignments",
+        "microsoft.authorization/policyexemptions",
+    ):
+        return PLATFORM
+
     # 0. Role assignments are owned by whoever owns what they grant access TO:
     #    subscription-level grants are governance (platform); a grant scoped to
     #    a resource follows that resource's owner (a grant on a VNet -> platform,
