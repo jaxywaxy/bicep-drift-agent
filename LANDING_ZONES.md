@@ -397,6 +397,45 @@ A ready-to-copy platform LZ config is in
 
 ---
 
+## RBAC Role-Assignment Drift
+
+Role assignments are scanned alongside resources (the most common out-of-band
+change: a "temporary" Contributor grant that never leaves). They need their own
+pipeline because assignments aren't rows in Resource Graph's `Resources` table
+and their bicep names are `guid(...)` expressions — so the agent matches on
+**identity** (role definition GUID + principalId + scope) instead of name:
+
+- **`extra_in_azure`** — an assignment in Azure with no bicep counterpart
+  (someone granted access out-of-band). Details carry the role name, principal,
+  scope, and **who granted it and when** straight from the RBAC API (no
+  activity-log retention limit). Privileged roles (Owner, Contributor, User
+  Access Administrator, RBAC Administrator) are flagged `privileged: true` and
+  called out in notifications.
+- **`missing_in_azure`** — a bicep assignment not deployed (or revoked).
+
+Scoping matches the scan: an RG scan sees assignments at/under that RG only
+(inherited subscription-level grants are excluded — they belong to the
+subscription scan); a subscription scan sees subscription-level grants plus
+those in RGs matching the selector. Management-group-level grants are never in
+scope.
+
+Owner routing: subscription-scope grants → **platform** (governance); a grant
+scoped to a resource follows that resource's owner (VNet → platform, storage
+account → workload); RG-scope grants → workload.
+
+Bicep principalIds that are runtime expressions (a managed identity's
+`principalId`) match best-effort by role GUID, like smart matching for
+`uniqueString` names. Assignments whose `roleDefinitionId` has no GUID literal
+(fully parameterised custom roles) are skipped rather than false-flagged.
+
+Disable with `INCLUDE_ROLE_ASSIGNMENTS=false` in the workflow env. Known-noise
+assignments (e.g. a service's auto-created grant) can be suppressed per-LZ with
+a `.drift-ignore` pattern on type `Microsoft.Authorization/roleAssignments` —
+drift names are `"<RoleName> -> <PrincipalType>:<principalId>"`, so patterns
+can target a role (`Reader -> *`) or a principal (`* -> *:<guid>`).
+
+---
+
 ## Troubleshooting
 
 ### "Landing Zone not found in lz-index.yml"

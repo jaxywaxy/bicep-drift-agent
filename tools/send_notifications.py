@@ -507,6 +507,16 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
         details = "properties differ: " + ", ".join(changed.keys()) if changed else ""
     elif drift_type == "extra_in_azure":
         details = "deployed but not in Bicep"
+        d = drift.get("details", {}) or {}
+        # RBAC extras carry grantor provenance from the RBAC API - surface the
+        # who/when (and privilege level) directly in the notification.
+        if d.get("role_name"):
+            granted = f"out-of-band grant of '{d['role_name']}' at {d.get('scope', 'unknown scope')}"
+            if d.get("created_by"):
+                granted += f", granted by {d['created_by']}"
+            if d.get("created_on"):
+                granted += f" on {d['created_on']}"
+            details = ("⚠️ PRIVILEGED " if d.get("privileged") else "") + granted
     elif drift_type == "missing_in_azure":
         details = "in Bicep but not deployed"
     else:
