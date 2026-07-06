@@ -145,6 +145,27 @@ class AllowlistTests(unittest.TestCase):
         live = self._bicep([], vnet_rules=[{"id": "/subscriptions/x/s1"}, {"id": "/subscriptions/x/s2"}])
         self.assertIn("properties.networkAcls.virtualNetworkRules", paths(compare(bicep, live)))
 
+    def test_azure_stripped_slash32_is_not_drift(self):
+        # Azure returns "1.2.3.4" for a rule declared "1.2.3.4/32" - the exact
+        # false-positive class that led to the original blanket ignore.
+        bicep = self._bicep([{"value": "1.2.3.4/32"}])
+        live = self._bicep([{"value": "1.2.3.4"}])
+        self.assertEqual(compare(bicep, live), [])
+        # ...and a real /24 range is still compared literally.
+        bicep = self._bicep([{"value": "5.6.7.0/24"}])
+        live = self._bicep([{"value": "5.6.7.0/24"}])
+        self.assertEqual(compare(bicep, live), [])
+
+    def test_live_added_resource_access_rule_is_drift(self):
+        rule = {"tenantId": "t1", "resourceId": "/subscriptions/x/providers/Microsoft.Synapse/workspaces/w1"}
+        added = {"tenantId": "t1", "resourceId": "/subscriptions/x/providers/Microsoft.Synapse/workspaces/evil"}
+        bicep = kv({"networkAcls": {**DEFAULT_ACLS, "resourceAccessRules": [rule]}}, rtype=ST_TYPE, name="st1")
+        live = kv({"networkAcls": {**DEFAULT_ACLS, "resourceAccessRules": [rule, added]}}, rtype=ST_TYPE, name="st1")
+        self.assertIn("properties.networkAcls.resourceAccessRules", paths(compare(bicep, live)))
+        # identical sets stay clean
+        live_same = kv({"networkAcls": {**DEFAULT_ACLS, "resourceAccessRules": [dict(rule)]}}, rtype=ST_TYPE, name="st1")
+        self.assertEqual(compare(bicep, live_same), [])
+
 
 class AccessPolicyTests(unittest.TestCase):
     """accessPolicies: identity-keyed, permissions as case-insensitive sets."""
