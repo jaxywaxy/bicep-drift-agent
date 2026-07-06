@@ -598,18 +598,31 @@ def _cognitive_deployment_child(acct_name: str, rg: Optional[str], dep: Dict) ->
     }
 
 
-def _query_cognitive_deployments(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
-    """Query AI model deployments (Azure OpenAI / AI Services) via ARM REST.
+def _is_system_managed_rai_policy(item: Dict) -> bool:
+    """Built-in content filter policies (Microsoft.Default*) are SystemManaged;
+    only UserManaged (custom) policies are bicep-comparable state."""
+    ptype = str((item.get("properties", {}) or {}).get("type", "")).lower()
+    return ptype == "systemmanaged"
 
-    Resource Graph does not index Microsoft.CognitiveServices/accounts/
-    deployments, so without expansion the estate's most drift-prone AI state -
-    model name/VERSION (pinned vs upgraded) and sku.capacity (TPM quota) -
-    is never compared. Same pattern as the Cosmos children expansion.
+
+def _query_cognitive_deployments(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
+    """Expand AI (Azure OpenAI / AI Services / Foundry) child resources via ARM REST.
+
+    Resource Graph indexes NONE of these children, so without expansion the
+    estate's most drift-prone AI state is never compared:
+      * accounts/deployments  - model name/VERSION, sku.capacity (TPM quota)
+      * accounts/raiPolicies  - custom content filters (UserManaged only;
+        the Microsoft.Default* built-ins are SystemManaged noise)
+      * accounts/projects     - Foundry projects
+      * accounts/connections and projects/connections - Foundry connections
+        (out-of-band additions = new data channels; the list API returns
+        metadata only - category/target/authType - never credentials)
+    Same pattern as the Cosmos children expansion.
     """
     import json as _json
     import urllib.request
 
-    api_version = "2024-10-01"
+    api_version = "2025-06-01"
     accounts = [
         r for r in resources
         if (r.get("type") or "").lower() == "microsoft.cognitiveservices/accounts"
@@ -624,29 +637,93 @@ def _query_cognitive_deployments(resources: List[Dict], token: Optional[str] = N
         logger.warning(f"Could not acquire token for Cognitive Services query: {e}")
         return []
 
+    def _list(parent_id: str, child: str) -> List[Dict]:
+        req = urllib.request.Request(
+            f"https://management.azure.com{parent_id}/{child}?api-version={api_version}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return _json.load(resp).get("value", [])
+
     children: List[Dict] = []
+    counts = {"deployments": 0, "raiPolicies": 0, "projects": 0, "connections": 0}
     for acct in accounts:
         acct_id = acct.get("id", "")
         acct_name = acct.get("name", "")
         rg = acct.get("resource_group") or _extract_resource_group_from_id(acct_id)
         if not acct_id or not acct_name:
             continue
+
         try:
-            req = urllib.request.Request(
-                f"https://management.azure.com{acct_id}/deployments?api-version={api_version}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                deployments = _json.load(resp)
+            for dep in _list(acct_id, "deployments"):
+                children.append(_cognitive_deployment_child(acct_name, rg, dep))
+                counts["deployments"] += 1
         except Exception as e:
             logger.debug(f"Could not list deployments for {acct_name}: {e}")
-            continue
-        for dep in deployments.get("value", []):
-            children.append(_cognitive_deployment_child(acct_name, rg, dep))
+
+        try:
+            for pol in _list(acct_id, "raiPolicies"):
+                if _is_system_managed_rai_policy(pol):
+                    continue
+                children.append(_cognitive_child(
+                    "Microsoft.CognitiveServices/accounts/raiPolicies", acct_name, rg, pol
+                ))
+                counts["raiPolicies"] += 1
+        except Exception as e:
+            logger.debug(f"Could not list raiPolicies for {acct_name}: {e}")
+
+        try:
+            for conn in _list(acct_id, "connections"):
+                children.append(_cognitive_child(
+                    "Microsoft.CognitiveServices/accounts/connections", acct_name, rg, conn
+                ))
+                counts["connections"] += 1
+        except Exception as e:
+            logger.debug(f"Could not list connections for {acct_name}: {e}")
+
+        try:
+            projects = _list(acct_id, "projects")
+        except Exception as e:
+            logger.debug(f"Could not list projects for {acct_name}: {e}")
+            projects = []
+        for proj in projects:
+            proj_name = proj.get("name", "")
+            children.append({
+                **_cognitive_child(
+                    "Microsoft.CognitiveServices/accounts/projects", acct_name, rg, proj
+                ),
+                "location": proj.get("location"),  # projects DO carry a location
+            })
+            counts["projects"] += 1
+            try:
+                for conn in _list(proj.get("id", ""), "connections"):
+                    children.append(_cognitive_child(
+                        "Microsoft.CognitiveServices/accounts/projects/connections",
+                        f"{acct_name}/{proj_name}", rg, conn,
+                    ))
+                    counts["connections"] += 1
+            except Exception as e:
+                logger.debug(f"Could not list connections for project {proj_name}: {e}")
 
     if children:
-        logger.info(f"Found {len(children)} AI model deployment(s) via ARM REST API")
+        summary = ", ".join(f"{v} {k}" for k, v in counts.items() if v)
+        logger.info(f"Expanded AI children via ARM REST API: {summary}")
     return children
+
+
+def _cognitive_child(rtype: str, parent_name: str, rg: Optional[str], item: Dict) -> Dict:
+    """Shape a Cognitive Services child resource as '{parent}/{name}' live state."""
+    return {
+        "type": rtype,
+        "name": f"{parent_name}/{item.get('name', '')}",
+        "location": None,  # child resources carry no location; None is skipped
+        "tags": {},
+        "sku": item.get("sku"),
+        "kind": None,
+        "properties": item.get("properties", {}) or {},
+        "id": item.get("id"),
+        "resource_group": rg,
+    }
 
 
 def _normalize_cosmos_account_locations(resources: List[Dict]) -> None:
