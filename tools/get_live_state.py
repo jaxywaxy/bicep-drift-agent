@@ -311,6 +311,34 @@ def _augment_untracked_resources(
     _normalize_cosmos_account_locations(resources)
     _normalize_aci_container_groups(resources)
     _expand_vnet_peerings(resources)
+    _qualify_child_resource_names(resources)
+
+
+def _qualify_child_resource_names(resources: List[Dict]) -> None:
+    """Give Resource-Graph-indexed child resources their parent-qualified name.
+
+    Resource Graph returns some child rows (SQL databases, ...) with the BARE
+    child name ('driftdb'), while bicep child resources compile to
+    'parent/child' ('sqlserver1/driftdb') - so they can never match and
+    double-report as missing + extra. A child type has more segments than its
+    name; rebuild the full name from the resource id's path (which alternates
+    type/name segments after the provider namespace). Mutates in place.
+    """
+    for r in resources:
+        rtype = r.get("type") or ""
+        name = r.get("name") or ""
+        expected_segments = len(rtype.split("/")) - 1  # e.g. servers/databases -> 2
+        if expected_segments < 2 or name.count("/") == expected_segments - 1:
+            continue
+        rid = r.get("id") or ""
+        marker = "/providers/"
+        idx = rid.lower().rfind(marker)
+        if idx < 0:
+            continue
+        segs = rid[idx + len(marker):].split("/")  # [namespace, typeA, nameA, typeB, nameB, ...]
+        names = segs[2::2]
+        if len(names) == expected_segments:
+            r["name"] = "/".join(names)
 
 
 def _expand_vnet_peerings(resources: List[Dict]) -> None:
@@ -712,10 +740,17 @@ def _query_cognitive_deployments(resources: List[Dict], token: Optional[str] = N
 
 
 def _cognitive_child(rtype: str, parent_name: str, rg: Optional[str], item: Dict) -> Dict:
-    """Shape a Cognitive Services child resource as '{parent}/{name}' live state."""
+    """Shape a Cognitive Services child resource as '{parent}/{name}' live state.
+
+    Some list APIs (projects) already return parent-qualified names
+    ('account/project') while others (deployments, raiPolicies) return bare
+    names - prefix only when needed, or the name double-prefixes.
+    """
+    raw_name = item.get("name", "")
+    qualified = raw_name if raw_name.startswith(f"{parent_name}/") else f"{parent_name}/{raw_name}"
     return {
         "type": rtype,
-        "name": f"{parent_name}/{item.get('name', '')}",
+        "name": qualified,
         "location": None,  # child resources carry no location; None is skipped
         "tags": {},
         "sku": item.get("sku"),
