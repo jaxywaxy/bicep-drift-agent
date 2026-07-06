@@ -71,8 +71,11 @@ ignore:
   # Note: Locks defined in IaC (Bicep) are now managed and should be detected
   # Lock removal is a critical security event that must trigger drift alerts
 
-  - resource_type: "Microsoft.Authorization/roleAssignments"
-    reason: "Role assignments auto-created by policies or RBAC automation"
+  # NOTE: Microsoft.Authorization/roleAssignments is deliberately NOT ignored
+  # (it used to be, from before RBAC drift detection existed - the blanket
+  # ignore would swallow every out-of-band grant the feature exists to catch).
+  # Known automation-created assignments should be ignored per-LZ by role or
+  # principal instead: drift names are "<RoleName> -> <PrincipalType>:<id>".
 
   # Monitoring/Diagnostics
   # Only ignore EXTRA workspaces (auto-created by Defender/Monitor and not in IaC).
