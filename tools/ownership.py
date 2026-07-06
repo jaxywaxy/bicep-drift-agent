@@ -82,6 +82,21 @@ def classify_owner(
     rtype = (resource_type or "").lower()
     types = {t.lower() for t in platform_types} if platform_types else DEFAULT_PLATFORM_TYPES
 
+    # 0. Role assignments are owned by whoever owns what they grant access TO:
+    #    subscription-level grants are governance (platform); a grant scoped to
+    #    a resource follows that resource's owner (a grant on a VNet -> platform,
+    #    on a storage account -> workload). RG-level grants default to workload
+    #    (app teams grant their identities access to their own RG).
+    if rtype == "microsoft.authorization/roleassignments":
+        scope = str(((drift or {}).get("details") or {}).get("scope") or "").lower()
+        if "/resourcegroups/" not in scope:
+            return PLATFORM  # subscription (or unknown) scope: governance drift
+        from .rbac import _scope_target_type
+        target_type = _scope_target_type(scope)
+        if target_type:
+            return classify_owner(target_type, None, platform_types)
+        return WORKLOAD
+
     # 1. Child security-rule resources are app-owned even though the NSG isn't.
     if rtype in WORKLOAD_OVERRIDE_TYPES:
         return WORKLOAD

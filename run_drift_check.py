@@ -22,8 +22,9 @@ load_dotenv()
 from tools.logger import setup_logging, get_logger
 from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detect_deployment_scope
 from tools.get_live_state import get_live_state, fetch_cross_subscription_resources
-from tools.diff_states import diff_states, format_drift_report
+from tools.diff_states import diff_states, format_drift_report, ResourceDrift
 from tools.ignore_patterns import IgnorePatternList
+from tools.rbac import fetch_role_assignments, compare_role_assignments, rbac_enabled
 from tools.rg_selector import rg_label
 
 logger = get_logger(__name__)
@@ -161,6 +162,35 @@ def run(bicep_file: str, resource_group: str):
     except Exception as e:
         logger.error(f"Failed to diff states: {e}", exc_info=True)
         raise
+
+    # Step 4b: RBAC role-assignment drift. Assignments are invisible to the
+    # normal pipeline (not in Resource Graph's Resources table; guid(...) names
+    # skipped by the comparator), so they get their own identity-based compare.
+    # Disable with INCLUDE_ROLE_ASSIGNMENTS=false.
+    if rbac_enabled():
+        logger.info("Step 4b: Checking RBAC role assignments...")
+        try:
+            live_assignments = fetch_role_assignments(
+                subscription_id=os.environ.get("AZURE_SUBSCRIPTION_ID"),
+                resource_group=resource_group,
+                scope=deployment_scope if deployment_scope == "subscription" else "resource_group",
+            )
+            rbac_drift_dicts = compare_role_assignments(arm_resources, live_assignments)
+            if ignore_patterns.patterns and rbac_drift_dicts:
+                rbac_drift_dicts, ignored = ignore_patterns.filter_drifts(rbac_drift_dicts)
+                if ignored:
+                    logger.info(f"Ignoring {len(ignored)} RBAC drift(s) per ignore patterns")
+            drifts.extend(
+                ResourceDrift(
+                    resource_type=d["type"],
+                    resource_name=d["name"],
+                    drift_type=d["drift_type"],
+                    details=d.get("details", {}),
+                )
+                for d in rbac_drift_dicts
+            )
+        except Exception as e:
+            logger.warning(f"RBAC drift check failed (continuing without it): {e}")
 
     # Step 5: Report
     logger.info("Drift Report Summary")
