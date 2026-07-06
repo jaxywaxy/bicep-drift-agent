@@ -199,3 +199,30 @@ class NotificationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GovernanceWriteAttributionTests(unittest.TestCase):
+    """A human writing a policy ASSIGNMENT must stay actionable - live-caught:
+    the 'policy' substring in 'policyassignments/write' mis-attributed the
+    out-of-band TDE assignment as policy-ENFORCED (expected) and silently
+    dropped it from the actionable set."""
+
+    def test_human_policy_assignment_write_is_not_policy_enforced(self):
+        from tools.change_origin import classify_change_origin
+        info = classify_change_origin([{
+            "operation": "microsoft.authorization/policyassignments/write",
+            "caller": "jacqui.anker@gmail.com",
+            "timestamp": "2026-07-06T21:53:15Z",
+            "properties": {},
+        }])
+        self.assertFalse(info.expected)
+
+    def test_dine_effect_operation_still_policy_enforced(self):
+        from tools.change_origin import classify_change_origin
+        info = classify_change_origin([{
+            "operation": "microsoft.authorization/policyinsights/policystates/deployifnotexists/action",
+            "caller": "some-msi-guid",
+            "timestamp": "2026-07-06T21:53:15Z",
+            "properties": {"policyAssignmentId": "/subscriptions/x/providers/Microsoft.Authorization/policyAssignments/p"},
+        }])
+        self.assertTrue(info.expected)
