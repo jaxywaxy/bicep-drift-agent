@@ -860,6 +860,25 @@ class PropertyComparator:
                 items.append((new_key, v))
         return dict(items)
 
+    # Placeholder the normalizer emits for an unresolvable uniqueString() inside
+    # a value, e.g. 'aidrift[86c9cbf6]'. The resource NAME gets smart-match
+    # remapped, but the same placeholder inside a PROPERTY value (a
+    # customSubDomainName set to the resource name) reaches the comparator
+    # as-is and must not be compared literally against the resolved live value.
+    @staticmethod
+    def _placeholder_value_matches(bicep_val: str, deployed_val: str) -> bool:
+        """True when a placeholder-bearing bicep string is consistent with the
+        deployed value: the fixed parts around each [hex] placeholder must
+        appear in order, with the placeholders spanning arbitrary generated
+        characters. 'aidrift[86c9cbf6]' matches 'aidrift3s7c7weddxr3s'."""
+        import re as _re
+        parts = _re.split(r"\[[0-9a-fA-F]{6,}\]", bicep_val)
+        if len(parts) < 2:
+            return False  # no placeholder present
+        pattern = "".join(_re.escape(p) + ("[a-z0-9]*" if i < len(parts) - 1 else "")
+                          for i, p in enumerate(parts))
+        return _re.fullmatch(pattern, deployed_val, _re.IGNORECASE) is not None
+
     @staticmethod
     def _scalar_equal(bicep_val: Any, deployed_val: Any) -> bool:
         """Compare two scalars, treating Azure resource IDs case-insensitively.
@@ -870,6 +889,8 @@ class PropertyComparator:
         if isinstance(bicep_val, str) and isinstance(deployed_val, str):
             if "/subscriptions/" in bicep_val.lower() and "/subscriptions/" in deployed_val.lower():
                 return bicep_val.lower() == deployed_val.lower()
+            if "[" in bicep_val and PropertyComparator._placeholder_value_matches(bicep_val, deployed_val):
+                return True
         return bicep_val == deployed_val
 
     @staticmethod

@@ -112,5 +112,40 @@ class AccountNetworkAclsTests(unittest.TestCase):
         self.assertIn("properties.networkAcls.ipRules", {d.property_path for d in diffs})
 
 
+class PlaceholderPropertyValueTests(unittest.TestCase):
+    """uniqueString placeholders inside PROPERTY values (not just names).
+
+    Live-caught false positive: customSubDomainName = the account name =
+    'aidrift[86c9cbf6]' compared literally against 'aidrift3s7c7weddxr3s'.
+    """
+
+    def _acct(self, sub_domain):
+        return {
+            "type": AI_TYPE,
+            "name": "aidrift[86c9cbf6]",
+            "properties": {"customSubDomainName": sub_domain, "publicNetworkAccess": "Enabled"},
+        }
+
+    def test_placeholder_value_matches_resolved_live_value(self):
+        diffs = PropertyComparator.compare_properties(
+            self._acct("aidrift[86c9cbf6]"), self._acct("aidrift3s7c7weddxr3s")
+        )
+        self.assertEqual([d for d in diffs if "customSubDomainName" in d.property_path], [])
+
+    def test_placeholder_with_wrong_prefix_is_still_drift(self):
+        diffs = PropertyComparator.compare_properties(
+            self._acct("aidrift[86c9cbf6]"), self._acct("someoneelse123")
+        )
+        self.assertTrue([d for d in diffs if "customSubDomainName" in d.property_path])
+
+    def test_placeholder_with_suffix_fixed_part(self):
+        self.assertTrue(PropertyComparator._placeholder_value_matches(
+            "st[86c9cbf6]data", "st3s7c7weddxr3sdata"
+        ))
+        self.assertFalse(PropertyComparator._placeholder_value_matches(
+            "st[86c9cbf6]data", "st3s7c7weddxr3slogs"
+        ))
+
+
 if __name__ == "__main__":
     unittest.main()
