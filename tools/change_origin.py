@@ -260,7 +260,15 @@ def classify_change_origin(
     policy_name_hint = None
     if isinstance(policy_principal_ids, dict):
         policy_name_hint = policy_principal_ids.get(caller)
-    if "azure policy" in caller or "policy" in operation or has_policy_prop or caller_is_policy_msi:
+    # Writing TO a policy assignment/exemption/definition is a governance change
+    # BY someone (human or pipeline) - not a change ENFORCED by policy. Without
+    # this exclusion, 'policy' in the operation name mis-attributes an
+    # out-of-band policy assignment as policy-enforced (expected), silently
+    # moving it out of the actionable drift set.
+    is_governance_object_write = operation.startswith("microsoft.authorization/policy")
+    op_signals_policy_effect = "policy" in operation and not is_governance_object_write
+    if ("azure policy" in caller or op_signals_policy_effect or has_policy_prop
+            or caller_is_policy_msi):
         return _classify_policy_change(latest, activity_logs, policy_name_hint)
 
     # Check for Azure service changes
