@@ -436,6 +436,38 @@ can target a role (`Reader -> *`) or a principal (`* -> *:<guid>`).
 
 ---
 
+## Key Vault & Storage Firewall / Access-Policy Drift
+
+Key Vault `networkAcls` used to be blanket-ignored (null-vs-default noise);
+that ignore is gone and the comparator now handles these properties with
+security-aware semantics, flagged **critical**:
+
+- **`networkAcls`** — a never-configured vault/storage account returns `null`,
+  which means *default open*; the comparator materializes that default on the
+  live side, so a template spelling out the same default is clean while a
+  template demanding `defaultAction: Deny` correctly drifts against an
+  unconfigured (open) resource. Enum casing and `bypass` list order are
+  normalized. Applies to `Microsoft.KeyVault/vaults` and
+  `Microsoft.Storage/storageAccounts`.
+- **`ipRules` / `virtualNetworkRules`** — compared as **exact sets** (element
+  identity = CIDR `value` or subnet `id`): a hand-added firewall opening is
+  drift even though the generic subset comparison would pass it. Reordering
+  and Azure's read-only field augmentation are not drift. A rule whose subnet
+  id is an unresolved cross-module expression excuses exactly one live rule.
+- **`accessPolicies`** (non-RBAC vaults) — keyed by `(objectId, applicationId)`
+  with permissions compared as case-insensitive **sets across all four
+  categories** — an out-of-band grant (new policy, or a permission added in a
+  category the bicep omits) is drift; reordering and casing are not. A policy
+  whose `objectId` is a runtime expression (managed identity) excuses one live
+  policy, like smart matching. RBAC-mode vaults (`enableRbacAuthorization:
+  true`) are covered by [RBAC drift](#rbac-role-assignment-drift) instead.
+
+**Caveat:** comparison is bicep-driven — if the template omits `ipRules`
+entirely, additions can't be detected. Declare `ipRules: []` explicitly to
+assert "no firewall exceptions allowed".
+
+---
+
 ## Troubleshooting
 
 ### "Landing Zone not found in lz-index.yml"
