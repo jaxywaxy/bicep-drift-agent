@@ -13,7 +13,11 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.get_live_state import _cognitive_deployment_child
+from tools.get_live_state import (
+    _cognitive_child,
+    _cognitive_deployment_child,
+    _is_system_managed_rai_policy,
+)
 from tools.property_drift import PropertyComparator
 
 AI_TYPE = "Microsoft.CognitiveServices/accounts"
@@ -110,6 +114,80 @@ class AccountNetworkAclsTests(unittest.TestCase):
         live = self._acct({"defaultAction": "Deny", "ipRules": [{"value": "203.0.113.7"}]})
         diffs = PropertyComparator.compare_properties(bicep, live)
         self.assertIn("properties.networkAcls.ipRules", {d.property_path for d in diffs})
+
+
+def cf(name, source, threshold="Medium", enabled=True, blocking=True):
+    return {"name": name, "source": source, "severityThreshold": threshold,
+            "enabled": enabled, "blocking": blocking}
+
+
+class ContentFilterTests(unittest.TestCase):
+    """raiPolicies contentFilters: identity = (name, source) - names repeat
+    across Prompt/Completion, so name-only pairing would cross-match."""
+
+    RAI_TYPE = "Microsoft.CognitiveServices/accounts/raiPolicies"
+
+    def _policy(self, filters):
+        return {
+            "type": self.RAI_TYPE,
+            "name": "aidrift/drifttest-rai",
+            "properties": {"basePolicyName": "Microsoft.DefaultV2", "mode": "Blocking",
+                           "contentFilters": filters},
+        }
+
+    def test_reordered_filters_are_clean(self):
+        a = [cf("Hate", "Prompt"), cf("Hate", "Completion"), cf("Violence", "Prompt")]
+        b = [cf("Violence", "Prompt"), cf("Hate", "Completion"), cf("Hate", "Prompt")]
+        self.assertEqual(
+            PropertyComparator.compare_properties(self._policy(a), self._policy(b)), []
+        )
+
+    def test_loosened_threshold_on_one_source_is_drift(self):
+        # Same name on both sources; only Completion loosened Medium->High.
+        # Name-only pairing would match the untouched Prompt entry and miss it.
+        bicep = [cf("Hate", "Prompt"), cf("Hate", "Completion")]
+        live = [cf("Hate", "Prompt"), cf("Hate", "Completion", threshold="High")]
+        diffs = PropertyComparator.compare_properties(self._policy(bicep), self._policy(live))
+        self.assertIn("properties.contentFilters", {d.property_path for d in diffs})
+
+    def test_filter_disabled_out_of_band_is_drift(self):
+        bicep = [cf("Violence", "Prompt")]
+        live = [cf("Violence", "Prompt", enabled=False)]
+        diffs = PropertyComparator.compare_properties(self._policy(bicep), self._policy(live))
+        self.assertIn("properties.contentFilters", {d.property_path for d in diffs})
+
+    def test_removed_filter_entry_is_drift(self):
+        bicep = [cf("Hate", "Prompt"), cf("Hate", "Completion")]
+        live = [cf("Hate", "Prompt")]
+        diffs = PropertyComparator.compare_properties(self._policy(bicep), self._policy(live))
+        self.assertIn("properties.contentFilters", {d.property_path for d in diffs})
+
+
+class RaiPolicyExpansionTests(unittest.TestCase):
+    def test_system_managed_builtins_are_filtered(self):
+        self.assertTrue(_is_system_managed_rai_policy(
+            {"name": "Microsoft.Default", "properties": {"type": "SystemManaged"}}
+        ))
+        self.assertFalse(_is_system_managed_rai_policy(
+            {"name": "drifttest-rai", "properties": {"type": "UserManaged"}}
+        ))
+
+    def test_cognitive_child_shape(self):
+        child = _cognitive_child(
+            "Microsoft.CognitiveServices/accounts/connections", "aidrift", "rg",
+            {"name": "conn-blob", "id": "/x/conn-blob",
+             "properties": {"category": "AzureBlob", "authType": "AAD"}},
+        )
+        self.assertEqual(child["name"], "aidrift/conn-blob")
+        self.assertEqual(child["properties"]["authType"], "AAD")
+        self.assertIsNone(child["location"])
+
+    def test_project_connection_child_is_nested_name(self):
+        child = _cognitive_child(
+            "Microsoft.CognitiveServices/accounts/projects/connections",
+            "aidrift/proj-drifttest", "rg", {"name": "conn-x", "properties": {}},
+        )
+        self.assertEqual(child["name"], "aidrift/proj-drifttest/conn-x")
 
 
 class PlaceholderPropertyValueTests(unittest.TestCase):

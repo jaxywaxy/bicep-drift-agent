@@ -733,6 +733,11 @@ class PropertyComparator:
             or kl.endswith(".resourceaccessrules")
         ):
             return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
+        # AI content filters: entries repeat names across sources (Hate/Prompt,
+        # Hate/Completion), so the generic name-keyed matcher pairs them wrongly
+        # - and a filter loosened out-of-band must be drift.
+        if kl.endswith("properties.contentfilters"):
+            return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
         return None
 
     @staticmethod
@@ -747,30 +752,42 @@ class PropertyComparator:
         expression (a subnet id from another module) each excuse one otherwise
         unmatched deployed element.
         """
-        def identity(el: Any) -> str:
+        def identity_and_keys(el: Any):
+            """(identity string, keys that formed it). Identity keys are matched
+            here (with canonicalization), so they're excluded from the per-pair
+            field-subset check - re-comparing them literally would reintroduce
+            the '1.2.3.4/32' vs '1.2.3.4' false positive."""
             if not isinstance(el, dict):
-                return str(el).lower()
+                return str(el).lower(), ()
             v = el.get("value") or el.get("id")
             if v is not None:
                 s = str(v).lower()
                 # Azure returns single-IP rules WITHOUT the /32 suffix that
                 # templates conventionally declare ("1.2.3.4/32" -> "1.2.3.4").
-                return s[:-3] if s.endswith("/32") else s
+                return (s[:-3] if s.endswith("/32") else s), ("value", "id")
+            # AI contentFilters: names repeat across sources (Hate/Prompt vs
+            # Hate/Completion) - identity is the (name, source) pair.
+            if "name" in el and "source" in el:
+                return (
+                    f"{str(el.get('name', '')).lower()}|{str(el.get('source', '')).lower()}",
+                    ("name", "source"),
+                )
             # storage resourceAccessRules have no value/id - identity is the
             # (tenantId, resourceId) pair, joined so unresolved-expression
             # markers in either part stay detectable by the caller.
-            return f"{str(el.get('tenantId', '')).lower()}|{str(el.get('resourceId', '')).lower()}"
+            return (
+                f"{str(el.get('tenantId', '')).lower()}|{str(el.get('resourceId', '')).lower()}",
+                ("tenantid", "resourceid"),
+            )
 
-        # Identity fields are matched via identity() above (with /32
-        # canonicalization), so exclude them from the per-pair field-subset
-        # check - comparing them literally again would re-introduce the
-        # "1.2.3.4/32" vs "1.2.3.4" false positive.
-        _IDENTITY_KEYS = {"value", "id", "tenantid", "resourceid"}
+        def identity(el: Any) -> str:
+            return identity_and_keys(el)[0]
 
         def non_identity_fields(el: Any) -> Any:
             if not isinstance(el, dict):
                 return el
-            return {k: v for k, v in el.items() if k.lower() not in _IDENTITY_KEYS}
+            _, used = identity_and_keys(el)
+            return {k: v for k, v in el.items() if k.lower() not in used}
 
         unresolved_slots = 0
         unmatched_deployed = list(deployed_list)
