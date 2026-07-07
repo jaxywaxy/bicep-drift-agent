@@ -486,6 +486,10 @@ class PropertyComparator:
         "properties.sslpolicy.minprotocolversion",
         "properties.webapplicationfirewallconfiguration.enabled",
         "properties.webapplicationfirewallconfiguration.firewallmode",
+        # Container Apps ingress exposure: turning ingress public or allowing
+        # insecure (http) traffic is a security posture change.
+        "properties.configuration.ingress.external",
+        "properties.configuration.ingress.allowinsecure",
     }
 
     # Types whose networkAcls default to open when never configured: Azure

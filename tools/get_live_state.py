@@ -317,9 +317,9 @@ def _augment_untracked_resources(
     except Exception as e:
         logger.warning(f"Failed to expand App Service config: {e}")
     try:
-        resources.extend(_expand_diagnostic_settings(resources, token=token))
+        resources.extend(_expand_extension_resources(resources, token=token))
     except Exception as e:
-        logger.warning(f"Failed to expand diagnostic settings: {e}")
+        logger.warning(f"Failed to expand extension resources: {e}")
     _normalize_cosmos_account_locations(resources)
     _normalize_aci_container_groups(resources)
     _expand_vnet_peerings(resources)
@@ -820,6 +820,10 @@ _CHILD_EXPANSION_SPECS = [
      "2020-06-01", "Microsoft.Network/privateDnsZones/virtualNetworkLinks", None),
     ("microsoft.managedidentity/userassignedidentities", "federatedIdentityCredentials",
      "2023-01-31", "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials", None),
+    # SQL server firewall rules: a hand-added rule (esp. an AllowAll 0.0.0.0
+    # range) opening a prod database to the internet is the classic drift.
+    ("microsoft.sql/servers", "firewallRules",
+     "2023-08-01-preview", "Microsoft.Sql/servers/firewallRules", None),
 ]
 
 # Record sets list with their concrete type in the response (…/dnszones/A etc.);
@@ -998,68 +1002,103 @@ _DIAGNOSTIC_PARENT_TYPES = {
 }
 
 
-def _expand_diagnostic_settings(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
-    """Expand diagnostic settings as children named '{resource}/{setting}'.
+# Data Collection Rule associations link a DCR to a monitored resource (chiefly
+# VMs/VMSS). A deleted association silences guest telemetry - the modern
+# equivalent of a deleted diagnostic setting.
+_DCR_ASSOCIATION_PARENT_TYPES = {
+    "microsoft.compute/virtualmachines",
+    "microsoft.compute/virtualmachinescalesets",
+    "microsoft.hybridcompute/machines",  # Arc-enabled servers
+}
 
-    Commonly DINE-deployed (Phase 3 attribution distinguishes policy-created
-    from hand-edited), and a DELETED setting is a silenced audit/SIEM feed -
-    exactly the drift that must page someone. Bicep declares them as extension
-    resources; qualify_diagnostic_setting_names() rewrites those to the same
-    '{scope}/{name}' form so the normal matching pipeline applies.
+# Extension-resource types the agent expands per-resource, keyed by the child
+# type: (parent-type set, provider-relative list path, api-version, log label).
+_EXTENSION_EXPANSION_SPECS = {
+    "Microsoft.Insights/diagnosticSettings": (
+        _DIAGNOSTIC_PARENT_TYPES, "providers/Microsoft.Insights/diagnosticSettings",
+        "2021-05-01-preview", "diagnostic setting"),
+    "Microsoft.Insights/dataCollectionRuleAssociations": (
+        _DCR_ASSOCIATION_PARENT_TYPES, "providers/Microsoft.Insights/dataCollectionRuleAssociations",
+        "2022-06-01", "DCR association"),
+}
+
+# The extension types whose bicep resources carry a 'scope' field to qualify.
+_EXTENSION_TYPES_LOWER = {t.lower() for t in _EXTENSION_EXPANSION_SPECS}
+
+
+def _expand_extension_resources(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
+    """Expand per-resource extension children (diagnostic settings, DCR
+    associations) named '{resource}/{name}'.
+
+    These are attached to a target resource and are NOT Resource Graph rows; a
+    deleted one is a silenced audit/telemetry feed - the drift that must page
+    someone. Bicep declares them as extension resources with a 'scope';
+    qualify_extension_resource_names() aligns those to the same name form.
     """
     import json as _json
     import urllib.request
 
-    api = "2021-05-01-preview"
-    parents = [
-        r for r in resources
-        if (r.get("type") or "").lower() in _DIAGNOSTIC_PARENT_TYPES and r.get("id")
-    ]
-    if not parents:
+    active = {
+        child_type: spec for child_type, spec in _EXTENSION_EXPANSION_SPECS.items()
+        if any((r.get("type") or "").lower() in spec[0] for r in resources)
+    }
+    if not active:
         return []
     try:
         if not token:
             token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
     except Exception as e:
-        logger.warning(f"Could not acquire token for diagnostic settings: {e}")
+        logger.warning(f"Could not acquire token for extension-resource expansion: {e}")
         return []
 
     children: List[Dict] = []
-    for parent in parents[:60]:  # hard cap on the N+1 fan-out
-        pid, pname = parent["id"], parent.get("name", "")
-        try:
-            req = urllib.request.Request(
-                f"https://management.azure.com{pid}/providers/Microsoft.Insights/diagnosticSettings?api-version={api}",
-                headers={"Authorization": f"Bearer {token}"},
-            )
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                items = _json.load(resp).get("value", [])
-        except Exception as e:
-            logger.debug(f"Could not list diagnostic settings for {pname}: {e}")
-            continue
-        for item in items:
-            children.append({
-                "type": "Microsoft.Insights/diagnosticSettings",
-                "name": f"{pname}/{item.get('name', '')}",
-                "location": None, "tags": {}, "sku": None, "kind": None,
-                "properties": item.get("properties", {}) or {},
-                "id": item.get("id"), "resource_group": parent.get("resource_group"),
-            })
-    if children:
-        logger.info(f"Expanded {len(children)} diagnostic setting(s)")
+    for child_type, (parent_types, path, api, label) in active.items():
+        parents = [
+            r for r in resources
+            if (r.get("type") or "").lower() in parent_types and r.get("id")
+        ]
+        count = 0
+        for parent in parents[:60]:  # hard cap on the N+1 fan-out
+            pid, pname = parent["id"], parent.get("name", "")
+            try:
+                req = urllib.request.Request(
+                    f"https://management.azure.com{pid}/{path}?api-version={api}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    items = _json.load(resp).get("value", [])
+            except Exception as e:
+                logger.debug(f"Could not list {label} for {pname}: {e}")
+                continue
+            for item in items:
+                children.append({
+                    "type": child_type,
+                    "name": f"{pname}/{item.get('name', '')}",
+                    "location": None, "tags": {}, "sku": None, "kind": None,
+                    "properties": item.get("properties", {}) or {},
+                    "id": item.get("id"), "resource_group": parent.get("resource_group"),
+                })
+                count += 1
+        if count:
+            logger.info(f"Expanded {count} {label}(s)")
     return children
 
 
-def qualify_diagnostic_setting_names(arm_resources: List[Dict]) -> None:
-    """Rewrite bicep diagnostic-setting extension resources to '{scope}/{name}'.
+# Back-compat alias (used by tests and callers that expanded diag settings only).
+def _expand_diagnostic_settings(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
+    return _expand_extension_resources(resources, token=token)
 
-    A bicep diag setting compiles with a plain name plus a 'scope' field
+
+def qualify_extension_resource_names(arm_resources: List[Dict]) -> None:
+    """Rewrite bicep extension resources (diagnostic settings, DCR associations)
+    to '{scope-leaf}/{name}' so they match the live expansion form.
+
+    A bicep extension resource compiles with a plain name plus a 'scope' field
     ('Microsoft.Storage/storageAccounts/stX'); live expansion names them
-    '{resourceName}/{settingName}'. Align the bicep side so normal (and
-    placeholder-aware) matching applies. Mutates in place.
+    '{resourceName}/{settingName}'. Mutates in place.
     """
     for r in arm_resources:
-        if (r.get("type") or "").lower() != "microsoft.insights/diagnosticsettings":
+        if (r.get("type") or "").lower() not in _EXTENSION_TYPES_LOWER:
             continue
         scope = str(r.get("scope") or "")
         if not scope or "/" in (r.get("name") or ""):
@@ -1067,6 +1106,10 @@ def qualify_diagnostic_setting_names(arm_resources: List[Dict]) -> None:
         scope_leaf = scope.split("/")[-1]
         if scope_leaf:
             r["name"] = f"{scope_leaf}/{r['name']}"
+
+
+# Back-compat alias.
+qualify_diagnostic_setting_names = qualify_extension_resource_names
 
 
 def fetch_declared_defender_pricings(arm_resources: List[Dict], sub_id: str,

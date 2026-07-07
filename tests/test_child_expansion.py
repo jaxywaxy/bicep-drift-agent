@@ -125,3 +125,67 @@ class ExpansionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Batch3ExpansionTests(unittest.TestCase):
+    """SQL firewall rules (child expansion) + DCR associations (extension)."""
+
+    def _expand(self, resources, responses):
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen(responses)):
+            return _expand_data_plane_children(resources, token="t")
+
+    def test_sql_firewall_rules_expanded(self):
+        srv = _resource("Microsoft.Sql/servers", "sql1",
+                        f"{SUB}/Microsoft.Sql/servers/sql1")
+        children = self._expand([srv], {
+            "/firewallRules?": [
+                {"name": "AllowHome", "id": "f1",
+                 "properties": {"startIpAddress": "203.0.113.5", "endIpAddress": "203.0.113.5"}},
+                {"name": "AllowAll", "id": "f2",
+                 "properties": {"startIpAddress": "0.0.0.0", "endIpAddress": "255.255.255.255"}},
+            ],
+        })
+        names = {c["name"] for c in children}
+        self.assertIn("sql1/AllowHome", names)
+        self.assertIn("sql1/AllowAll", names)
+        self.assertEqual(
+            next(c for c in children if c["name"] == "sql1/AllowAll")["type"],
+            "Microsoft.Sql/servers/firewallRules")
+
+    def test_dcr_associations_expanded_for_vm(self):
+        from tools.get_live_state import _expand_extension_resources
+        vm = _resource("Microsoft.Compute/virtualMachines", "vm1",
+                       f"{SUB}/Microsoft.Compute/virtualMachines/vm1")
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen({
+            "/dataCollectionRuleAssociations?": [
+                {"name": "vm1-dcra", "id": "a1",
+                 "properties": {"dataCollectionRuleId": f"{SUB}/Microsoft.Insights/dataCollectionRules/dcr1"}}],
+            "/diagnosticSettings?": [],
+        })):
+            children = _expand_extension_resources([vm], token="t")
+        self.assertEqual(
+            [c["name"] for c in children if "dcra" in c["name"]], ["vm1/vm1-dcra"])
+        self.assertEqual(children[0]["type"], "Microsoft.Insights/dataCollectionRuleAssociations")
+
+    def test_qualify_extension_names_covers_both_types(self):
+        from tools.get_live_state import qualify_extension_resource_names
+        arm = [
+            {"type": "Microsoft.Insights/diagnosticSettings", "name": "kv-audit",
+             "scope": "Microsoft.KeyVault/vaults/kv1"},
+            {"type": "Microsoft.Insights/dataCollectionRuleAssociations", "name": "vm-dcra",
+             "scope": "Microsoft.Compute/virtualMachines/vm1"},
+        ]
+        qualify_extension_resource_names(arm)
+        self.assertEqual(arm[0]["name"], "kv1/kv-audit")
+        self.assertEqual(arm[1]["name"], "vm1/vm-dcra")
+
+
+class ContainerAppsSecurityTests(unittest.TestCase):
+    def test_ingress_exposure_paths_are_critical(self):
+        from tools.property_drift import PropertyComparator
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.configuration.ingress.external"),
+            "critical")
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.configuration.ingress.allowInsecure"),
+            "critical")

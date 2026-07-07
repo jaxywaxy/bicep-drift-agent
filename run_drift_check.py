@@ -25,7 +25,7 @@ from tools.get_live_state import (
     get_live_state,
     fetch_cross_subscription_resources,
     fetch_declared_defender_pricings,
-    qualify_diagnostic_setting_names,
+    qualify_extension_resource_names,
 )
 from tools.diff_states import diff_states, format_drift_report, ResourceDrift
 from tools.ignore_patterns import IgnorePatternList
@@ -143,7 +143,7 @@ def run(bicep_file: str, resource_group: str):
     # '{scope}/{name}' names to align with the live expansion; Defender pricing
     # tiers are fetched only when the template declares them (every sub has a
     # Free-tier row for every plan - undeclared ones would flood extras).
-    qualify_diagnostic_setting_names(arm_resources)
+    qualify_extension_resource_names(arm_resources)
     live_resources.extend(fetch_declared_defender_pricings(
         arm_resources, os.environ.get("AZURE_SUBSCRIPTION_ID")
     ))
