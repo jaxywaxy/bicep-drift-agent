@@ -86,6 +86,9 @@ storage, App Service, Key Vault, Logic Apps, Log Analytics, Event Hubs,
 Cosmos DB (+children), ACR, ACI, SQL Server/DB, Azure OpenAI / AI Services /
 Foundry (+children), Service Bus, Traffic Manager, DNS zones, Monitor
 action groups & metric alerts, VNets/subnets/peerings/NSGs/route tables/NAT,
-private endpoints, locks, RBAC, and Azure Policy. Load balancers and
-Application Gateways (+ WAF policy) are handled (owner-tagged platform, WAF
-mode / SSL-min-version flagged critical) but not yet live-verified.
+private endpoints, locks, RBAC, and Azure Policy. Newer additions handled but
+not yet live-verified: load balancers and Application Gateways (+ WAF policy;
+owner-tagged platform, WAF mode / SSL-min-version critical), SQL firewall
+rules, Data Collection Rules + DCR associations (silenced-telemetry drift),
+diagnostic settings, Defender pricings, and Container Apps (ingress exposure
+flagged critical).
