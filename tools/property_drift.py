@@ -537,6 +537,25 @@ class PropertyComparator:
         """
         diffs = []
 
+        # App settings VALUES are secrets. Reduce both sides to KEY SETS before
+        # any flattening - flattened per-key comparison would put the values
+        # into PropertyDiff desired/actual and leak them into reports.
+        if (
+            str(bicep_properties.get("type", "")).lower() == "microsoft.web/sites/config"
+            and str(bicep_properties.get("name", "")).lower().endswith("appsettings")
+        ):
+            b_keys = sorted((bicep_properties.get("properties") or {}).keys())
+            d_keys = sorted((deployed_properties.get("properties") or {}).keys())
+            if b_keys != d_keys:
+                return [PropertyDiff(
+                    property_path="properties.appSettingKeys",
+                    desired_value=b_keys,
+                    actual_value=d_keys,
+                    change_type="modified",
+                    severity="warning",
+                )]
+            return []
+
         # Null networkAcls on a vault/storage account means "default open" -
         # materialize that default on the deployed side so a template spelling
         # out the same default doesn't false-drift (and so a template demanding
