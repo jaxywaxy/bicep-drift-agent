@@ -37,6 +37,11 @@ DEFAULT_PLATFORM_TYPES = {
     "microsoft.network/ipgroups",
     "microsoft.network/firewallpolicies",
     "microsoft.network/natgateways",
+    # Load balancers and Application Gateways (+ its WAF policy) are shared
+    # ingress/egress fabric a platform team typically owns.
+    "microsoft.network/loadbalancers",
+    "microsoft.network/applicationgateways",
+    "microsoft.network/applicationgatewaywebapplicationfirewallpolicies",
     # Public IPs in a connectivity/platform LZ front platform egress/ingress
     # (NAT gateway, firewall, bastion, VPN/ER gateway). A workload rarely owns a
     # standalone public IP (it fronts via App Gateway/Front Door), so default
