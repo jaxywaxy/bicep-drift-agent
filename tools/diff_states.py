@@ -66,38 +66,7 @@ def diff_states(
 
     # Normalize live resources to match ARM shape
     normalized_live = normalize_live_resources(live_resources)
-
-    # Filter out auto-managed resources from live state that can't be in Bicep
-    # (These are created and managed by other resources, not separately defined)
-    auto_managed_types = {
-        "Microsoft.Compute/disks",  # Created by VMs
-        "Microsoft.Compute/virtualMachines/extensions",  # Created by VMs
-    }
-    normalized_live = [r for r in normalized_live if r.get("type") not in auto_managed_types]
-    # System databases Azure creates on every SQL server - never in Bicep.
-    normalized_live = [
-        r for r in normalized_live
-        if not (
-            (r.get("type") or "").lower() == "microsoft.sql/servers/databases"
-            and (r.get("name") or "").split("/")[-1].lower() == "master"
-        )
-    ]
-    # App Service config objects (web, appsettings, ...) exist on EVERY site
-    # with runtime defaults - only the kinds the bicep declares are compared
-    # (property drift on declared ones still fires; undeclared ones are not
-    # extras). Same bicep-driven rule as Defender pricing tiers.
-    declared_config_leaves = {
-        (r.get("name") or "").split("/")[-1].lower()
-        for r in filtered_arm
-        if (r.get("type") or "").lower() == "microsoft.web/sites/config"
-    }
-    normalized_live = [
-        r for r in normalized_live
-        if not (
-            (r.get("type") or "").lower() == "microsoft.web/sites/config"
-            and (r.get("name") or "").split("/")[-1].lower() not in declared_config_leaves
-        )
-    ]
+    normalized_live = filter_unmanaged_live_resources(normalized_live, filtered_arm)
 
     # Use DriftDetector's intelligent matching (handles fuzzy matching for parameter-based names)
     detector_drifts = DriftDetector.detect_drift(filtered_arm, normalized_live)
@@ -156,6 +125,45 @@ def diff_states(
             ))
 
     return drifts
+
+
+def filter_unmanaged_live_resources(normalized_live: list[dict], filtered_arm: list[dict]) -> list[dict]:
+    """Drop live rows that can never appear in Bicep, so they aren't false extras.
+
+    Applied in BOTH Phase 1 (diff_states) and the Phase 2 diagnostic
+    property-drift pass, so a resource filtered here doesn't reappear as an
+    extra in the report's property_drifts section.
+
+    - auto-managed types (VM disks/extensions)
+    - SQL system databases (`master`)
+    - App Service `config/*` kinds the bicep doesn't declare (config/web exists
+      on every site with runtime defaults; declared kinds still property-compare)
+    """
+    auto_managed_types = {
+        "Microsoft.Compute/disks",  # Created by VMs
+        "Microsoft.Compute/virtualMachines/extensions",  # Created by VMs
+    }
+    result = [r for r in normalized_live if r.get("type") not in auto_managed_types]
+    result = [
+        r for r in result
+        if not (
+            (r.get("type") or "").lower() == "microsoft.sql/servers/databases"
+            and (r.get("name") or "").split("/")[-1].lower() == "master"
+        )
+    ]
+    declared_config_leaves = {
+        (r.get("name") or "").split("/")[-1].lower()
+        for r in filtered_arm
+        if (r.get("type") or "").lower() == "microsoft.web/sites/config"
+    }
+    result = [
+        r for r in result
+        if not (
+            (r.get("type") or "").lower() == "microsoft.web/sites/config"
+            and (r.get("name") or "").split("/")[-1].lower() not in declared_config_leaves
+        )
+    ]
+    return result
 
 
 def _should_compare_resource(resource: dict) -> bool:

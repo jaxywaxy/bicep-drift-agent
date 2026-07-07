@@ -146,3 +146,47 @@ class FormatEvalAndConfigGateTests(unittest.TestCase):
         drifts = diff_states(arm, live)
         # declared appsettings compares (clean); undeclared web is not an extra
         self.assertEqual([d.resource_name for d in drifts if d.drift_type == "extra_in_azure"], [])
+
+
+class DedupeAndFilterReuseTests(unittest.TestCase):
+    """Fixes from the full-estate scan report review."""
+
+    def test_dedupe_drops_duplicate_id_keeps_first(self):
+        from tools.get_live_state import _dedupe_resources_by_id
+        # Resource Graph row (lowercase type) precedes the AI-expansion copy;
+        # both share an id. First-seen (richer Graph row) wins.
+        rows = [
+            {"type": "microsoft.cognitiveservices/accounts/projects",
+             "name": "ai/proj", "id": "/sub/x/PROJECTS/proj",
+             "properties": {"displayName": "real"}},
+            {"type": "Microsoft.CognitiveServices/accounts/projects",
+             "name": "ai/proj", "id": "/sub/x/projects/proj", "properties": {}},
+        ]
+        _dedupe_resources_by_id(rows)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["properties"]["displayName"], "real")
+
+    def test_dedupe_keeps_rows_without_id(self):
+        from tools.get_live_state import _dedupe_resources_by_id
+        rows = [
+            {"type": "t", "name": "a", "id": None},
+            {"type": "t", "name": "b", "id": None},
+            {"type": "t", "name": "c", "id": "/sub/c"},
+        ]
+        _dedupe_resources_by_id(rows)
+        self.assertEqual(len(rows), 3)
+
+    def test_filter_reuse_drops_master_and_undeclared_config(self):
+        from tools.diff_states import filter_unmanaged_live_resources
+        live = [
+            {"type": "microsoft.sql/servers/databases", "name": "sql1/master"},
+            {"type": "microsoft.sql/servers/databases", "name": "sql1/driftdb"},
+            {"type": "microsoft.web/sites/config", "name": "app1/web"},
+            {"type": "microsoft.web/sites/config", "name": "app1/appsettings"},
+        ]
+        arm = [{"type": "Microsoft.Web/sites/config", "name": "app1/appsettings"}]
+        kept = {r["name"] for r in filter_unmanaged_live_resources(live, arm)}
+        self.assertNotIn("sql1/master", kept)       # system DB
+        self.assertNotIn("app1/web", kept)           # undeclared config kind
+        self.assertIn("sql1/driftdb", kept)          # real DB
+        self.assertIn("app1/appsettings", kept)      # declared config kind

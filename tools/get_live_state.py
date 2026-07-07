@@ -324,6 +324,32 @@ def _augment_untracked_resources(
     _normalize_aci_container_groups(resources)
     _expand_vnet_peerings(resources)
     _qualify_child_resource_names(resources)
+    _dedupe_resources_by_id(resources)
+
+
+def _dedupe_resources_by_id(resources: List[Dict]) -> None:
+    """Drop rows whose resource id duplicates an earlier one (mutates in place).
+
+    Resource Graph is progressively indexing child types (Cognitive Services
+    projects, virtualNetworkLinks, ...), so an ARM-REST expansion can add a
+    second copy of a row the base query already returned. First-seen wins:
+    base Resource Graph rows precede expansion rows, and Graph rows carry
+    richer properties. Rows without an id are always kept (nothing to key on).
+    """
+    seen: set = set()
+    deduped: List[Dict] = []
+    dropped = 0
+    for r in resources:
+        rid = str(r.get("id") or "").lower()
+        if rid and rid in seen:
+            dropped += 1
+            continue
+        if rid:
+            seen.add(rid)
+        deduped.append(r)
+    if dropped:
+        logger.info(f"Deduped {dropped} duplicate live resource row(s) by id")
+    resources[:] = deduped
 
 
 def _qualify_child_resource_names(resources: List[Dict]) -> None:
