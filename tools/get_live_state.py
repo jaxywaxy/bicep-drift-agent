@@ -312,6 +312,14 @@ def _augment_untracked_resources(
         resources.extend(_expand_data_plane_children(resources, token=token))
     except Exception as e:
         logger.warning(f"Failed to expand data-plane children: {e}")
+    try:
+        resources.extend(_expand_appservice_config(resources, token=token))
+    except Exception as e:
+        logger.warning(f"Failed to expand App Service config: {e}")
+    try:
+        resources.extend(_expand_diagnostic_settings(resources, token=token))
+    except Exception as e:
+        logger.warning(f"Failed to expand diagnostic settings: {e}")
     _normalize_cosmos_account_locations(resources)
     _normalize_aci_container_groups(resources)
     _expand_vnet_peerings(resources)
@@ -766,6 +774,12 @@ def _skip_apex_ns_soa(item: Dict) -> bool:
 
 _CHILD_EXPANSION_SPECS = [
     # (parent_type_lower, list_path, api_version, child_type, skip_predicate)
+    # The 'default' blob/file service rows themselves (soft-delete/versioning
+    # policies live here, and bicep declares them as parents of containers).
+    ("microsoft.storage/storageaccounts", "blobServices",
+     "2023-01-01", "Microsoft.Storage/storageAccounts/blobServices", None),
+    ("microsoft.storage/storageaccounts", "fileServices",
+     "2023-01-01", "Microsoft.Storage/storageAccounts/fileServices", None),
     ("microsoft.storage/storageaccounts", "blobServices/default/containers",
      "2023-01-01", "Microsoft.Storage/storageAccounts/blobServices/containers", None),
     ("microsoft.storage/storageaccounts", "fileServices/default/shares",
@@ -864,6 +878,207 @@ def _expand_data_plane_children(resources: List[Dict], token: Optional[str] = No
         logger.info("Expanded data-plane children via ARM REST: "
                     + ", ".join(f"{v} {k}" for k, v in sorted(by_type.items())))
     return children
+
+
+def _expand_appservice_config(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
+    """Expand App Service config children: config/web + config/appsettings.
+
+    config/web (GET) carries the non-secret runtime surface: TLS minimum,
+    ftpsState, http20Enabled, alwaysOn - portal setting flips are the canonical
+    workload drift. App settings VALUES are secrets: the appsettings child is
+    shaped with its raw properties here, and the comparator reduces both sides
+    to KEY SETS (values are never compared or written to a report).
+    """
+    import json as _json
+    import urllib.request
+
+    api = "2023-01-01"
+    sites = [r for r in resources if (r.get("type") or "").lower() == "microsoft.web/sites"]
+    if not sites:
+        return []
+    try:
+        if not token:
+            token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
+    except Exception as e:
+        logger.warning(f"Could not acquire token for App Service config: {e}")
+        return []
+
+    def _call(url: str, method: str = "GET") -> Dict:
+        req = urllib.request.Request(
+            url, headers={"Authorization": f"Bearer {token}", "Content-Length": "0"},
+            method=method, data=b"" if method == "POST" else None,
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return _json.load(resp)
+
+    children: List[Dict] = []
+    for site in sites:
+        sid, sname = site.get("id", ""), site.get("name", "")
+        if not sid or not sname:
+            continue
+        try:
+            web = _call(f"https://management.azure.com{sid}/config/web?api-version={api}")
+            children.append({
+                "type": "Microsoft.Web/sites/config", "name": f"{sname}/web",
+                "location": None, "tags": {}, "sku": None, "kind": None,
+                "properties": web.get("properties", {}) or {},
+                "id": web.get("id"), "resource_group": site.get("resource_group"),
+            })
+        except Exception as e:
+            logger.debug(f"Could not fetch config/web for {sname}: {e}")
+        try:
+            apps = _call(f"https://management.azure.com{sid}/config/appsettings/list?api-version={api}",
+                         method="POST")
+            children.append({
+                "type": "Microsoft.Web/sites/config", "name": f"{sname}/appsettings",
+                "location": None, "tags": {}, "sku": None, "kind": None,
+                "properties": apps.get("properties", {}) or {},  # comparator reduces to keys
+                "id": apps.get("id"), "resource_group": site.get("resource_group"),
+            })
+        except Exception as e:
+            logger.debug(f"Could not fetch appsettings for {sname}: {e}")
+    if children:
+        logger.info(f"Expanded {len(children)} App Service config object(s)")
+    return children
+
+
+# Types that commonly carry diagnostic settings - queried per resource (N calls),
+# so scoped to a curated set rather than every row.
+_DIAGNOSTIC_PARENT_TYPES = {
+    "microsoft.keyvault/vaults",
+    "microsoft.storage/storageaccounts",
+    "microsoft.web/sites",
+    "microsoft.sql/servers/databases",
+    "microsoft.eventhub/namespaces",
+    "microsoft.servicebus/namespaces",
+    "microsoft.documentdb/databaseaccounts",
+    "microsoft.cognitiveservices/accounts",
+    "microsoft.network/networksecuritygroups",
+    "microsoft.network/azurefirewalls",
+    "microsoft.network/applicationgateways",
+    "microsoft.containerservice/managedclusters",
+    "microsoft.operationalinsights/workspaces",
+    "microsoft.logic/workflows",
+}
+
+
+def _expand_diagnostic_settings(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
+    """Expand diagnostic settings as children named '{resource}/{setting}'.
+
+    Commonly DINE-deployed (Phase 3 attribution distinguishes policy-created
+    from hand-edited), and a DELETED setting is a silenced audit/SIEM feed -
+    exactly the drift that must page someone. Bicep declares them as extension
+    resources; qualify_diagnostic_setting_names() rewrites those to the same
+    '{scope}/{name}' form so the normal matching pipeline applies.
+    """
+    import json as _json
+    import urllib.request
+
+    api = "2021-05-01-preview"
+    parents = [
+        r for r in resources
+        if (r.get("type") or "").lower() in _DIAGNOSTIC_PARENT_TYPES and r.get("id")
+    ]
+    if not parents:
+        return []
+    try:
+        if not token:
+            token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
+    except Exception as e:
+        logger.warning(f"Could not acquire token for diagnostic settings: {e}")
+        return []
+
+    children: List[Dict] = []
+    for parent in parents[:60]:  # hard cap on the N+1 fan-out
+        pid, pname = parent["id"], parent.get("name", "")
+        try:
+            req = urllib.request.Request(
+                f"https://management.azure.com{pid}/providers/Microsoft.Insights/diagnosticSettings?api-version={api}",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                items = _json.load(resp).get("value", [])
+        except Exception as e:
+            logger.debug(f"Could not list diagnostic settings for {pname}: {e}")
+            continue
+        for item in items:
+            children.append({
+                "type": "Microsoft.Insights/diagnosticSettings",
+                "name": f"{pname}/{item.get('name', '')}",
+                "location": None, "tags": {}, "sku": None, "kind": None,
+                "properties": item.get("properties", {}) or {},
+                "id": item.get("id"), "resource_group": parent.get("resource_group"),
+            })
+    if children:
+        logger.info(f"Expanded {len(children)} diagnostic setting(s)")
+    return children
+
+
+def qualify_diagnostic_setting_names(arm_resources: List[Dict]) -> None:
+    """Rewrite bicep diagnostic-setting extension resources to '{scope}/{name}'.
+
+    A bicep diag setting compiles with a plain name plus a 'scope' field
+    ('Microsoft.Storage/storageAccounts/stX'); live expansion names them
+    '{resourceName}/{settingName}'. Align the bicep side so normal (and
+    placeholder-aware) matching applies. Mutates in place.
+    """
+    for r in arm_resources:
+        if (r.get("type") or "").lower() != "microsoft.insights/diagnosticsettings":
+            continue
+        scope = str(r.get("scope") or "")
+        if not scope or "/" in (r.get("name") or ""):
+            continue
+        scope_leaf = scope.split("/")[-1]
+        if scope_leaf:
+            r["name"] = f"{scope_leaf}/{r['name']}"
+
+
+def fetch_declared_defender_pricings(arm_resources: List[Dict], sub_id: str,
+                                     token: Optional[str] = None) -> List[Dict]:
+    """Fetch Defender for Cloud pricing tiers - ONLY those the bicep declares.
+
+    Every subscription has a pricing row for every plan (default Free), so
+    surfacing undeclared ones would flood extras; this is bicep-driven only:
+    a declared 'Standard' plan downgraded to Free IS drift, silence about
+    plans the template doesn't manage is intentional.
+    """
+    import json as _json
+    import urllib.request
+
+    declared = {
+        (r.get("name") or "").split("/")[-1].lower()
+        for r in arm_resources
+        if (r.get("type") or "").lower() == "microsoft.security/pricings"
+    }
+    declared.discard("")
+    if not declared:
+        return []
+    try:
+        if not token:
+            token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
+        req = urllib.request.Request(
+            f"https://management.azure.com/subscriptions/{sub_id}/providers/Microsoft.Security/pricings?api-version=2024-01-01",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            items = _json.load(resp).get("value", [])
+    except Exception as e:
+        logger.warning(f"Could not fetch Defender pricings: {e}")
+        return []
+
+    rows = []
+    for item in items:
+        if (item.get("name") or "").lower() not in declared:
+            continue
+        rows.append({
+            "type": "Microsoft.Security/pricings", "name": item.get("name"),
+            "location": None, "tags": {}, "sku": None, "kind": None,
+            "properties": item.get("properties", {}) or {},
+            "id": item.get("id"), "resource_group": None,
+        })
+    if rows:
+        logger.info(f"Fetched {len(rows)} declared Defender pricing plan(s)")
+    return rows
 
 
 def _cognitive_child(rtype: str, parent_name: str, rg: Optional[str], item: Dict) -> Dict:

@@ -21,7 +21,12 @@ load_dotenv()
 
 from tools.logger import setup_logging, get_logger
 from tools.compile_bicep import compile_bicep, extract_resources_from_arm, detect_deployment_scope
-from tools.get_live_state import get_live_state, fetch_cross_subscription_resources
+from tools.get_live_state import (
+    get_live_state,
+    fetch_cross_subscription_resources,
+    fetch_declared_defender_pricings,
+    qualify_diagnostic_setting_names,
+)
 from tools.diff_states import diff_states, format_drift_report, ResourceDrift
 from tools.ignore_patterns import IgnorePatternList
 from tools.rbac import fetch_role_assignments, compare_role_assignments, rbac_enabled
@@ -133,6 +138,15 @@ def run(bicep_file: str, resource_group: str):
     # directly from its target subscription so it's matched and property-compared
     # instead of false-flagged missing.
     live_resources.extend(fetch_cross_subscription_resources(arm_resources))
+
+    # Step 2c: bicep-driven extras. Diagnostic-setting extension resources get
+    # '{scope}/{name}' names to align with the live expansion; Defender pricing
+    # tiers are fetched only when the template declares them (every sub has a
+    # Free-tier row for every plan - undeclared ones would flood extras).
+    qualify_diagnostic_setting_names(arm_resources)
+    live_resources.extend(fetch_declared_defender_pricings(
+        arm_resources, os.environ.get("AZURE_SUBSCRIPTION_ID")
+    ))
 
     # Step 3: Load ignore patterns
     logger.info("Step 3: Loading ignore patterns...")
