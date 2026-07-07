@@ -611,6 +611,11 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
         "properties": _resolve_value(resource.get("properties"), parameters, variables),
     }
 
+    # Extension resources (diagnostic settings, locks) carry the resource they
+    # attach to in 'scope' - needed to qualify their names for matching.
+    if resource.get("scope"):
+        normalized["scope"] = resolve_expression(resource.get("scope"), parameters, variables)
+
     # Keep original resource for debugging if needed
     normalized["_raw"] = resource
 

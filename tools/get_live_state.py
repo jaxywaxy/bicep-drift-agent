@@ -837,6 +837,11 @@ def _expand_data_plane_children(resources: List[Dict], token: Optional[str] = No
         with urllib.request.urlopen(req, timeout=30) as resp:
             return _json.load(resp).get("value", [])
 
+    # Some child types ARE Resource Graph rows in some cases (virtualNetworkLinks,
+    # for one) - dedupe by resource id so expansion never duplicates a row the
+    # base query already returned (a duplicate live row becomes a false extra).
+    seen_ids = {str(r.get("id") or "").lower() for r in resources if r.get("id")}
+
     def _expand(pool: List[Dict], specs) -> List[Dict]:
         out: List[Dict] = []
         for parent_type, path, api, child_type, skip in specs:
@@ -852,6 +857,11 @@ def _expand_data_plane_children(resources: List[Dict], token: Optional[str] = No
                 for item in items:
                     if skip and skip(item):
                         continue
+                    item_id = str(item.get("id") or "").lower()
+                    if item_id and item_id in seen_ids:
+                        continue
+                    if item_id:
+                        seen_ids.add(item_id)
                     # blobServices/fileServices paths inject the implicit
                     # 'default' segment bicep child names carry.
                     infix = "default/" if "/default/" in f"/{path}/" else ""

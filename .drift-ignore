@@ -30,21 +30,15 @@ ignore:
     reason: "Public IPs auto-created by LBs, App Gateways, or referenced as existing"
 
 
-  # Storage account auto-managed services
-  - resource_type: "Microsoft.Storage/storageAccounts/blobServices"
-    reason: "Blob services auto-created with storage account"
-
-  - resource_type: "Microsoft.Storage/storageAccounts/fileServices"
-    reason: "File services auto-created with storage account"
-
+  # NOTE: storage blob/file services and CONTAINERS/SHARES are deliberately NOT
+  # ignored anymore - they're ARM-REST-expanded and compared. A hand-added or
+  # made-public container is exactly the drift this exists to catch. The
+  # tableServices/queueServices defaults (not yet expanded) stay ignored.
   - resource_type: "Microsoft.Storage/storageAccounts/tableServices"
-    reason: "Table services auto-created with storage account"
+    reason: "Table services auto-created with storage account (not yet expanded)"
 
   - resource_type: "Microsoft.Storage/storageAccounts/queueServices"
-    reason: "Queue services auto-created with storage account"
-
-  - resource_type: "Microsoft.Storage/storageAccounts/blobServices/containers"
-    reason: "Blob containers often auto-created or managed separately"
+    reason: "Queue services auto-created with storage account (not yet expanded)"
 
   # SQL Server auto-managed resources
   - resource_type: "Microsoft.Sql/servers/databases"
@@ -61,8 +55,9 @@ ignore:
   - resource_type: "Microsoft.Web/sites/slots"
     reason: "Deployment slots auto-created for certain App Service configurations"
 
-  - resource_type: "Microsoft.Web/sites/config"
-    reason: "Site config managed by App Service runtime"
+  # NOTE: Microsoft.Web/sites/config is deliberately NOT ignored anymore -
+  # config/web and appsettings are expanded and compared (appsettings as key
+  # sets, values redacted). Portal setting flips are canonical workload drift.
 
   - resource_type: "Microsoft.Web/sites/extensions"
     reason: "Site extensions auto-managed by App Service"
@@ -89,8 +84,10 @@ ignore:
     resource_name: ".*Smart Detection.*"
     reason: "Auto-created by Application Insights Smart Detection feature"
 
-  - resource_type: "Microsoft.Insights/diagnosticSettings"
-    reason: "Diagnostic settings auto-created by Azure policies"
+  # NOTE: Microsoft.Insights/diagnosticSettings is deliberately NOT ignored
+  # anymore - settings are expanded per resource and compared; a deleted one is
+  # a silenced audit/SIEM feed. Policy-created settings are handled by Phase 3
+  # attribution (policy-enforced = expected), not by a blanket ignore.
 
   # Tag drift on VMs (parameter expressions in tags resolve at deployment time)
   - resource_type: "Microsoft.Compute/virtualMachines"
