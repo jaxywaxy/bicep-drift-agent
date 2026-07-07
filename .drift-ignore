@@ -182,11 +182,9 @@ ignore:
     drift_type: "property_drift"
     reason: "Namespace properties not fully exposed by Azure API - property drift only; a deleted/added namespace is still real drift"
 
-  - resource_type: "Microsoft.EventHub/namespaces/eventhubs"
-    reason: "Child resource with parent name containing unresolved uniqueString() - deployed correctly but cannot be matched"
-
-  - resource_type: "Microsoft.EventHub/namespaces/eventhubs/authorizationRules"
-    reason: "Child resource with parent name containing unresolved uniqueString() - deployed correctly but cannot be matched"
+  # NOTE: EventHub child resources (eventhubs, authorizationRules, consumer
+  # groups) are deliberately NOT ignored anymore - they're expanded via ARM
+  # REST and placeholder-named parents smart-match since PR #185.
 
   # Log Analytics resources with unresolvable parameter names
   # Custom tables and solutions with parameter-based parent names cannot be reliably matched

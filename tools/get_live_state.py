@@ -308,6 +308,10 @@ def _augment_untracked_resources(
         resources.extend(_query_cognitive_deployments(resources, token=token))
     except Exception as e:
         logger.warning(f"Failed to query Cognitive Services deployments: {e}")
+    try:
+        resources.extend(_expand_data_plane_children(resources, token=token))
+    except Exception as e:
+        logger.warning(f"Failed to expand data-plane children: {e}")
     _normalize_cosmos_account_locations(resources)
     _normalize_aci_container_groups(resources)
     _expand_vnet_peerings(resources)
@@ -736,6 +740,129 @@ def _query_cognitive_deployments(resources: List[Dict], token: Optional[str] = N
     if children:
         summary = ", ".join(f"{v} {k}" for k, v in counts.items() if v)
         logger.info(f"Expanded AI children via ARM REST API: {summary}")
+    return children
+
+
+# ---------------------------------------------------------------------------
+# Generic data-plane child expansion.
+#
+# Resource Graph's Resources table only indexes top-level (and a few child)
+# resource types. Everything below is invisible without an ARM REST listing -
+# and these children are where high-value drift lives: a blob container made
+# public, a hand-added DNS record, a new federated credential on an identity.
+# Each spec: (parent type, list path under the parent, api-version, child
+# type, optional per-item skip predicate).
+# ---------------------------------------------------------------------------
+
+def _skip_default_consumer_group(item: Dict) -> bool:
+    return (item.get("name") or "") == "$Default"  # auto-created on every event hub
+
+
+def _skip_apex_ns_soa(item: Dict) -> bool:
+    """Zone-apex NS and SOA record sets are auto-created with the zone."""
+    rtype = (item.get("type") or "").upper()
+    return (item.get("name") or "") == "@" and (rtype.endswith("/NS") or rtype.endswith("/SOA"))
+
+
+_CHILD_EXPANSION_SPECS = [
+    # (parent_type_lower, list_path, api_version, child_type, skip_predicate)
+    ("microsoft.storage/storageaccounts", "blobServices/default/containers",
+     "2023-01-01", "Microsoft.Storage/storageAccounts/blobServices/containers", None),
+    ("microsoft.storage/storageaccounts", "fileServices/default/shares",
+     "2023-01-01", "Microsoft.Storage/storageAccounts/fileServices/shares", None),
+    ("microsoft.servicebus/namespaces", "queues",
+     "2021-11-01", "Microsoft.ServiceBus/namespaces/queues", None),
+    ("microsoft.servicebus/namespaces", "topics",
+     "2021-11-01", "Microsoft.ServiceBus/namespaces/topics", None),
+    ("microsoft.eventhub/namespaces", "eventhubs",
+     "2021-11-01", "Microsoft.EventHub/namespaces/eventhubs", None),
+    ("microsoft.network/privatednszones", "virtualNetworkLinks",
+     "2020-06-01", "Microsoft.Network/privateDnsZones/virtualNetworkLinks", None),
+    ("microsoft.managedidentity/userassignedidentities", "federatedIdentityCredentials",
+     "2023-01-31", "Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials", None),
+]
+
+# Record sets list with their concrete type in the response (…/dnszones/A etc.);
+# the spec's child_type of None means "use the item's own type".
+_RECORDSET_SPECS = [
+    ("microsoft.network/dnszones", "recordsets", "2018-05-01", None, _skip_apex_ns_soa),
+    ("microsoft.network/privatednszones", "ALL", "2020-06-01", None, _skip_apex_ns_soa),
+]
+
+# Children of children, expanded from the first pass's results.
+_GRANDCHILD_EXPANSION_SPECS = [
+    ("microsoft.eventhub/namespaces/eventhubs", "consumergroups",
+     "2021-11-01", "Microsoft.EventHub/namespaces/eventhubs/consumergroups",
+     _skip_default_consumer_group),
+    ("microsoft.eventhub/namespaces/eventhubs", "authorizationRules",
+     "2021-11-01", "Microsoft.EventHub/namespaces/eventhubs/authorizationRules", None),
+]
+
+
+def _expand_data_plane_children(resources: List[Dict], token: Optional[str] = None) -> List[Dict]:
+    """Expand ARM-REST-only children per _CHILD_EXPANSION_SPECS (see above)."""
+    import json as _json
+    import urllib.request
+
+    parent_types = {s[0] for s in _CHILD_EXPANSION_SPECS + _RECORDSET_SPECS}
+    if not any((r.get("type") or "").lower() in parent_types for r in resources):
+        return []
+
+    try:
+        if not token:
+            token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
+    except Exception as e:
+        logger.warning(f"Could not acquire token for child expansion: {e}")
+        return []
+
+    def _list(parent_id: str, path: str, api: str) -> List[Dict]:
+        req = urllib.request.Request(
+            f"https://management.azure.com{parent_id}/{path}?api-version={api}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return _json.load(resp).get("value", [])
+
+    def _expand(pool: List[Dict], specs) -> List[Dict]:
+        out: List[Dict] = []
+        for parent_type, path, api, child_type, skip in specs:
+            for parent in [r for r in pool if (r.get("type") or "").lower() == parent_type]:
+                pid, pname = parent.get("id", ""), parent.get("name", "")
+                if not pid or not pname:
+                    continue
+                try:
+                    items = _list(pid, path, api)
+                except Exception as e:
+                    logger.debug(f"Could not list {path} for {pname}: {e}")
+                    continue
+                for item in items:
+                    if skip and skip(item):
+                        continue
+                    # blobServices/fileServices paths inject the implicit
+                    # 'default' segment bicep child names carry.
+                    infix = "default/" if "/default/" in f"/{path}/" else ""
+                    out.append({
+                        "type": child_type or item.get("type"),
+                        "name": f"{pname}/{infix}{item.get('name', '')}",
+                        "location": None,
+                        "tags": {},
+                        "sku": item.get("sku"),
+                        "kind": None,
+                        "properties": item.get("properties", {}) or {},
+                        "id": item.get("id"),
+                        "resource_group": parent.get("resource_group"),
+                    })
+        return out
+
+    children = _expand(resources, _CHILD_EXPANSION_SPECS + _RECORDSET_SPECS)
+    children.extend(_expand(children, _GRANDCHILD_EXPANSION_SPECS))
+    if children:
+        by_type = {}
+        for c in children:
+            key = (c["type"] or "").split("/")[-1]
+            by_type[key] = by_type.get(key, 0) + 1
+        logger.info("Expanded data-plane children via ARM REST: "
+                    + ", ".join(f"{v} {k}" for k, v in sorted(by_type.items())))
     return children
 
 
