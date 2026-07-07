@@ -32,7 +32,7 @@ from tools.smart_matching import (
     annotate_drifts_with_matches,
 )
 from tools.property_drift import DriftDetector
-from tools.diff_states import _should_compare_resource
+from tools.diff_states import _should_compare_resource, filter_unmanaged_live_resources
 from run_drift_check import run as run_phase1
 from tools.compile_bicep import compile_bicep, detect_deployment_scope
 from tools.rg_selector import rg_label
@@ -323,6 +323,19 @@ def main():
             ignore_paths.append(repo_ignore)
             logger.info(f"Merged per-LZ ignore profile from {repo_ignore}")
         ignore_list = IgnorePatternList.from_files(*ignore_paths)
+
+        # Annotate drifts with smart matching info FIRST, so a reconciled
+        # unresolvable-named resource is relabeled 'matched_unresolvable' before
+        # ignore filtering runs. Otherwise an 'extra_in_azure' ignore (e.g. the
+        # auto-created-workspace one) can swallow an IaC-managed resource that
+        # only looked extra because of its uniqueString name - it would show as
+        # 'ignored' instead of correctly 'matched'.
+        if "smart_matched" in report_data:
+            report_data["drifts"] = annotate_drifts_with_matches(
+                report_data.get("drifts", []),
+                report_data.get("smart_matched", [])
+            )
+
         if ignore_list.patterns:
             logger.info("Loading ignore patterns...")
             ignore_list.log_summary()
@@ -336,13 +349,6 @@ def main():
 
             report_data["drifts"] = filtered_drifts
             report_data["ignored_drifts"] = ignored_drifts
-
-        # Annotate drifts with smart matching information
-        if "smart_matched" in report_data:
-            report_data["drifts"] = annotate_drifts_with_matches(
-                report_data.get("drifts", []),
-                report_data.get("smart_matched", [])
-            )
 
         # Emit the grep-able summary from the FILTERED drift set so the CI workflow
         # summary matches the HTML/JSON report (ignored drifts are excluded).
@@ -362,6 +368,11 @@ def main():
             unresolvable_count = len(bicep_resources) - len(filtered_bicep_resources)
             if unresolvable_count > 0:
                 logger.debug(f"Filtered {unresolvable_count} resource(s) with unresolvable expressions")
+
+            # Drop live rows that can never be in Bicep (SQL master, undeclared
+            # App Service config kinds, ...) - the SAME filter Phase 1 applies -
+            # so they don't reappear as extras in this diagnostic pass.
+            deployed_resources = filter_unmanaged_live_resources(deployed_resources, filtered_bicep_resources)
 
             # Detect property-level drift
             property_drifts = DriftDetector.detect_drift(filtered_bicep_resources, deployed_resources)
