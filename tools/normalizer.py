@@ -34,6 +34,63 @@ def extract_parameters(arm_template: dict) -> dict:
     return params
 
 
+def _eval_embedded_formats(s: str, parameters: dict, variables: dict) -> str:
+    """Evaluate format('...', args) calls embedded ANYWHERE in a partially
+    resolved string, when every argument resolves to a literal.
+
+    A module child name compiles to e.g.
+    "format('app-{0}-drift', parameters('environment'))/appsettings" - the
+    site part is fully resolvable, but no earlier pass evaluates a format()
+    that isn't the whole expression. Left unevaluated, the name can only be
+    rescued by fuzzy matching, which mis-pairs same-type siblings
+    (web vs appsettings). Calls whose arguments stay unresolved are left
+    intact for smart matching.
+    """
+    if not isinstance(s, str) or "format(" not in s:
+        return s
+    out = s
+    for _ in range(3):  # outer formats may reveal inner ones; few passes suffice
+        changed = False
+        search_from = 0
+        while True:
+            idx = out.find("format(", search_from)
+            if idx == -1:
+                break
+            # balanced-paren extraction of the whole call
+            depth, j = 0, idx + len("format")
+            end = -1
+            while j < len(out):
+                if out[j] == "(":
+                    depth += 1
+                elif out[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        end = j
+                        break
+                j += 1
+            if end == -1:
+                break
+            call = out[idx:end + 1]
+            template, args = _parse_format_call(call, parameters, variables)
+            resolvable = (
+                template is not None
+                and args
+                and not any(ch in str(a) for a in args for ch in "([")
+            )
+            if resolvable:
+                result = template
+                for i, arg in enumerate(args):
+                    result = result.replace(f"{{{i}}}", str(arg))
+                out = out[:idx] + result + out[end + 1:]
+                changed = True
+                search_from = 0
+            else:
+                search_from = idx + 1
+        if not changed:
+            break
+    return out
+
+
 def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tuple:
     """
     Parse a format() function call and extract template + resolved arguments.
@@ -602,7 +659,10 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
 
     normalized = {
         "type": resource.get("type", ""),
-        "name": resolve_expression(resource.get("name", ""), parameters, variables),
+        "name": _eval_embedded_formats(
+            resolve_expression(resource.get("name", ""), parameters, variables),
+            parameters, variables,
+        ),
         "location": resolve_expression(resource.get("location"), parameters, variables) or "unknown",
         "apiVersion": resource.get("apiVersion", ""),
         "tags": _resolve_value(resource.get("tags") or {}, parameters, variables),

@@ -82,6 +82,22 @@ def diff_states(
             and (r.get("name") or "").split("/")[-1].lower() == "master"
         )
     ]
+    # App Service config objects (web, appsettings, ...) exist on EVERY site
+    # with runtime defaults - only the kinds the bicep declares are compared
+    # (property drift on declared ones still fires; undeclared ones are not
+    # extras). Same bicep-driven rule as Defender pricing tiers.
+    declared_config_leaves = {
+        (r.get("name") or "").split("/")[-1].lower()
+        for r in filtered_arm
+        if (r.get("type") or "").lower() == "microsoft.web/sites/config"
+    }
+    normalized_live = [
+        r for r in normalized_live
+        if not (
+            (r.get("type") or "").lower() == "microsoft.web/sites/config"
+            and (r.get("name") or "").split("/")[-1].lower() not in declared_config_leaves
+        )
+    ]
 
     # Use DriftDetector's intelligent matching (handles fuzzy matching for parameter-based names)
     detector_drifts = DriftDetector.detect_drift(filtered_arm, normalized_live)
