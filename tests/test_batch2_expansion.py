@@ -111,3 +111,38 @@ class DefenderPricingFilterTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FormatEvalAndConfigGateTests(unittest.TestCase):
+    """Live-caught: an embedded format() name mis-paired same-type config
+    siblings, and undeclared config/web (exists on every site) became extras
+    once the blanket sites/config ignore was removed."""
+
+    def test_embedded_format_resolves_with_literal_args(self):
+        from tools.normalizer import _eval_embedded_formats
+        self.assertEqual(
+            _eval_embedded_formats(
+                "format('app-{0}-drift', parameters('environment'))/appsettings",
+                {"environment": "test"}, {},
+            ),
+            "app-test-drift/appsettings",
+        )
+
+    def test_unresolvable_format_left_for_smart_matching(self):
+        from tools.normalizer import _eval_embedded_formats
+        expr = "format('x-{0}', uniqueString(resourceGroup().id))"
+        self.assertEqual(_eval_embedded_formats(expr, {}, {}), expr)
+
+    def test_undeclared_config_kinds_are_not_extras(self):
+        from tools.diff_states import diff_states
+        live = [
+            {"type": "microsoft.web/sites/config", "name": "app1/web",
+             "location": None, "properties": {"minTlsVersion": "1.2"}},
+            {"type": "microsoft.web/sites/config", "name": "app1/appsettings",
+             "location": None, "properties": {"K": "v"}},
+        ]
+        arm = [{"type": "Microsoft.Web/sites/config", "name": "app1/appsettings",
+                "properties": {"K": "v"}}]
+        drifts = diff_states(arm, live)
+        # declared appsettings compares (clean); undeclared web is not an extra
+        self.assertEqual([d.resource_name for d in drifts if d.drift_type == "extra_in_azure"], [])
