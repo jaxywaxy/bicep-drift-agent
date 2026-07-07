@@ -478,6 +478,14 @@ class PropertyComparator:
         "properties.publicnetworkaccess",
         # AI content filters - loosening one is a governance event
         "properties.contentfilters",
+        # Application Gateway / WAF security posture: WAF mode flip
+        # (Prevention->Detection), disabling the WAF, or weakening the min TLS
+        # version are all security-critical.
+        "properties.policysettings.mode",
+        "properties.policysettings.state",
+        "properties.sslpolicy.minprotocolversion",
+        "properties.webapplicationfirewallconfiguration.enabled",
+        "properties.webapplicationfirewallconfiguration.firewallmode",
     }
 
     # Types whose networkAcls default to open when never configured: Azure

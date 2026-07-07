@@ -190,3 +190,24 @@ class DedupeAndFilterReuseTests(unittest.TestCase):
         self.assertNotIn("app1/web", kept)           # undeclared config kind
         self.assertIn("sql1/driftdb", kept)          # real DB
         self.assertIn("app1/appsettings", kept)      # declared config kind
+
+
+class NetworkApplianceSeverityTests(unittest.TestCase):
+    """App Gateway / WAF security-posture paths are critical severity."""
+
+    def test_waf_mode_flip_is_critical(self):
+        from tools.property_drift import PropertyComparator
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.policySettings.mode"), "critical")
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.policySettings.state"), "critical")
+
+    def test_appgw_ssl_min_version_is_critical(self):
+        from tools.property_drift import PropertyComparator
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.sslPolicy.minProtocolVersion"), "critical")
+
+    def test_ordinary_appgw_path_is_not_critical(self):
+        from tools.property_drift import PropertyComparator
+        self.assertNotEqual(
+            PropertyComparator._get_severity("properties.httpListeners"), "critical")

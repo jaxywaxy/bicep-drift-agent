@@ -52,6 +52,14 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(classify_owner("Microsoft.Web/sites"), WORKLOAD)
         self.assertEqual(classify_owner("Microsoft.DocumentDB/databaseAccounts"), WORKLOAD)
 
+    def test_load_balancer_and_app_gateway_are_platform(self):
+        self.assertEqual(classify_owner("Microsoft.Network/loadBalancers"), PLATFORM)
+        self.assertEqual(classify_owner("Microsoft.Network/applicationGateways"), PLATFORM)
+        self.assertEqual(
+            classify_owner("Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies"),
+            PLATFORM,
+        )
+
     def test_config_override_of_platform_types(self):
         # A config can declare its own platform-owned set.
         self.assertEqual(
