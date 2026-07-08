@@ -824,6 +824,17 @@ _CHILD_EXPANSION_SPECS = [
     # range) opening a prod database to the internet is the classic drift.
     ("microsoft.sql/servers", "firewallRules",
      "2023-08-01-preview", "Microsoft.Sql/servers/firewallRules", None),
+    # Front Door Standard/Premium (Microsoft.Cdn/profiles) children. Drift here
+    # redirects traffic (origins), changes routing/TLS (routes), or detaches the
+    # WAF (securityPolicies). Origins/routes are grandchildren (below).
+    ("microsoft.cdn/profiles", "afdEndpoints",
+     "2023-05-01", "Microsoft.Cdn/profiles/afdEndpoints", None),
+    ("microsoft.cdn/profiles", "originGroups",
+     "2023-05-01", "Microsoft.Cdn/profiles/originGroups", None),
+    ("microsoft.cdn/profiles", "securityPolicies",
+     "2023-05-01", "Microsoft.Cdn/profiles/securityPolicies", None),
+    ("microsoft.cdn/profiles", "ruleSets",
+     "2023-05-01", "Microsoft.Cdn/profiles/ruleSets", None),
 ]
 
 # Record sets list with their concrete type in the response (…/dnszones/A etc.);
@@ -840,6 +851,13 @@ _GRANDCHILD_EXPANSION_SPECS = [
      _skip_default_consumer_group),
     ("microsoft.eventhub/namespaces/eventhubs", "authorizationRules",
      "2021-11-01", "Microsoft.EventHub/namespaces/eventhubs/authorizationRules", None),
+    # Front Door origins live under origin groups; routes under endpoints. An
+    # added origin is a traffic-redirect (exfil) vector; a route's TLS/forwarding
+    # change is a downgrade risk.
+    ("microsoft.cdn/profiles/origingroups", "origins",
+     "2023-05-01", "Microsoft.Cdn/profiles/originGroups/origins", None),
+    ("microsoft.cdn/profiles/afdendpoints", "routes",
+     "2023-05-01", "Microsoft.Cdn/profiles/afdEndpoints/routes", None),
 ]
 
 

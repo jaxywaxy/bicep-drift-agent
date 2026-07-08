@@ -490,6 +490,10 @@ class PropertyComparator:
         # insecure (http) traffic is a security posture change.
         "properties.configuration.ingress.external",
         "properties.configuration.ingress.allowinsecure",
+        # Front Door route TLS posture: forwarding to origins over HttpOnly, or
+        # dropping the HTTP->HTTPS redirect, is a downgrade.
+        "properties.forwardingprotocol",
+        "properties.httpsredirect",
     }
 
     # Types whose networkAcls default to open when never configured: Azure

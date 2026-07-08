@@ -88,7 +88,8 @@ Foundry (+children), Service Bus, Traffic Manager, DNS zones, Monitor
 action groups & metric alerts, VNets/subnets/peerings/NSGs/route tables/NAT,
 private endpoints, locks, RBAC, and Azure Policy. Newer additions handled but
 not yet live-verified: load balancers and Application Gateways (+ WAF policy;
-owner-tagged platform, WAF mode / SSL-min-version critical), SQL firewall
-rules, Data Collection Rules + DCR associations (silenced-telemetry drift),
-diagnostic settings, Defender pricings, and Container Apps (ingress exposure
-flagged critical).
+owner-tagged platform, WAF mode / SSL-min-version critical), Front Door
+Standard/Premium (+ endpoints/origin groups/origins/routes/security policies;
+route TLS-downgrade flagged critical), SQL firewall rules, Data Collection
+Rules + DCR associations (silenced-telemetry drift), diagnostic settings,
+Defender pricings, and Container Apps (ingress exposure flagged critical).
