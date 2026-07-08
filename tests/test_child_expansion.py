@@ -229,6 +229,29 @@ class FrontDoorExpansionTests(unittest.TestCase):
         origin = next(c for c in children if c["name"] == "fd1/og1/origin1")
         self.assertEqual(origin["type"], "Microsoft.Cdn/profiles/originGroups/origins")
 
+    def test_routes_expanded_when_endpoint_is_a_base_query_row(self):
+        # Regression: afdEndpoints are returned by the base Resource Graph query
+        # (lowercase type), so the child pass dedups the endpoint out of `children`
+        # by id. The grandchild pass must still expand its routes — otherwise every
+        # AFD route false-flags missing_in_azure. Here the endpoint is supplied as a
+        # base resource AND returned by the /afdEndpoints listing with the same id.
+        ep_id = f"{SUB}/Microsoft.Cdn/profiles/fd1/afdEndpoints/ep1"
+        profile = _resource("Microsoft.Cdn/profiles", "fd1",
+                            f"{SUB}/Microsoft.Cdn/profiles/fd1")
+        endpoint_base = _resource("microsoft.cdn/profiles/afdendpoints", "fd1/ep1", ep_id)
+        children = self._expand([profile, endpoint_base], {
+            "/afdEndpoints?": [{"name": "ep1", "id": ep_id, "properties": {}}],
+            "/originGroups?": [],
+            "/securityPolicies?": [],
+            "/ruleSets?": [],
+            "/routes?": [
+                {"name": "route1", "id": "r1",
+                 "properties": {"forwardingProtocol": "HttpsOnly"}}],
+        })
+        names = {c["name"] for c in children}
+        # Endpoint itself is deduped (already a base row), but its route is expanded.
+        self.assertIn("fd1/ep1/route1", names)
+
 
 class FrontDoorOwnershipAndSeverityTests(unittest.TestCase):
     def test_frontdoor_and_waf_are_platform(self):
