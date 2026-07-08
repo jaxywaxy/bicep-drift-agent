@@ -5,6 +5,7 @@ Normalizes ARM template and live Azure resources to a common shape.
 Handles ARM expression resolution and flattening nested resources.
 """
 
+import json
 import re
 from typing import Any
 
@@ -545,6 +546,19 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     # Handle [resourceId(...)] expressions
     if inner.startswith("resourceId"):
         return _resolve_resource_id(inner, parameters, variables)
+
+    # Handle [json('literal')] — Bicep's json() coerces a JSON literal to a real
+    # typed value (commonly a numeric Container Apps CPU like json('0.25'), which
+    # Azure returns as 0.25). Parse the literal so it compares as the typed value,
+    # not the raw string "json('0.25')". Non-literal args (json(variables('x')))
+    # don't match and fall through to the unresolved fallback below.
+    if inner.startswith("json"):
+        json_match = re.match(r"json\s*\(\s*'(.*)'\s*\)\s*$", inner, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except (ValueError, TypeError):
+                pass
 
     # Other expressions — try to extract a meaningful name
     # For complex expressions, just return a generic fallback
