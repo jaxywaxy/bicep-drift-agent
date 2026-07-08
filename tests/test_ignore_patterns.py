@@ -164,5 +164,44 @@ class EmptyAndNoMatchTests(unittest.TestCase):
         self.assertEqual(len(ignored), 0)
 
 
+class RepoIgnoreLoadBalancerPublicIpScopingTests(unittest.TestCase):
+    """The baseline .drift-ignore LB/PublicIP rules must be scoped to
+    extra_in_azure only: auto-created LBs/PIPs (extras) are suppressed, but an
+    IaC-declared LB/PIP must still surface property_drift and missing_in_azure.
+    Guards the real repo file (regression: bare type match silenced a live probe
+    change on a declared load balancer)."""
+
+    @classmethod
+    def setUpClass(cls):
+        repo_ignore = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".drift-ignore"
+        )
+        cls.il = IgnorePatternList.from_file(repo_ignore)
+
+    def _one(self, drift):
+        filtered, ignored = self.il.filter_drifts([drift])
+        return bool(ignored)
+
+    def test_extra_lb_and_pip_still_ignored(self):
+        self.assertTrue(self._one({"type": "Microsoft.Network/loadBalancers",
+                                   "name": "kubernetes", "drift_type": "extra_in_azure"}))
+        self.assertTrue(self._one({"type": "Microsoft.Network/publicIPAddresses",
+                                   "name": "pip-auto", "drift_type": "extra_in_azure"}))
+
+    def test_declared_lb_property_and_missing_surface(self):
+        self.assertFalse(self._one({
+            "type": "Microsoft.Network/loadBalancers", "name": "lb-drift-test",
+            "drift_type": "property_drift",
+            "details": {"changed_properties": {"properties.probes": {}}}}))
+        self.assertFalse(self._one({"type": "Microsoft.Network/loadBalancers",
+                                    "name": "lb-drift-test", "drift_type": "missing_in_azure"}))
+
+    def test_declared_pip_property_surfaces(self):
+        self.assertFalse(self._one({
+            "type": "Microsoft.Network/publicIPAddresses", "name": "pip-lb-drift-test",
+            "drift_type": "property_drift",
+            "details": {"changed_properties": {"properties.sku.name": {}}}}))
+
+
 if __name__ == "__main__":
     unittest.main()

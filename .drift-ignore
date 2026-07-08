@@ -23,10 +23,16 @@ ignore:
   - resource_type: "Microsoft.ContainerService/managedClusters/agentPools"
     reason: "Agent pools auto-managed by AKS cluster"
 
+  # Scoped to extra_in_azure ONLY: the concern is auto-created LBs/PIPs that appear
+  # as unmanaged extras. An IaC-DECLARED load balancer or public IP must still surface
+  # property_drift (e.g. a probe/rule/SKU change) and missing_in_azure (deletion) —
+  # a bare type match would silence those too.
   - resource_type: "Microsoft.Network/loadBalancers"
+    drift_type: "extra_in_azure"
     reason: "Load balancers auto-created by AKS and App Services"
 
   - resource_type: "Microsoft.Network/publicIPAddresses"
+    drift_type: "extra_in_azure"
     reason: "Public IPs auto-created by LBs, App Gateways, or referenced as existing"
 
 
