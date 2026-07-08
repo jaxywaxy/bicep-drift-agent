@@ -927,7 +927,13 @@ def _expand_data_plane_children(resources: List[Dict], token: Optional[str] = No
         return out
 
     children = _expand(resources, _CHILD_EXPANSION_SPECS + _RECORDSET_SPECS)
-    children.extend(_expand(children, _GRANDCHILD_EXPANSION_SPECS))
+    # Grandchild parents (AFD afdEndpoints/originGroups) can come from EITHER the
+    # child expansion above OR the base Resource Graph query — afdEndpoints is
+    # returned as a base row, so the first pass dedups it out of `children` (its id
+    # is already seen). Expand grandchildren over BOTH pools, otherwise AFD routes
+    # (whose parent endpoint came from the base query) are never fetched and every
+    # route false-flags as missing_in_azure. seen_ids still prevents duplicate rows.
+    children.extend(_expand(resources + children, _GRANDCHILD_EXPANSION_SPECS))
     if children:
         by_type = {}
         for c in children:
