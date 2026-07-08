@@ -614,14 +614,28 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
 
 
 def _generate_recommendations(agent, drifts_to_analyze: list) -> None:
-    """Generate a per-drift remediation recommendation via Claude (if available)."""
-    if agent and len(drifts_to_analyze) > 0:
-        logger.info("Generating recommendations via Claude...")
+    """Generate a per-drift remediation recommendation via Claude (if available).
+
+    Skips 'matched_unresolvable' entries: they are informational (a runtime-named
+    resource reconciled to its live counterpart), not actionable drift, so a
+    remediation recommendation is meaningless — and, at one Claude call each,
+    these dominate the run's wall time.
+    """
+    rec_targets = [
+        d for d in drifts_to_analyze
+        if d.get("drift_type") != "matched_unresolvable"
+    ]
+    skipped_informational = len(drifts_to_analyze) - len(rec_targets)
+
+    if agent and rec_targets:
+        logger.info(f"Generating recommendations via Claude for {len(rec_targets)} actionable drift(s)...")
+        if skipped_informational:
+            logger.info(f"Skipping {skipped_informational} informational (matched_unresolvable) drift(s)")
         recommendations_count = 0
-        for i, drift in enumerate(drifts_to_analyze, 1):
+        for i, drift in enumerate(rec_targets, 1):
             try:
                 drift_name = drift.get("name", "unknown")
-                logger.debug(f"[{i}/{len(drifts_to_analyze)}] {drift_name}...")
+                logger.debug(f"[{i}/{len(rec_targets)}] {drift_name}...")
 
                 recommendation = agent.get_drift_recommendation(
                     resource_type=drift.get("type", ""),
@@ -637,7 +651,7 @@ def _generate_recommendations(agent, drifts_to_analyze: list) -> None:
                 logger.warning(f"Failed to generate recommendation for {drift_name}: {str(e)[:50]}", exc_info=True)
                 drift["recommendation"] = f"Could not generate recommendation: {str(e)[:100]}"
 
-        logger.info(f"Generated recommendations for {recommendations_count}/{len(drifts_to_analyze)} drifts")
+        logger.info(f"Generated recommendations for {recommendations_count}/{len(rec_targets)} drifts")
     elif not agent:
         logger.info("Skipping Claude recommendations (no API key)")
 

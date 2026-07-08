@@ -92,6 +92,30 @@ class TestClaudeAndRecommendationsNoAgent(unittest.TestCase):
         ad._generate_recommendations(None, drifts)
         self.assertNotIn("recommendation", drifts[0])
 
+    def test_recommendations_skip_matched_unresolvable(self):
+        # matched_unresolvable is informational, not actionable: it must NOT
+        # trigger a Claude call, while real drift types still do.
+        class _FakeAgent:
+            def __init__(self):
+                self.called_for = []
+
+            def get_drift_recommendation(self, resource_type, resource_name, drift_type, details):
+                self.called_for.append(resource_name)
+                return "rec"
+
+        drifts = [
+            {"type": "X", "name": "missing", "drift_type": "missing_in_azure"},
+            {"type": "X", "name": "reconciled", "drift_type": "matched_unresolvable"},
+            {"type": "X", "name": "changed", "drift_type": "property_drift"},
+        ]
+        agent = _FakeAgent()
+        ad._generate_recommendations(agent, drifts)
+
+        self.assertEqual(sorted(agent.called_for), ["changed", "missing"])
+        # The informational entry is left untouched (no recommendation added).
+        reconciled = next(d for d in drifts if d["name"] == "reconciled")
+        self.assertNotIn("recommendation", reconciled)
+
 
 class TestLifecycleEmptyDrifts(unittest.TestCase):
     def test_no_drifts_skips_azure_calls(self):
