@@ -189,3 +189,57 @@ class ContainerAppsSecurityTests(unittest.TestCase):
         self.assertEqual(
             PropertyComparator._get_severity("properties.configuration.ingress.allowInsecure"),
             "critical")
+
+
+class FrontDoorExpansionTests(unittest.TestCase):
+    """Front Door Standard/Premium (Microsoft.Cdn/profiles) child + grandchild
+    expansion: endpoints/originGroups/securityPolicies, then origins/routes."""
+
+    def _expand(self, resources, responses):
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen(responses)):
+            return _expand_data_plane_children(resources, token="t")
+
+    def test_frontdoor_children_and_grandchildren(self):
+        profile = _resource("Microsoft.Cdn/profiles", "fd1",
+                            f"{SUB}/Microsoft.Cdn/profiles/fd1")
+        children = self._expand([profile], {
+            "/afdEndpoints?": [
+                {"name": "ep1", "id": f"{SUB}/Microsoft.Cdn/profiles/fd1/afdEndpoints/ep1",
+                 "properties": {"enabledState": "Enabled"}}],
+            "/originGroups?": [
+                {"name": "og1", "id": f"{SUB}/Microsoft.Cdn/profiles/fd1/originGroups/og1",
+                 "properties": {}}],
+            "/securityPolicies?": [
+                {"name": "waf-assoc", "id": "sp1", "properties": {}}],
+            "/ruleSets?": [],
+            # grandchildren
+            "/origins?": [
+                {"name": "origin1", "id": "o1",
+                 "properties": {"hostName": "backend.example.com"}}],
+            "/routes?": [
+                {"name": "route1", "id": "r1",
+                 "properties": {"forwardingProtocol": "HttpsOnly", "httpsRedirect": "Enabled"}}],
+        })
+        names = {c["name"] for c in children}
+        self.assertIn("fd1/ep1", names)
+        self.assertIn("fd1/og1", names)
+        self.assertIn("fd1/waf-assoc", names)
+        self.assertIn("fd1/og1/origin1", names)      # origin grandchild
+        self.assertIn("fd1/ep1/route1", names)        # route grandchild
+        origin = next(c for c in children if c["name"] == "fd1/og1/origin1")
+        self.assertEqual(origin["type"], "Microsoft.Cdn/profiles/originGroups/origins")
+
+
+class FrontDoorOwnershipAndSeverityTests(unittest.TestCase):
+    def test_frontdoor_and_waf_are_platform(self):
+        from tools.ownership import classify_owner, PLATFORM
+        self.assertEqual(classify_owner("Microsoft.Cdn/profiles"), PLATFORM)
+        self.assertEqual(
+            classify_owner("Microsoft.Network/FrontDoorWebApplicationFirewallPolicies"), PLATFORM)
+
+    def test_route_tls_downgrade_paths_are_critical(self):
+        from tools.property_drift import PropertyComparator
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.forwardingProtocol"), "critical")
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.httpsRedirect"), "critical")
