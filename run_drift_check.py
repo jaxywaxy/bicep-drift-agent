@@ -32,6 +32,7 @@ from tools.ignore_patterns import IgnorePatternList
 from tools.rbac import fetch_role_assignments, compare_role_assignments, rbac_enabled
 from tools.policy import fetch_policy_resources, compare_policy_resources, policy_drift_enabled
 from tools.rg_selector import rg_label
+from tools.redact import redact_secrets
 
 logger = get_logger(__name__)
 
@@ -249,8 +250,12 @@ def run(bicep_file: str, resource_group: str):
             json.dump({
                 "resource_group": label,
                 "bicep_file": bicep_file,
-                "arm_resources": arm_resources,
-                "live_resources": live_resources,
+                # Scrub secret-bearing property values (e.g. a literal
+                # administratorLoginPassword resolved from a bicepparam) before
+                # they are written to disk / CI artifacts. Property comparison
+                # already ignores write-only secrets; this covers the raw dump.
+                "arm_resources": redact_secrets(arm_resources),
+                "live_resources": redact_secrets(live_resources),
                 "drift_count": len(drifts),
                 "drifts": [
                     {
@@ -269,8 +274,11 @@ def run(bicep_file: str, resource_group: str):
 
 
 def main():
-    # Initialize logging
-    setup_logging(level="INFO")
+    # Initialize logging (DRIFT_LOG_LEVEL overrides the default)
+    from tools.config import LOG_LEVEL, validate_config
+    setup_logging(level=LOG_LEVEL)
+    for warning in validate_config():
+        logger.warning(f"Config: {warning}")
 
     if len(sys.argv) < 3:
         logger.error("Usage: python run_drift_check.py <bicep-file> <resource-group>")

@@ -15,7 +15,6 @@ Recommended responsibilities:
 
 import json
 import os
-import re
 from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -70,14 +69,6 @@ class DriftFinding:
     confidence: float
     reason: str
     details: Dict[str, Any]
-
-
-@dataclass
-class DriftAgentResult:
-    summary: Dict[str, Any]
-    findings: List[DriftFinding]
-    llm_analysis: str
-    raw_llm_json: Optional[Dict[str, Any]] = None
 
 
 class DriftAgent:
@@ -160,17 +151,12 @@ class DriftAgent:
         self.max_drift_items_for_prompt = max_drift_items_for_prompt
         self.conversation_history: List[Dict[str, str]] = []
 
-    def analyze_drift(
-        self,
-        drift_report: DriftReport,
-        include_json: bool = False,
-    ) -> str:
+    def analyze_drift(self, drift_report: DriftReport) -> str:
         """
         Analyse drift report and return a human-readable recommendation.
 
         Args:
             drift_report: Drift analysis from Phase 1.
-            include_json: If True, append structured finding JSON to the response.
 
         Returns:
             Human-readable analysis and recommendations.
@@ -202,50 +188,7 @@ class DriftAgent:
             }
         )
 
-        if include_json:
-            result = DriftAgentResult(
-                summary=summary,
-                findings=findings,
-                llm_analysis=analysis,
-            )
-            return analysis + "\n\n```json\n" + json.dumps(self._serialise_result(result), indent=2) + "\n```"
-
         return analysis
-
-    def analyze_drift_structured(self, drift_report: DriftReport) -> DriftAgentResult:
-        """
-        Analyse drift report and return structured result.
-
-        This is useful if the next phase needs to create Jira tickets,
-        GitHub comments, dashboards, or remediation workflows.
-        """
-        findings = self._build_findings(drift_report)
-        summary = self._build_summary(drift_report, findings)
-        context = self._format_drift_context(drift_report, findings, summary)
-
-        self.conversation_history = [
-            {
-                "role": "user",
-                "content": context,
-            }
-        ]
-
-        response = self.client.messages.create(
-            model=self.model,
-            max_tokens=3500,
-            system=self._get_structured_system_prompt(),
-            messages=self.conversation_history,
-        )
-
-        text = response.content[0].text.strip()
-        parsed = self._try_parse_json(text)
-
-        return DriftAgentResult(
-            summary=summary,
-            findings=findings,
-            llm_analysis=text,
-            raw_llm_json=parsed,
-        )
 
     def ask_followup(self, question: str) -> str:
         """
@@ -332,64 +275,6 @@ Respond with:
         )
 
         return response.content[0].text.strip()
-
-    def generate_pipeline_comment(self, drift_report: DriftReport) -> str:
-        """
-        Generate a PR or pipeline-friendly markdown comment.
-
-        Useful for GitHub Actions, Azure DevOps, Buildkite, or pull request checks.
-        """
-        findings = self._build_findings(drift_report)
-        summary = self._build_summary(drift_report, findings)
-
-        critical = summary["severity_counts"].get(DriftSeverity.CRITICAL.value, 0)
-        high = summary["severity_counts"].get(DriftSeverity.HIGH.value, 0)
-
-        status = "passed"
-        if critical > 0:
-            status = "failed"
-        elif high > 0:
-            status = "warning"
-
-        lines = [
-            "## Bicep Drift Analysis",
-            "",
-            f"**Status:** `{status}`",
-            f"**Total drift items:** {summary['total_drift']}",
-            "",
-            "### Severity Summary",
-        ]
-
-        for severity, count in summary["severity_counts"].items():
-            lines.append(f"- **{severity}:** {count}")
-
-        lines.extend(
-            [
-                "",
-                "### Top Findings",
-            ]
-        )
-
-        for finding in findings[:10]:
-            lines.append(
-                f"- `{finding.severity}` `{finding.category}` "
-                f"`{finding.drift_type}` - "
-                f"{finding.resource_type} / {finding.resource_name} "
-                f"→ {finding.recommended_action}"
-            )
-
-        if len(findings) > 10:
-            lines.append(f"- ...and {len(findings) - 10} more findings.")
-
-        lines.extend(
-            [
-                "",
-                "### Recommended Next Step",
-                self._get_pipeline_next_step(summary),
-            ]
-        )
-
-        return "\n".join(lines)
 
     def _build_findings(self, drift_report: DriftReport) -> List[DriftFinding]:
         drifts = drift_report.drifts or []
@@ -683,65 +568,6 @@ Output style:
 - Be concise, practical, and suitable for an infrastructure team.
 """
 
-    @staticmethod
-    def _get_structured_system_prompt() -> str:
-        return """
-You are an expert Azure infrastructure engineer analysing Bicep deployment drift.
-
-Return valid JSON only.
-
-The JSON schema should be:
-{
-  "executiveSummary": "string",
-  "overallRisk": "critical | high | medium | low | informational | unknown",
-  "priorityFindings": [
-    {
-      "resourceType": "string",
-      "resourceName": "string",
-      "severity": "critical | high | medium | low | informational | unknown",
-      "category": "string",
-      "issue": "string",
-      "likelyCause": "string",
-      "recommendation": "string",
-      "confidence": "high | medium | low"
-    }
-  ],
-  "remediationPlan": [
-    {
-      "priority": 1,
-      "action": "string",
-      "ownerHint": "platform | workload | security | governance | unknown",
-      "verification": "string"
-    }
-  ],
-  "exceptionsToConsider": [
-    {
-      "resourceName": "string",
-      "reason": "string"
-    }
-  ],
-  "dataQualityCaveats": [
-    "string"
-  ]
-}
-
-Do not include markdown.
-Do not invent facts.
-If information is missing, say so explicitly in the relevant field.
-"""
-
-    def _get_pipeline_next_step(self, summary: Dict[str, Any]) -> str:
-        if summary["severity_counts"].get(DriftSeverity.CRITICAL.value, 0) > 0:
-            return "Block promotion and investigate critical drift before deployment continues."
-
-        if summary["severity_counts"].get(DriftSeverity.HIGH.value, 0) > 0:
-            return "Require platform review before promotion. High-severity drift should be remediated or exception-approved."
-
-        if summary["severity_counts"].get(DriftSeverity.MEDIUM.value, 0) > 0:
-            return "Allow deployment with a follow-up remediation task if the drift is understood."
-
-        return "No blocking drift detected. Continue with normal deployment checks."
-
     def _extract_resource_id(self, drift: Drift, details: Dict[str, Any]) -> Optional[str]:
         candidates = [
             getattr(drift, "resource_id", None),
@@ -792,31 +618,6 @@ If information is missing, say so explicitly in the relevant field.
         value = (value or "").lower()
 
         return any(value.startswith(prefix.lower()) for prefix in prefixes)
-
-    @staticmethod
-    def _try_parse_json(text: str) -> Optional[Dict[str, Any]]:
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-
-        match = re.search(r"\{.*\}", text, re.DOTALL)
-        if not match:
-            return None
-
-        try:
-            return json.loads(match.group(0))
-        except json.JSONDecodeError:
-            return None
-
-    @staticmethod
-    def _serialise_result(result: DriftAgentResult) -> Dict[str, Any]:
-        return {
-            "summary": result.summary,
-            "findings": [asdict(finding) for finding in result.findings],
-            "llm_analysis": result.llm_analysis,
-            "raw_llm_json": result.raw_llm_json,
-        }
 
     @staticmethod
     def _make_pseudo_drift(

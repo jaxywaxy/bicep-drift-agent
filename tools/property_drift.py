@@ -1080,19 +1080,6 @@ class PropertyComparator:
                 return True
         return False
 
-    @staticmethod
-    def _is_system_property(key: str) -> bool:
-        """Check if property is system-generated."""
-        system_prefixes = {
-            "id",
-            "systemData",
-            "etag",
-            "managedBy",
-            "identity.principalId",
-            "identity.tenantId",
-        }
-        return any(key.startswith(prefix) for prefix in system_prefixes)
-
 
 class ConfigurationValidator:
     """Validate resource configurations for critical issues."""

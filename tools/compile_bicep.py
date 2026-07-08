@@ -19,6 +19,11 @@ from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
+try:
+    from .config import BICEP_BUILD_TIMEOUT
+except ImportError:  # standalone execution (python tools/compile_bicep.py)
+    from config import BICEP_BUILD_TIMEOUT
+
 
 def _sanitize_error_message(error_text: str) -> str:
     """Remove potential secrets from error messages."""
@@ -84,11 +89,18 @@ def _compile_bicep_cached(bicep_file_path: str) -> dict:
     with tempfile.TemporaryDirectory() as tmp_dir:
         output_path = Path(tmp_dir) / "compiled.json"
 
-        result = subprocess.run(
-            ["az", "bicep", "build", "--file", str(bicep_path), "--outfile", str(output_path)],
-            capture_output=True,
-            text=True,
-        )
+        try:
+            result = subprocess.run(
+                ["az", "bicep", "build", "--file", str(bicep_path), "--outfile", str(output_path)],
+                capture_output=True,
+                text=True,
+                timeout=BICEP_BUILD_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(
+                f"az bicep build timed out after {BICEP_BUILD_TIMEOUT}s for {bicep_path} "
+                f"(override with DRIFT_BICEP_TIMEOUT)"
+            )
 
         if result.returncode != 0:
             safe_stdout = _sanitize_error_message(result.stdout)

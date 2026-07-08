@@ -18,6 +18,11 @@ from dataclasses import dataclass
 import urllib.request
 import urllib.error
 
+try:
+    from .config import WEBHOOK_TIMEOUT_SECONDS
+except ImportError:  # standalone execution (python tools/send_notifications.py)
+    from config import WEBHOOK_TIMEOUT_SECONDS
+
 logger = logging.getLogger(__name__)
 
 
@@ -361,8 +366,7 @@ class NotificationRouter:
         if slack_url:
             template = MessageTemplate(template_str, platform="slack")
             for event in filtered_events:
-                event_context = {**context, "event_type": event.event_type, "resource_type": event.resource_type, "resource_name": event.resource_name, "details": event.details, "owner": event.owner}
-                message = template.render(event_context)
+                message = template.render(self._event_context(context, event))
                 success = self._send_to_slack(slack_url, message) and success
             if success:
                 logger.info(f"{team_name}: Slack notification sent ({len(filtered_events)} event(s))")
@@ -373,8 +377,7 @@ class NotificationRouter:
         if teams_url:
             template = MessageTemplate(template_str, platform="teams")
             for event in filtered_events:
-                event_context = {**context, "event_type": event.event_type, "resource_type": event.resource_type, "resource_name": event.resource_name, "details": event.details, "owner": event.owner}
-                message = template.render(event_context)
+                message = template.render(self._event_context(context, event))
                 success = self._send_to_teams(teams_url, message) and success
             if success:
                 logger.info(f"{team_name}: Teams notification sent ({len(filtered_events)} event(s))")
@@ -382,6 +385,18 @@ class NotificationRouter:
                 logger.warning(f"{team_name}: Teams notification failed")
 
         return success
+
+    @staticmethod
+    def _event_context(context: Dict[str, str], event: DriftEvent) -> Dict[str, str]:
+        """Merge the shared template context with a single event's fields."""
+        return {
+            **context,
+            "event_type": event.event_type,
+            "resource_type": event.resource_type,
+            "resource_name": event.resource_name,
+            "details": event.details,
+            "owner": event.owner,
+        }
 
     def _send_to_slack(self, webhook_url: str, message: str) -> bool:
         """Send message to Slack webhook."""
@@ -395,7 +410,7 @@ class NotificationRouter:
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
-            with _webhook_opener().open(req, timeout=10) as response:
+            with _webhook_opener().open(req, timeout=WEBHOOK_TIMEOUT_SECONDS) as response:
                 return response.status == 200
         except urllib.error.HTTPError as e:
             if 300 <= e.code < 400:
@@ -426,7 +441,7 @@ class NotificationRouter:
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
-            with _webhook_opener().open(req, timeout=10) as response:
+            with _webhook_opener().open(req, timeout=WEBHOOK_TIMEOUT_SECONDS) as response:
                 return response.status in (200, 201)
         except urllib.error.HTTPError as e:
             if 300 <= e.code < 400:
@@ -441,11 +456,11 @@ class NotificationRouter:
             return False
 
 
-def extract_recommendations_from_reports() -> Dict[str, List[Dict[str, str]]]:
+def extract_recommendations_from_reports() -> Dict[str, str]:
     """Extract recommendations from JSON drift reports in reports/ directory.
 
     Returns:
-        Dict mapping resource names to their recommendations
+        Dict mapping "<type>/<name>" to that resource's recommendation string.
     """
     recommendations = {}
     try:

@@ -11,6 +11,16 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
+def _esc(value) -> str:
+    """HTML-escape any value for safe interpolation into report markup.
+
+    Resource names/types and property values come from Azure/Bicep data and may
+    contain angle brackets (e.g. a tag or description value), so they must be
+    escaped before being placed into the HTML body.
+    """
+    return html.escape(str(value))
+
+
 def generate_html_report(
     drift_json_file: Path,
     output_file: Path,
@@ -967,8 +977,37 @@ def _render_property_drift_section(data: dict) -> str:
     modified = [d for d in property_drifts if d["drift_type"] == "modified"]
     missing = [d for d in property_drifts if d["drift_type"] == "missing"]
     extra = [d for d in property_drifts if d["drift_type"] == "extra"]
+    # Critical configuration issues surfaced by ConfigurationValidator
+    # (orphaned disks, VMs with no NIC). These have no Bicep counterpart, so
+    # they don't fit the missing/extra/modified buckets — render them on their own.
+    critical_config = [d for d in property_drifts if d["drift_type"] == "critical_config_error"]
 
     html = ""
+
+    if critical_config:
+        html += """
+            <div class="section">
+                <h2>🚨 Critical Configuration Issues</h2>
+                <p>Detected in the live environment (independent of Bicep) — these need attention:</p>
+                <div style="margin-top: 16px;">
+        """
+        for resource in critical_config:
+            resource_type = resource.get("resource_type", "")
+            resource_name = resource.get("deployed_name") or resource.get("resource_name", "")
+            issues = "; ".join(
+                f"{diff.get('property_path', '')}: {diff.get('actual_value', '')}"
+                for diff in resource.get("property_diffs", [])
+            )
+            html += (
+                "<div style='padding: 8px; background: #fff3e0; border-left: 4px solid #e65100; "
+                "border-radius: 4px; margin-bottom: 8px;'>"
+                f"<strong>{_esc(resource_type)}</strong> — {_esc(resource_name)}"
+                f"<div style='font-size: 12px; color: #666;'>{_esc(issues)}</div></div>"
+            )
+        html += """
+                </div>
+            </div>
+        """
 
     # Modified resources section
     if modified:
@@ -984,8 +1023,8 @@ def _render_property_drift_section(data: dict) -> str:
             resource_type = resource.get("resource_type", "")
             html += f"""
                     <div class="property-drift-resource">
-                        <h3>{resource_type}</h3>
-                        <p><strong>{resource_name}</strong></p>
+                        <h3>{_esc(resource_type)}</h3>
+                        <p><strong>{_esc(resource_name)}</strong></p>
             """
 
             for diff in resource.get("property_diffs", []):
@@ -996,17 +1035,17 @@ def _render_property_drift_section(data: dict) -> str:
                 actual = diff.get("actual_value", "N/A")
 
                 html += f"""
-                        <div class="property-change {severity}">
-                            <div class="property-path">{prop_path}</div>
-                            <div style="font-size: 11px; color: #666; margin-bottom: 8px;">{change_type.title()}</div>
+                        <div class="property-change {_esc(severity)}">
+                            <div class="property-path">{_esc(prop_path)}</div>
+                            <div style="font-size: 11px; color: #666; margin-bottom: 8px;">{_esc(change_type.title())}</div>
                             <div class="property-values">
                                 <div>
                                     <div class="property-value-label">Expected (Bicep)</div>
-                                    <div class="property-value">{json.dumps(desired, default=str)}</div>
+                                    <div class="property-value">{_esc(json.dumps(desired, default=str))}</div>
                                 </div>
                                 <div>
                                     <div class="property-value-label">Actual (Azure)</div>
-                                    <div class="property-value">{json.dumps(actual, default=str)}</div>
+                                    <div class="property-value">{_esc(json.dumps(actual, default=str))}</div>
                                 </div>
                             </div>
                         </div>
@@ -1032,7 +1071,7 @@ def _render_property_drift_section(data: dict) -> str:
         for resource in missing:
             resource_type = resource.get("resource_type", "")
             resource_name = resource.get("resource_name", "")
-            html += f"<div style='padding: 8px; background: #ffebee; border-radius: 4px; margin-bottom: 8px;'><strong>{resource_type}</strong> — {resource_name}</div>"
+            html += f"<div style='padding: 8px; background: #ffebee; border-radius: 4px; margin-bottom: 8px;'><strong>{_esc(resource_type)}</strong> — {_esc(resource_name)}</div>"
         html += """
                 </div>
             </div>
@@ -1049,7 +1088,7 @@ def _render_property_drift_section(data: dict) -> str:
         for resource in extra:
             resource_type = resource.get("resource_type", "")
             resource_name = resource.get("deployed_name", resource.get("resource_name", ""))
-            html += f"<div style='padding: 8px; background: #e3f2fd; border-radius: 4px; margin-bottom: 8px;'><strong>{resource_type}</strong> — {resource_name}</div>"
+            html += f"<div style='padding: 8px; background: #e3f2fd; border-radius: 4px; margin-bottom: 8px;'><strong>{_esc(resource_type)}</strong> — {_esc(resource_name)}</div>"
         html += """
                 </div>
             </div>
