@@ -1053,6 +1053,9 @@ class PropertyComparator:
             'concat(',
             'string(',
             'take(',
+            # json('<literal>') is resolved in the normalizer; a json(...) that
+            # survives here wraps a non-literal arg and can't be compared.
+            'json(',
         ]
 
         return any(marker in value_lower for marker in unresolved_markers)
