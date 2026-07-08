@@ -147,7 +147,10 @@ def discover_resource_groups():
 
 
 def main():
-    setup_logging(level="INFO")
+    from tools.config import LOG_LEVEL, validate_config
+    setup_logging(level=LOG_LEVEL)
+    for warning in validate_config():
+        logger.warning(f"Config: {warning}")
 
     if len(sys.argv) < 3:
         logger.error("Usage: python analyze_drift.py <bicep-file> <resource-group>")
