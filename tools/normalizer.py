@@ -560,9 +560,36 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
             except (ValueError, TypeError):
                 pass
 
-    # Other expressions — try to extract a meaningful name
-    # For complex expressions, just return a generic fallback
-    return inner
+    # Other expressions — resolve any EMBEDDED variables()/parameters() so that
+    # identity extractors still see literal values even when the OUTER function
+    # can't be resolved. e.g. a policy assignment's
+    #   tenantResourceId('Microsoft.Authorization/policyDefinitions', variables('policyId'))
+    # keeps its GUID literal, so policy.py can match it (otherwise the GUID stays
+    # hidden behind variables(...) and the assignment is skipped -> false extra).
+    return _eval_embedded_refs(inner, parameters, variables)
+
+
+_EMBEDDED_REF_RE = re.compile(r"\b(variables|parameters)\(\s*'([^']+)'\s*\)")
+
+
+def _eval_embedded_refs(s: str, parameters: dict, variables: dict) -> str:
+    """Replace embedded variables('x')/parameters('x') calls with their literal
+    scalar value (quoted, since they sit inside a larger expression). Names that
+    don't resolve to a scalar literal are left intact for smart matching.
+    """
+    if not isinstance(s, str) or ("variables(" not in s and "parameters(" not in s):
+        return s
+
+    def _sub(m: "re.Match[str]") -> str:
+        src = variables if m.group(1) == "variables" else parameters
+        val = src.get(m.group(2))
+        if isinstance(val, str):
+            return "'%s'" % val
+        if isinstance(val, (int, float, bool)):
+            return str(val)
+        return m.group(0)  # unresolved / non-scalar — leave intact
+
+    return _EMBEDDED_REF_RE.sub(_sub, s)
 
 
 def flatten_resources(arm_template: dict, parameters: dict = None, variables: dict = None) -> list[dict]:

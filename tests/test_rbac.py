@@ -73,6 +73,17 @@ class GuidExtractionTests(unittest.TestCase):
         self.assertIsNone(_extract_guid("[parameters('customRoleId')]"))
         self.assertIsNone(_extract_guid(None))
 
+    def test_variable_based_role_def_id_resolved_by_normalizer(self):
+        # Regression: roleDefinitionId built with variables()/parameters() hides
+        # the GUID (subscriptionResourceId(..., variables('roleId'))) so _extract_guid
+        # returned None and the declared assignment matched nothing -> live one
+        # became a false extra. The normalizer now resolves the embedded variable;
+        # feeding its output, the GUID is recovered.
+        from tools.normalizer import _eval_embedded_refs
+        raw = "subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('roleId'))"
+        resolved = _eval_embedded_refs(raw, {}, {"roleId": READER})
+        self.assertEqual(_extract_guid(resolved), READER)
+
 
 class ScopeParsingTests(unittest.TestCase):
     def test_scope_rg(self):

@@ -101,6 +101,30 @@ class BicepExtractionTests(unittest.TestCase):
         extracted, skipped = extract_bicep_policy_assignments(arm)
         self.assertEqual((extracted, skipped), ([], 1))
 
+    def test_variable_based_definition_id_matches_after_normalizer(self):
+        # Regression: a policyDefinitionId built with variables()/parameters() —
+        # tenantResourceId('...policyDefinitions', variables('policyId')) — used to
+        # hide the GUID, so the assignment was skipped and the live one became a
+        # false extra. The normalizer now resolves the embedded variable; feeding
+        # its output here, the definition_ref is recovered and the live assignment
+        # matches (no drift).
+        from tools.normalizer import _eval_embedded_refs
+        raw = "tenantResourceId('Microsoft.Authorization/policyDefinitions', variables('policyId'))"
+        resolved = _eval_embedded_refs(raw, {}, {"policyId": TDE_GUID})
+        arm = [{
+            "type": "Microsoft.Authorization/policyAssignments",
+            "name": "audit-tde",
+            "properties": {"policyDefinitionId": resolved, "displayName": "Audit TDE"},
+        }]
+        extracted, skipped = extract_bicep_policy_assignments(arm)
+        self.assertEqual(skipped, 0)
+        self.assertEqual(extracted[0]["definition_ref"], TDE_GUID)
+        # ...and it matches the live assignment with the same definition -> no drift
+        self.assertEqual(
+            compare_policy_resources(arm, [live_assignment(name="audit-tde", definition=TDE_GUID)], []),
+            [],
+        )
+
 
 class CompareTests(unittest.TestCase):
     def test_matched_by_name_no_drift(self):

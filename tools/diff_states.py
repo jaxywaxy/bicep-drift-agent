@@ -166,6 +166,13 @@ def filter_unmanaged_live_resources(normalized_live: list[dict], filtered_arm: l
     return result
 
 
+_IDENTITY_MATCHED_TYPES = {
+    "microsoft.authorization/roleassignments",
+    "microsoft.authorization/policyassignments",
+    "microsoft.authorization/policyexemptions",
+}
+
+
 def _should_compare_resource(resource: dict) -> bool:
     """
     Determine if a resource should be included in drift comparison.
@@ -188,6 +195,16 @@ def _should_compare_resource(resource: dict) -> bool:
 
     # Skip module deployments — these are Bicep syntax, not real resources
     if res_type == "microsoft.resources/deployments":
+        return False
+
+    # Skip identity-matched governance resources. Role assignments, policy
+    # assignments and exemptions live in separate Resource Graph tables (not
+    # Resources) and are compared by their own dedicated identity-based paths
+    # (rbac.py / policy.py). Comparing them in the name-based main diff emits a
+    # false missing_in_azure — they are never in the Resources table. Role
+    # assignments were already skipped incidentally (guid(...) names); policy
+    # assignments with a literal name were not.
+    if res_type in _IDENTITY_MATCHED_TYPES:
         return False
 
     # Skip only truly unresolvable complex expressions
