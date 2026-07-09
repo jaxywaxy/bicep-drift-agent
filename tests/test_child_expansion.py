@@ -253,6 +253,39 @@ class FrontDoorExpansionTests(unittest.TestCase):
         self.assertIn("fd1/ep1/route1", names)
 
 
+class EventGridSubscriptionExpansionTests(unittest.TestCase):
+    """Event Grid event subscriptions are extension resources under a topic
+    (nested-provider path) or system topic (plain child path); both parents are
+    base Resource Graph rows."""
+
+    def _expand(self, resources, responses):
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen(responses)):
+            return _expand_data_plane_children(resources, token="t")
+
+    def test_topic_and_systemtopic_subscriptions_expanded(self):
+        topic = _resource("microsoft.eventgrid/topics", "evgt1",
+                          f"{SUB}/Microsoft.EventGrid/topics/evgt1")
+        systopic = _resource("microsoft.eventgrid/systemtopics", "evgst1",
+                             f"{SUB}/Microsoft.EventGrid/systemTopics/evgst1")
+        children = self._expand([topic, systopic], {
+            "topics/evgt1/providers/Microsoft.EventGrid/eventSubscriptions": [
+                {"name": "sub-drift", "id": "es1",
+                 "properties": {"destination": {"endpointType": "EventHub"}}}],
+            "systemTopics/evgst1/eventSubscriptions": [
+                {"name": "sub-drift", "id": "es2",
+                 "properties": {"destination": {"endpointType": "EventHub"}}}],
+        })
+        names = {(c["type"], c["name"]) for c in children}
+        self.assertIn(("Microsoft.EventGrid/topics/eventSubscriptions", "evgt1/sub-drift"), names)
+        self.assertIn(("Microsoft.EventGrid/systemTopics/eventSubscriptions", "evgst1/sub-drift"), names)
+
+    def test_subscription_destination_is_critical(self):
+        from tools.property_drift import PropertyComparator
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.destination.endpointType"),
+            "critical")
+
+
 class FrontDoorOwnershipAndSeverityTests(unittest.TestCase):
     def test_frontdoor_and_waf_are_platform(self):
         from tools.ownership import classify_owner, PLATFORM
