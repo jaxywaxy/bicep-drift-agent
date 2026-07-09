@@ -55,6 +55,25 @@ class ResolveExpressionTests(unittest.TestCase):
     def test_unresolved_param_falls_back_to_name(self):
         self.assertEqual(resolve_expression("[parameters('missing')]", self.params, {}), "missing")
 
+    def test_embedded_variable_in_unresolvable_function_is_resolved(self):
+        # A variables()/parameters() nested inside an outer function that can't be
+        # resolved (tenantResourceId) must still be substituted, so identity
+        # extractors see the literal (policy/role definition ids).
+        out = resolve_expression(
+            "[tenantResourceId('Microsoft.Authorization/policyDefinitions', variables('polId'))]",
+            {}, {"polId": "06a78e20-9358-41c9-923c-fb736d382a4d"},
+        )
+        self.assertEqual(
+            out,
+            "tenantResourceId('Microsoft.Authorization/policyDefinitions', '06a78e20-9358-41c9-923c-fb736d382a4d')",
+        )
+
+    def test_embedded_unresolved_ref_left_intact(self):
+        out = resolve_expression(
+            "[tenantResourceId('x', variables('missing'))]", {}, {},
+        )
+        self.assertEqual(out, "tenantResourceId('x', variables('missing'))")
+
 
 if __name__ == "__main__":
     unittest.main()
