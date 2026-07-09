@@ -143,6 +143,15 @@ ignore:
   - resource_type: "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
     reason: "Child resource with unresolvable parameter expressions in name"
 
+  # A records inside privatelink.* zones are auto-created by a private endpoint's
+  # DNS zone group (Azure manages them), so they appear as extras. Scoped to
+  # extra_in_azure and the privatelink.* zone so a hand-declared record in such a
+  # zone would still surface as property/missing drift.
+  - resource_type: "Microsoft.Network/privateDnsZones/A"
+    resource_name: "privatelink.*"
+    drift_type: "extra_in_azure"
+    reason: "A records in privatelink.* zones are auto-created by private endpoint DNS zone groups"
+
   # Optional resource properties (not defined in Bicep)
   # These appear in Azure but weren't explicitly set in template
   - resource_type: "Microsoft.RecoveryServices/vaults"

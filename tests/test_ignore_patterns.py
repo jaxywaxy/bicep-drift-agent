@@ -203,5 +203,47 @@ class RepoIgnoreLoadBalancerPublicIpScopingTests(unittest.TestCase):
             "details": {"changed_properties": {"properties.sku.name": {}}}}))
 
 
+class RepoIgnorePrivatelinkRecordScopingTests(unittest.TestCase):
+    """A records in privatelink.* zones are auto-created by a private endpoint's
+    DNS zone group, so their extras are suppressed — but ONLY extras, and ONLY in
+    privatelink zones. Guards the real repo file (regression: a PE deployment's
+    auto-managed A record false-flagged extra_in_azure)."""
+
+    @classmethod
+    def setUpClass(cls):
+        repo_ignore = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".drift-ignore"
+        )
+        cls.il = IgnorePatternList.from_file(repo_ignore)
+
+    def _ignored(self, drift):
+        _, ignored = self.il.filter_drifts([drift])
+        return bool(ignored)
+
+    def test_privatelink_extra_record_ignored(self):
+        self.assertTrue(self._ignored({
+            "type": "Microsoft.Network/privateDnsZones/A",
+            "name": "privatelink.vaultcore.azure.net/kvdrift123",
+            "drift_type": "extra_in_azure"}))
+
+    def test_normal_zone_extra_record_surfaces(self):
+        # a hand-added record in an ordinary private zone is real drift
+        self.assertFalse(self._ignored({
+            "type": "Microsoft.Network/privateDnsZones/A",
+            "name": "drifttest.internal/rogue",
+            "drift_type": "extra_in_azure"}))
+
+    def test_privatelink_missing_and_property_surface(self):
+        self.assertFalse(self._ignored({
+            "type": "Microsoft.Network/privateDnsZones/A",
+            "name": "privatelink.vaultcore.azure.net/db",
+            "drift_type": "missing_in_azure"}))
+        self.assertFalse(self._ignored({
+            "type": "Microsoft.Network/privateDnsZones/A",
+            "name": "privatelink.vaultcore.azure.net/db",
+            "drift_type": "property_drift",
+            "details": {"changed_properties": {"properties.aRecords": {}}}}))
+
+
 if __name__ == "__main__":
     unittest.main()
