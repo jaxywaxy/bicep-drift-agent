@@ -835,6 +835,14 @@ _CHILD_EXPANSION_SPECS = [
      "2023-05-01", "Microsoft.Cdn/profiles/securityPolicies", None),
     ("microsoft.cdn/profiles", "ruleSets",
      "2023-05-01", "Microsoft.Cdn/profiles/ruleSets", None),
+    # Event Grid subscriptions are extension resources under a topic/system topic;
+    # a changed destination (re-routing events elsewhere) or filter is quiet, high-
+    # value drift. Custom-topic subs list under a nested provider segment; system-
+    # topic subs are a plain child. Both parents are base Resource Graph rows.
+    ("microsoft.eventgrid/topics", "providers/Microsoft.EventGrid/eventSubscriptions",
+     "2023-12-15-preview", "Microsoft.EventGrid/topics/eventSubscriptions", None),
+    ("microsoft.eventgrid/systemtopics", "eventSubscriptions",
+     "2023-12-15-preview", "Microsoft.EventGrid/systemTopics/eventSubscriptions", None),
 ]
 
 # Record sets list with their concrete type in the response (…/dnszones/A etc.);

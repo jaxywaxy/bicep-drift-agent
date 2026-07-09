@@ -494,6 +494,9 @@ class PropertyComparator:
         # dropping the HTTP->HTTPS redirect, is a downgrade.
         "properties.forwardingprotocol",
         "properties.httpsredirect",
+        # Event Grid subscription destination: re-pointing a subscription sends the
+        # event stream to a different sink (data exfiltration / interception).
+        "properties.destination",
     }
 
     # Types whose networkAcls default to open when never configured: Azure
