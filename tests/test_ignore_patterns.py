@@ -245,5 +245,57 @@ class RepoIgnorePrivatelinkRecordScopingTests(unittest.TestCase):
             "details": {"changed_properties": {"properties.aRecords": {}}}}))
 
 
+class RepoIgnoreAksScopingTests(unittest.TestCase):
+    """The AKS rules must be narrowly scoped (regression: blanket ignores hid
+    security-posture drift). Cluster: ONLY properties.agentPoolProfiles noise is
+    ignored - enableRBAC / apiServerAccessProfile changes and cluster deletion
+    surface. agentPools children: extras (inline system pools) ignored, but a
+    declared pool's deletion or scale surfaces. Guards the real repo file."""
+
+    AKS = "Microsoft.ContainerService/managedClusters"
+    POOL = AKS + "/agentPools"
+
+    @classmethod
+    def setUpClass(cls):
+        repo_ignore = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".drift-ignore"
+        )
+        cls.il = IgnorePatternList.from_file(repo_ignore)
+
+    def _ignored(self, drift):
+        _, ignored = self.il.filter_drifts([drift])
+        return bool(ignored)
+
+    def test_agent_pool_profiles_noise_ignored(self):
+        self.assertTrue(self._ignored({
+            "type": self.AKS, "name": "aks-drift-test", "drift_type": "property_drift",
+            "details": {"changed_properties": {"properties.agentPoolProfiles": {}}}}))
+
+    def test_security_posture_drift_surfaces(self):
+        for prop in ("properties.enableRBAC",
+                     "properties.apiServerAccessProfile.enablePrivateCluster",
+                     "properties.networkProfile.networkPolicy"):
+            self.assertFalse(self._ignored({
+                "type": self.AKS, "name": "aks-drift-test", "drift_type": "property_drift",
+                "details": {"changed_properties": {prop: {}}}}), prop)
+
+    def test_cluster_missing_and_extra_surface(self):
+        self.assertFalse(self._ignored({"type": self.AKS, "name": "aks-x",
+                                        "drift_type": "missing_in_azure"}))
+        self.assertFalse(self._ignored({"type": self.AKS, "name": "aks-rogue",
+                                        "drift_type": "extra_in_azure"}))
+
+    def test_inline_system_pool_extra_ignored(self):
+        self.assertTrue(self._ignored({"type": self.POOL, "name": "aks-drift-test/system",
+                                       "drift_type": "extra_in_azure"}))
+
+    def test_declared_pool_deletion_and_scale_surface(self):
+        self.assertFalse(self._ignored({"type": self.POOL, "name": "aks-drift-test/userpool",
+                                        "drift_type": "missing_in_azure"}))
+        self.assertFalse(self._ignored({
+            "type": self.POOL, "name": "aks-drift-test/userpool", "drift_type": "property_drift",
+            "details": {"changed_properties": {"properties.count": {}}}}))
+
+
 if __name__ == "__main__":
     unittest.main()

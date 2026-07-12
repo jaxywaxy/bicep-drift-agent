@@ -82,6 +82,41 @@ class TestIgnorePatterns(unittest.TestCase):
         self.assertIsInstance(result, IgnorePatternList)
 
 
+class TestPropertyDriftCanonicalDriftTypes(unittest.TestCase):
+    def test_extra_canonicalized_so_scoped_ignore_applies(self):
+        # Regression: the Phase 2 diagnostic pass filtered with drift_type "extra"
+        # while ignore rules are scoped to "extra_in_azure", so an ignored resource
+        # (e.g. a PE's auto-created privatelink A record) leaked back into the
+        # report's property_drifts section. The pass must canonicalize before
+        # filtering.
+        ignore_list = IgnorePatternList([{
+            "resource_type": "Microsoft.Network/privateDnsZones/A",
+            "resource_name": "privatelink.*",
+            "drift_type": "extra_in_azure",
+            "reason": "auto-created by PE dns zone group",
+        }])
+        report = {
+            "arm_resources": [
+                {"type": "Microsoft.Storage/storageAccounts", "name": "stfixed",
+                 "location": "eastus", "sku": {"name": "Standard_LRS"},
+                 "properties": {"accessTier": "Hot"}},
+            ],
+            "live_resources": [
+                {"type": "Microsoft.Storage/storageAccounts", "name": "stfixed",
+                 "location": "eastus", "sku": {"name": "Standard_LRS"},
+                 "properties": {"accessTier": "Hot", "provisioningState": "Succeeded"}},
+                {"type": "Microsoft.Network/privateDnsZones/A",
+                 "name": "privatelink.vaultcore.azure.net/kv123",
+                 "properties": {"ttl": 10}},
+            ],
+            "drifts": [],
+        }
+        ad._detect_and_merge_property_drift(report, ignore_list)
+        leaked = [d for d in report.get("property_drifts", [])
+                  if "privatelink" in (d.get("deployed_name") or d.get("resource_name") or "")]
+        self.assertEqual(leaked, [], "ignored extra leaked into property_drifts")
+
+
 class TestClaudeAndRecommendationsNoAgent(unittest.TestCase):
     def test_analysis_without_agent_returns_none(self):
         report = {"bicep_file": "m.bicep", "resource_group": "rg", "drifts": []}

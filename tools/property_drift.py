@@ -497,6 +497,13 @@ class PropertyComparator:
         # Event Grid subscription destination: re-pointing a subscription sends the
         # event stream to a different sink (data exfiltration / interception).
         "properties.destination",
+        # AKS security posture: disabling RBAC, opening the API server (private
+        # cluster off / authorized IP ranges dropped), re-enabling local accounts,
+        # or removing the network policy engine are all security-critical changes.
+        "properties.enablerbac",
+        "properties.apiserveraccessprofile",
+        "properties.disablelocalaccounts",
+        "properties.networkprofile.networkpolicy",
     }
 
     # Types whose networkAcls default to open when never configured: Azure

@@ -338,15 +338,21 @@ def _detect_and_merge_property_drift(report_data: dict, ignore_list: IgnorePatte
 
     property_drifts = DriftDetector.detect_drift(filtered_bicep_resources, deployed_resources)
 
-    # Apply ignore patterns to property drifts, in the SAME shape the main drift
-    # filter uses (a "modified" resource -> drift_type "property_drift" with
-    # changed_properties keyed by property path) so property-scoped ignore patterns
-    # (e.g. KeyVault networkAcls) match here too.
+    # Apply ignore patterns to property drifts, in the SAME shape (and with the
+    # SAME canonical drift_type names) the main drift filter uses: "modified" ->
+    # "property_drift", "extra" -> "extra_in_azure", "missing" -> "missing_in_azure".
+    # Without the extra/missing mapping, drift_type-scoped ignore rules (e.g. the
+    # privatelink A-record rule, extra_in_azure only) never match this diagnostic
+    # pass, so an ignored resource leaks back into the report's property_drifts
+    # section.
+    _canon = {"modified": "property_drift",
+              "extra": "extra_in_azure",
+              "missing": "missing_in_azure"}
     raw_property_drifts = [
         {
             "type": d.resource_type,
             "name": d.resource_name,
-            "drift_type": "property_drift" if d.drift_type == "modified" else d.drift_type,
+            "drift_type": _canon.get(d.drift_type, d.drift_type),
             "details": {
                 "changed_properties": {
                     diff.property_path: {

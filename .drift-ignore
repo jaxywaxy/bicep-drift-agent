@@ -19,9 +19,13 @@ ignore:
   - resource_type: "Microsoft.Compute/virtualMachineScaleSets"
     reason: "VMSS auto-created by AKS node pools, managed separately"
 
-  # AKS auto-managed resources
+  # AKS auto-managed resources. Scoped to extra_in_azure ONLY: pools declared
+  # inline in the cluster's agentPoolProfiles (system pools) surface as extra
+  # children, but a separately-DECLARED agentPools child must still surface
+  # missing_in_azure (deleted pool) and property_drift (scaled/re-sized pool).
   - resource_type: "Microsoft.ContainerService/managedClusters/agentPools"
-    reason: "Agent pools auto-managed by AKS cluster"
+    drift_type: "extra_in_azure"
+    reason: "Inline/system agent pools surface as extra children; managed via the cluster"
 
   # Scoped to extra_in_azure ONLY: the concern is auto-created LBs/PIPs that appear
   # as unmanaged extras. An IaC-DECLARED load balancer or public IP must still surface
@@ -158,9 +162,14 @@ ignore:
     drift_type: "property_drift"
     reason: "Optional properties (sku fields, tags added by Azure) ignored if not in Bicep - property drift only"
 
+  # NARROWED from a blanket property_drift ignore: only the agentPoolProfiles
+  # array is genuinely noisy (separately-declared agentPools children materialize
+  # as added elements; counts move under autoscale) - pools are compared via the
+  # expanded agentPools children instead. Security posture (enableRBAC,
+  # apiServerAccessProfile, networkProfile, disableLocalAccounts) now SURFACES.
   - resource_type: "Microsoft.ContainerService/managedClusters"
-    drift_type: "property_drift"
-    reason: "AKS cluster properties may have runtime-resolved values - property drift only; a deleted/added cluster is still real drift"
+    property: "properties.agentPoolProfiles"
+    reason: "Pool state duplicated into the parent's agentPoolProfiles array; pools compared via agentPools children"
 
   # API Management auto-managed resources
   - resource_type: "Microsoft.ApiManagement/service/groups"

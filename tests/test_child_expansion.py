@@ -253,6 +253,30 @@ class FrontDoorExpansionTests(unittest.TestCase):
         self.assertIn("fd1/ep1/route1", names)
 
 
+class AksAgentPoolExpansionTests(unittest.TestCase):
+    """AKS agent pools declared as separate agentPools children are invisible to
+    Resource Graph; they must be expanded from the cluster so a declared pool
+    matches (and a deleted/scaled one surfaces)."""
+
+    def test_agent_pools_expanded_from_cluster(self):
+        cluster = _resource("microsoft.containerservice/managedclusters", "aks1",
+                            f"{SUB}/Microsoft.ContainerService/managedClusters/aks1")
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen({
+            "/agentPools?": [
+                {"name": "system", "id": "ap1",
+                 "properties": {"count": 1, "mode": "System", "vmSize": "Standard_D2s_v3"}},
+                {"name": "userpool", "id": "ap2",
+                 "properties": {"count": 1, "mode": "User", "vmSize": "Standard_D2s_v3"}},
+            ],
+        })):
+            children = _expand_data_plane_children([cluster], token="t")
+        names = {(c["type"], c["name"]) for c in children}
+        self.assertIn(("Microsoft.ContainerService/managedClusters/agentPools", "aks1/system"), names)
+        self.assertIn(("Microsoft.ContainerService/managedClusters/agentPools", "aks1/userpool"), names)
+        userpool = next(c for c in children if c["name"] == "aks1/userpool")
+        self.assertEqual(userpool["properties"]["count"], 1)
+
+
 class EventGridSubscriptionExpansionTests(unittest.TestCase):
     """Event Grid event subscriptions are extension resources under a topic
     (nested-provider path) or system topic (plain child path); both parents are

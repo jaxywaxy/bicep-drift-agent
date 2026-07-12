@@ -835,6 +835,12 @@ _CHILD_EXPANSION_SPECS = [
      "2023-05-01", "Microsoft.Cdn/profiles/securityPolicies", None),
     ("microsoft.cdn/profiles", "ruleSets",
      "2023-05-01", "Microsoft.Cdn/profiles/ruleSets", None),
+    # AKS agent pools: pools declared as separate agentPools children are invisible
+    # to Resource Graph, so without this a declared pool false-flags missing_in_azure
+    # (and a deleted/scaled pool goes undetected). Inline system pools surface as
+    # extras and are suppressed by the extra_in_azure-scoped ignore.
+    ("microsoft.containerservice/managedclusters", "agentPools",
+     "2024-02-01", "Microsoft.ContainerService/managedClusters/agentPools", None),
     # Event Grid subscriptions are extension resources under a topic/system topic;
     # a changed destination (re-routing events elsewhere) or filter is quiet, high-
     # value drift. Custom-topic subs list under a nested provider segment; system-
