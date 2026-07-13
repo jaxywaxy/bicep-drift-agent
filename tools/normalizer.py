@@ -637,6 +637,17 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
         if resource_type == "Microsoft.Resources/resourceGroups":
             continue
 
+        # Conditional resources: a module/resource gated behind `if (...)` whose
+        # condition resolves to false is NOT deployed - comparing it would flag
+        # every gated-off module as missing_in_azure. Only a condition that
+        # resolves to a definitive false skips; an unresolvable expression keeps
+        # the resource (conservative - matches previous behavior).
+        condition = resource.get("condition")
+        if condition is not None:
+            resolved = _resolve_value(condition, parameters, variables)
+            if resolved is False or (isinstance(resolved, str) and resolved.lower() == "false"):
+                continue
+
         # Handle nested deployments separately — extract their resources, don't add the deployment itself
         if resource_type == "Microsoft.Resources/deployments":
             nested_template = resource.get("properties", {}).get("template", {})
