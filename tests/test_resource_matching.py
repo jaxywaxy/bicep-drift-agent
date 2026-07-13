@@ -54,3 +54,44 @@ class SingleCandidateGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ChildSiblingFuzzyGuardTests(unittest.TestCase):
+    """A deleted child's bicep definition must not fuzzy-match a surviving
+    SIBLING: siblings share every parent segment, so full-name token overlap
+    ('aks-drift-test/userpool' vs 'aks-drift-test/system') clears the fuzzy
+    threshold on the parent alone (live repro: deleted userpool paired with the
+    system pool, hiding missing_in_azure and fabricating name/mode drift)."""
+
+    POOL = "Microsoft.ContainerService/managedClusters/agentPools"
+
+    def test_deleted_pool_not_matched_to_sibling(self):
+        bicep = [_res(self.POOL, "aks-drift-test/userpool")]
+        deployed = [_res(self.POOL, "aks-drift-test/system")]
+        matches = ResourceMatcher.match_resources(bicep, deployed)
+        self.assertEqual(matches, [])
+
+    def test_deletion_reports_missing_and_sibling_extra(self):
+        bicep = [_res(self.POOL, "aks-drift-test/userpool")]
+        deployed = [_res(self.POOL, "aks-drift-test/system")]
+        drifts = DriftDetector.detect_drift(bicep, deployed)
+        by_type = {(d.drift_type, d.resource_name) for d in drifts}
+        self.assertIn(("missing", "aks-drift-test/userpool"), by_type)
+        self.assertIn(("extra", "aks-drift-test/system"), by_type)
+
+    def test_same_leaf_under_placeholder_parent_still_matches(self):
+        # eventhub child under a uniqueString-named namespace: parent differs
+        # textually (placeholder) but the leaf matches - must still pair.
+        EH = "Microsoft.EventHub/namespaces/eventhubs"
+        bicep = [_res(EH, "eh-[3a7f9c2b]/drift-hub")]
+        deployed = [_res(EH, "eh-3s7c7weddxr3s/drift-hub")]
+        matches = ResourceMatcher.match_resources(bicep, deployed)
+        self.assertEqual(len(matches), 1)
+
+    def test_cross_parent_same_leaf_not_matched(self):
+        # identical leaf under DIFFERENT literal parents is a different resource
+        CT = "Microsoft.Storage/storageAccounts/blobServices/containers"
+        bicep = [_res(CT, "stalpha/default/data")]
+        deployed = [_res(CT, "stbravo/default/data")]
+        matches = ResourceMatcher.match_resources(bicep, deployed)
+        self.assertEqual(matches, [])

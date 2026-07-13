@@ -278,10 +278,26 @@ class ResourceMatcher:
 
         for candidate in candidates:
             deployed_name = candidate.get("name", "")
-            bicep_clean = bicep_name.replace('[', '').replace(']', '').replace("'", '').replace('parameters(', '').replace(')', '')
+
+            # Child resources ('parent/child'): siblings share every parent
+            # segment, so full-name token overlap ('aks-drift-test/userpool' vs
+            # 'aks-drift-test/system' = 2/3) clears the threshold on the parent
+            # alone - pairing a DELETED child's bicep definition with a surviving
+            # sibling (hiding the deletion AND fabricating name/mode property
+            # drift). Require the parents to correspond and score the LEAF only.
+            if "/" in bicep_name and "/" in deployed_name:
+                b_parent, _, b_leaf = bicep_name.rpartition("/")
+                d_parent, _, d_leaf = deployed_name.rpartition("/")
+                if b_parent.lower() != d_parent.lower() and "[" not in b_parent:
+                    continue
+                bicep_cmp, deployed_cmp = b_leaf, d_leaf
+            else:
+                bicep_cmp, deployed_cmp = bicep_name, deployed_name
+
+            bicep_clean = bicep_cmp.replace('[', '').replace(']', '').replace("'", '').replace('parameters(', '').replace(')', '')
 
             bicep_tokens = [t for t in bicep_clean.split('-') if len(t) > 1 and t not in ('vmName', 'vaultName', 'name')]
-            deployed_tokens = [t for t in deployed_name.split('-') if len(t) > 1]
+            deployed_tokens = [t for t in deployed_cmp.split('-') if len(t) > 1]
 
             if bicep_tokens and deployed_tokens:
                 # Optimize fuzzy matching: use set intersection for O(n+m) instead of O(n*m)
