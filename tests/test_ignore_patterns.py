@@ -297,5 +297,69 @@ class RepoIgnoreAksScopingTests(unittest.TestCase):
             "details": {"changed_properties": {"properties.count": {}}}}))
 
 
+class PropertyScopedStrippingTests(unittest.TestCase):
+    """A property-scoped rule strips ONLY the matching properties; the drift is
+    fully ignored only when nothing survives. Regression: the AKS
+    agentPoolProfiles noise rule used to drop the WHOLE cluster drift, swallowing
+    a real authorizedIPRanges finding riding in the same record (live repro on
+    rg-drift-test)."""
+
+    AKS = "Microsoft.ContainerService/managedClusters"
+
+    def setUp(self):
+        self.il = IgnorePatternList([{
+            "resource_type": self.AKS,
+            "property": "properties.agentPoolProfiles",
+            "reason": "noise",
+        }])
+
+    def test_real_finding_survives_alongside_ignored_noise(self):
+        drift = {
+            "type": self.AKS, "name": "aks-drift-test", "drift_type": "property_drift",
+            "details": {"changed_properties": {
+                "properties.agentPoolProfiles": {"desired": [], "actual": []},
+                "properties.apiServerAccessProfile.authorizedIPRanges": {
+                    "desired": [], "actual": ["121.99.101.109/32"], "severity": "critical"},
+            }},
+        }
+        filtered, ignored = self.il.filter_drifts([drift])
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(ignored, [])
+        surviving = filtered[0]["details"]["changed_properties"]
+        self.assertEqual(
+            list(surviving), ["properties.apiServerAccessProfile.authorizedIPRanges"])
+        # the stripped noise is preserved for transparency
+        self.assertIn("properties.agentPoolProfiles",
+                      filtered[0].get("ignored_properties", {}))
+
+    def test_drift_fully_ignored_when_all_properties_match(self):
+        drift = {
+            "type": self.AKS, "name": "aks-drift-test", "drift_type": "property_drift",
+            "details": {"changed_properties": {
+                "properties.agentPoolProfiles": {"desired": [], "actual": []}}},
+        }
+        filtered, ignored = self.il.filter_drifts([drift])
+        self.assertEqual(filtered, [])
+        self.assertEqual(len(ignored), 1)
+        self.assertEqual(ignored[0]["ignored_reason"], "noise")
+
+    def test_name_scoped_property_rule_respects_name(self):
+        il = IgnorePatternList([{
+            "resource_type": self.AKS,
+            "resource_name": "other-cluster",
+            "property": "properties.agentPoolProfiles",
+        }])
+        drift = {
+            "type": self.AKS, "name": "aks-drift-test", "drift_type": "property_drift",
+            "details": {"changed_properties": {
+                "properties.agentPoolProfiles": {"desired": [], "actual": []}}},
+        }
+        filtered, ignored = il.filter_drifts([drift])
+        self.assertEqual(len(filtered), 1)
+        self.assertEqual(
+            list(filtered[0]["details"]["changed_properties"]),
+            ["properties.agentPoolProfiles"])
+
+
 if __name__ == "__main__":
     unittest.main()
