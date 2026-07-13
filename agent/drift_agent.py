@@ -452,7 +452,7 @@ Respond with:
         if self._has_cost_sensitive_change(resource_type, details):
             return DriftCategory.COST_DRIFT
 
-        if "modified" in drift_type:
+        if "modified" in drift_type or "property" in drift_type:
             return DriftCategory.CONFIGURATION_DRIFT
 
         if "missing" in drift_type:
@@ -469,6 +469,14 @@ Respond with:
     ) -> DriftSeverity:
         if category == DriftCategory.SYSTEM_MANAGED:
             return DriftSeverity.INFORMATIONAL
+
+        # The property-drift detector assigns per-property severity (CRITICAL_
+        # PROPERTIES, security sentinels). A critical property is authoritative
+        # regardless of category heuristics - without this, an ACR admin-user
+        # or storage https-only drift classified as finding severity "unknown".
+        property_severity = self._max_property_severity(details)
+        if property_severity == DriftSeverity.CRITICAL:
+            return DriftSeverity.CRITICAL
 
         if category == DriftCategory.SECURITY_DRIFT:
             if "missing" in drift_type or self._contains_high_risk_detail(details):
@@ -491,7 +499,9 @@ Respond with:
         if "missing" in drift_type:
             return DriftSeverity.HIGH
 
-        if "modified" in drift_type:
+        if "modified" in drift_type or "property" in drift_type:
+            if property_severity is not None:
+                return property_severity
             if self._contains_high_risk_detail(details):
                 return DriftSeverity.HIGH
             return DriftSeverity.MEDIUM
@@ -500,6 +510,29 @@ Respond with:
             return DriftSeverity.LOW
 
         return DriftSeverity.UNKNOWN
+
+    # Detector per-property severities are info/warning/critical; map them to
+    # finding-level severities (warning is actionable but not urgent).
+    _PROPERTY_SEVERITY_RANK = (
+        ("critical", DriftSeverity.CRITICAL),
+        ("warning", DriftSeverity.MEDIUM),
+        ("info", DriftSeverity.LOW),
+    )
+
+    def _max_property_severity(self, details: Dict[str, Any]) -> Optional[DriftSeverity]:
+        """Highest detector-assigned severity across changed_properties, or None."""
+        changed = (details or {}).get("changed_properties")
+        if not isinstance(changed, dict):
+            return None
+        labels = {
+            (change.get("severity") or "").lower()
+            for change in changed.values()
+            if isinstance(change, dict)
+        }
+        for label, severity in self._PROPERTY_SEVERITY_RANK:
+            if label in labels:
+                return severity
+        return None
 
     def _recommend_action(
         self,
@@ -519,7 +552,7 @@ Respond with:
         if "missing" in drift_type:
             return RemediationAction.REDEPLOY_BICEP
 
-        if "modified" in drift_type:
+        if "modified" in drift_type or "property" in drift_type:
             return RemediationAction.REDEPLOY_BICEP
 
         if "extra" in drift_type:
@@ -579,7 +612,7 @@ Respond with:
         if "missing" in drift_type:
             return "Resource appears in desired state but was not found in actual Azure state."
 
-        if "modified" in drift_type:
+        if "modified" in drift_type or "property" in drift_type:
             return "Resource exists in both desired and actual state, but one or more compared properties differ."
 
         return "Classification based on available drift type, resource type, and details."
