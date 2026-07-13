@@ -344,3 +344,74 @@ class WebhookRedirectTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SeverityInEventTests(unittest.TestCase):
+    """Critical findings must not read like routine drift in the channel:
+    property drift carries the highest per-property severity onto the event
+    (with a CRITICAL prefix in details), and {{ severity }} is a template var.
+    Live gap: the out-of-band authorizedIPRanges finding rendered identically
+    to a capacity tweak."""
+
+    def _report_event(self, changed_properties):
+        report = {"drifts": [{
+            "type": "Microsoft.ContainerService/managedClusters",
+            "name": "aks-drift-test",
+            "drift_type": "property_drift",
+            "owner": "workload",
+            "details": {"changed_properties": changed_properties},
+        }]}
+        with tempfile.NamedTemporaryFile("w", suffix="-drift.json", delete=False) as f:
+            json.dump(report, f)
+            path = f.name
+        try:
+            return events_from_report(path)[0]
+        finally:
+            os.unlink(path)
+
+    def test_critical_property_sets_severity_and_prefix(self):
+        ev = self._report_event({
+            "properties.apiServerAccessProfile.authorizedIPRanges": {
+                "desired": [], "actual": ["1.2.3.4/32"], "severity": "critical"},
+        })
+        self.assertEqual(ev.severity, "critical")
+        self.assertTrue(ev.details.startswith("🚨 CRITICAL "))
+
+    def test_highest_severity_wins_across_properties(self):
+        ev = self._report_event({
+            "tags.env": {"severity": "warning"},
+            "properties.enableRBAC": {"severity": "critical"},
+        })
+        self.assertEqual(ev.severity, "critical")
+
+    def test_warning_only_has_no_critical_prefix(self):
+        ev = self._report_event({"sku.name": {"severity": "warning"}})
+        self.assertEqual(ev.severity, "warning")
+        self.assertNotIn("CRITICAL", ev.details)
+
+    def test_missing_severity_defaults_empty(self):
+        ev = self._report_event({"properties.x": {}})
+        self.assertEqual(ev.severity, "")
+
+    def test_privileged_rbac_extra_is_critical(self):
+        report = {"drifts": [{
+            "type": "Microsoft.Authorization/roleAssignments",
+            "name": "Owner -> User:someone",
+            "drift_type": "extra_in_azure",
+            "owner": "platform",
+            "details": {"role_name": "Owner", "scope": "/sub/x", "privileged": True},
+        }]}
+        with tempfile.NamedTemporaryFile("w", suffix="-drift.json", delete=False) as f:
+            json.dump(report, f)
+            path = f.name
+        try:
+            ev = events_from_report(path)[0]
+        finally:
+            os.unlink(path)
+        self.assertEqual(ev.severity, "critical")
+
+    def test_severity_template_variable_renders(self):
+        ev = DriftEvent(event_type="DRIFT", resource_type="T", resource_name="n",
+                        severity="critical")
+        ctx = NotificationRouter._event_context({"report_url": "u"}, ev)
+        self.assertEqual(ctx["severity"], "critical")

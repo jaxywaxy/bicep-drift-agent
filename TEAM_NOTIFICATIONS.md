@@ -355,6 +355,7 @@ notifications:
 - `{{ resource_name }}` → Resource name
 - `{{ details }}` → Additional details
 - `{{ owner }}` → platform, workload, or unknown (Phase 4 owner-routing)
+- `{{ severity }}` → critical, warning, or info (empty when the source has none; property drift takes the highest per-property severity, and critical findings also get a `🚨 CRITICAL` prefix in `{{ details }}`)
 - `{{ report_url }}` → Link to GitHub Actions run
 - `{{ drift_count }}` → Number of DRIFT events
 - `{{ extra_count }}` → Number of EXTRA events

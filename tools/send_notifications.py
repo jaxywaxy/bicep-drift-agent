@@ -34,6 +34,7 @@ class DriftEvent:
     resource_name: str
     details: str = ""
     owner: str = "unknown"  # platform, workload, or unknown (Phase 4 owner-routing)
+    severity: str = ""  # critical / warning / info ("" when the source has none)
 
 
 class NotificationFilter:
@@ -396,6 +397,7 @@ class NotificationRouter:
             "resource_name": event.resource_name,
             "details": event.details,
             "owner": event.owner,
+            "severity": event.severity,
         }
 
     def _send_to_slack(self, webhook_url: str, message: str) -> bool:
@@ -517,9 +519,22 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
     """Build a DriftEvent from a JSON-report drift dict (carries owner)."""
     drift_type = drift.get("drift_type", "")
     event_type = _DRIFT_TYPE_TO_EVENT.get(drift_type, "DRIFT")
+    severity = ""
     if drift_type == "property_drift":
         changed = drift.get("details", {}).get("changed_properties", {})
         details = "properties differ: " + ", ".join(changed.keys()) if changed else ""
+        # A critical security finding (an out-of-band authorizedIPRanges change,
+        # a WAF mode flip) must not read like a routine capacity tweak in the
+        # channel - surface the report's highest per-property severity.
+        ranks = {"critical": 2, "warning": 1, "info": 0}
+        severities = [
+            str(v.get("severity", "")).lower()
+            for v in changed.values() if isinstance(v, dict)
+        ]
+        severity = max((s for s in severities if s in ranks),
+                       key=ranks.get, default="")
+        if severity == "critical" and details:
+            details = f"🚨 CRITICAL {details}"
     elif drift_type == "extra_in_azure":
         details = "deployed but not in Bicep"
         d = drift.get("details", {}) or {}
@@ -531,6 +546,8 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
                 granted += f", granted by {d['created_by']}"
             if d.get("created_on"):
                 granted += f" on {d['created_on']}"
+            if d.get("privileged"):
+                severity = "critical"
             details = ("⚠️ PRIVILEGED " if d.get("privileged") else "") + granted
         elif d.get("policy_display_name") or d.get("exemption_category"):
             if d.get("exemption_category"):
@@ -559,6 +576,7 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
         resource_name=drift.get("name", "Unknown"),
         details=details,
         owner=drift.get("owner", "unknown"),
+        severity=severity,
     )
 
 
