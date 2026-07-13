@@ -30,9 +30,14 @@ from tools.smart_matching import (
     detect_unresolvable_expressions,
     smart_match_resources,
     annotate_drifts_with_matches,
+    _has_unresolvable_expression,
 )
 from tools.property_drift import DriftDetector
-from tools.diff_states import _should_compare_resource, filter_unmanaged_live_resources
+from tools.diff_states import (
+    _should_compare_resource,
+    _IDENTITY_MATCHED_TYPES,
+    filter_unmanaged_live_resources,
+)
 from run_drift_check import run as run_phase1
 from tools.compile_bicep import compile_bicep, detect_deployment_scope
 from tools.rg_selector import rg_label
@@ -269,6 +274,52 @@ def _apply_smart_matching(report_data: dict) -> None:
         ]
     else:
         logger.info("No successful smart matches")
+
+    _flag_unmatched_placeholder_resources(report_data, unmatched_bicep)
+
+
+def _flag_unmatched_placeholder_resources(report_data: dict, unmatched_bicep: list) -> None:
+    """Emit missing_in_azure for placeholder-named Bicep resources with no live match.
+
+    Phase 1 deliberately skips unresolvable-named resources (their literal name
+    never matches the deployed uniqueString name), so their existence is only
+    proven by smart matching. Matching is by type: an unresolvable-named resource
+    still unmatched afterwards means the type's live candidates ran out — its
+    deployed counterpart is GONE. Without this, deleting any uniqueString-named
+    resource (storage account, key vault, SQL server, LA workspace...) produced
+    no drift at all. Identity-matched governance types are excluded: their live
+    rows come from separate Resource Graph tables and are compared by the
+    dedicated rbac/policy paths, so their guid() names would false-flag here.
+    """
+    existing = {
+        ((d.get("type") or "").lower(), d.get("name"))
+        for d in report_data.get("drifts", [])
+    }
+    for resource in unmatched_bicep:
+        rtype = resource.get("type") or ""
+        name = resource.get("name") or ""
+        rtype_lower = rtype.lower()
+        if rtype_lower == "microsoft.resources/deployments" or rtype_lower in _IDENTITY_MATCHED_TYPES:
+            continue
+        if not _has_unresolvable_expression(name):
+            continue  # literal-named resources are compared (and flagged) in Phase 1
+        if (rtype_lower, name) in existing:
+            continue
+        logger.warning(
+            f"Unresolvable-named resource has no live counterpart — missing_in_azure: {rtype}/{name}"
+        )
+        report_data.setdefault("drifts", []).append({
+            "type": rtype,
+            "name": name,
+            "drift_type": "missing_in_azure",
+            "details": {
+                "note": (
+                    "Runtime-generated name (uniqueString/placeholder); no deployed "
+                    "resource of this type left to match, so the deployed instance "
+                    "has been deleted or was never created."
+                ),
+            },
+        })
 
 
 def _apply_ignore_patterns(report_data: dict, bicep_file: str) -> IgnorePatternList:
