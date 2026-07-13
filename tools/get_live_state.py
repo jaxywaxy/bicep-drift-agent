@@ -911,11 +911,23 @@ def _expand_data_plane_children(resources: List[Dict], token: Optional[str] = No
                 pid, pname = parent.get("id", ""), parent.get("name", "")
                 if not pid or not pname:
                     continue
+                # A failed listing must NOT silently yield "no children": every
+                # declared child of this parent would false-flag missing_in_azure
+                # (seen live: a transient agentPools failure while an AKS cluster
+                # reconciled reported a healthy declared pool as deleted). Retry
+                # once, then WARN so the gap is visible in the run log.
                 try:
                     items = _list(pid, path, api)
-                except Exception as e:
-                    logger.debug(f"Could not list {path} for {pname}: {e}")
-                    continue
+                except Exception:
+                    try:
+                        time.sleep(2)
+                        items = _list(pid, path, api)
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not list {path} for {pname} after retry: {e} - "
+                            f"declared {child_type or path} children may false-flag as missing"
+                        )
+                        continue
                 for item in items:
                     if skip and skip(item):
                         continue
