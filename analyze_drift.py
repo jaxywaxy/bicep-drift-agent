@@ -781,6 +781,13 @@ def main():
 
         _generate_recommendations(agent, drifts_to_analyze)
 
+        # Per-run cost telemetry: exact token usage (from each response's usage
+        # block) and the estimated USD cost of this run's Claude calls. Stored
+        # in the report so CI runs leave an auditable cost trail.
+        if agent is not None:
+            logger.info(f"Claude usage this run: {agent.usage.summary()}")
+            report_data["agent_usage"] = agent.usage.to_dict()
+
         # ALWAYS persist the processed report (filtered drifts + property_drifts +
         # lifecycle, and recommendations if generated) so the HTML report - which reads
         # this JSON file - matches the filtered summary regardless of the API key.
