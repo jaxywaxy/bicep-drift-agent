@@ -492,6 +492,20 @@ class PropertyComparator:
         "properties.accesspolicies",
         "properties.enablerbacauthorization",
         "properties.publicnetworkaccess",
+        # Credential / anonymous-access exposure (ACR admin account, anonymous
+        # pull, storage public blobs, key-based auth left enabled).
+        "properties.adminuserenabled",
+        "properties.anonymouspullenabled",
+        "properties.allowblobpublicaccess",
+        "properties.allowsharedkeyaccess",
+        "properties.disablelocalauth",
+        # Transport security (TLS floor / https enforcement).
+        "properties.supportshttpstrafficonly",
+        "properties.minimumtlsversion",
+        "properties.minimaltlsversion",
+        "properties.httpsonly",
+        # Key Vault data-destruction protection.
+        "properties.enablesoftdelete",
         # AI content filters - loosening one is a governance event
         "properties.contentfilters",
         # Application Gateway / WAF security posture: WAF mode flip
@@ -560,6 +574,61 @@ class PropertyComparator:
             # Absent = Kubernetes RBAC enabled (the safe default; a live False
             # means someone built/mutated the cluster with RBAC off).
             "properties.enablerbac": True,
+        },
+        # NOTE: minimumTlsVersion/minimalTlsVersion are deliberately NOT
+        # sentinels: the absent-default is CREATION-API-VERSION-DEPENDENT
+        # (live-observed: a fresh EventHub namespace @2021-11-01 materializes
+        # '1.0' while ServiceBus @2022-10-01-preview materializes '1.2'), so no
+        # single default is FP-free. A template-DECLARED TLS floor weakened
+        # out-of-band is still caught by the generic comparison, as critical.
+        "microsoft.sql/servers": {
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        "microsoft.storage/storageaccounts": {
+            # Platform default for new accounts is false (public blob access
+            # disallowed) - a live true is anonymous-read exposure.
+            "properties.allowblobpublicaccess": False,
+            "properties.allowsharedkeyaccess": True,
+            # Stable default (true) since API 2019-04-01.
+            "properties.supportshttpstrafficonly": True,
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        "microsoft.keyvault/vaults": {
+            # Soft delete is mandatory on current vaults; a live false is a
+            # data-destruction exposure. Purge protection is one-way: a live
+            # true was enabled out-of-band (irreversible governance change).
+            "properties.enablesoftdelete": True,
+            "properties.enablepurgeprotection": False,
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        "microsoft.web/sites": {
+            # Azure's default is https NOT enforced - drift in either
+            # direction (hardened or reverted) is an out-of-band change.
+            "properties.httpsonly": False,
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        "microsoft.containerregistry/registries": {
+            # The classic: portal-enabled admin account (shared credential).
+            "properties.adminuserenabled": False,
+            "properties.anonymouspullenabled": False,
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        "microsoft.cognitiveservices/accounts": {
+            "properties.publicnetworkaccess": "Enabled",
+            # Absent = API-key (local) auth allowed.
+            "properties.disablelocalauth": False,
+        },
+        "microsoft.servicebus/namespaces": {
+            "properties.disablelocalauth": False,
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        "microsoft.eventhub/namespaces": {
+            "properties.disablelocalauth": False,
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        "microsoft.documentdb/databaseaccounts": {
+            "properties.publicnetworkaccess": "Enabled",
+            "properties.disablelocalauth": False,
         },
     }
 
@@ -815,12 +884,16 @@ class PropertyComparator:
             if deployed_key is None:
                 continue  # absent live-side too
             live_value = deployed_flat[deployed_key]
-            if live_value is None:
-                continue  # null means the default
+            if live_value is None or live_value == "":
+                # null/"" both mean "never materialized" - i.e. the default.
+                continue
             if isinstance(default, list) and isinstance(live_value, list):
                 matches = sorted(str(v).lower() for v in live_value) == sorted(
                     str(v).lower() for v in default
                 )
+            elif isinstance(default, str) and isinstance(live_value, str):
+                # Enum-valued strings ('Enabled', 'TLS1_2') - Azure varies casing.
+                matches = live_value.lower() == default.lower()
             else:
                 matches = live_value == default
             if not matches:
