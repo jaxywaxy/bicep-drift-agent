@@ -524,6 +524,29 @@ class PropertyComparator:
         "virtualNetworkRules": [],
     }
 
+    # Security sentinels: properties whose ABSENCE from the template is itself a
+    # security posture ("no authorized IP ranges", "local accounts enabled"). The
+    # generic comparison iterates bicep keys only, so a key someone sets on the
+    # live resource out-of-band is invisible when the template omits it — e.g.
+    # API server authorizedIPRanges added via `az aks update`. For these paths,
+    # an omitted template key is treated as demanding the documented Azure
+    # default, and a live value deviating from that default is drift. Paths are
+    # matched case-insensitively against the flattened dicts; a path the
+    # template DOES declare (itself or any child) is left to the generic
+    # comparison. Keyed by lowercased resource type -> {lowercased path: default}.
+    SECURITY_SENTINELS = {
+        "microsoft.containerservice/managedclusters": {
+            # Absent = API server reachable from all networks, no IP allowlist.
+            "properties.apiserveraccessprofile.authorizedipranges": [],
+            "properties.apiserveraccessprofile.enableprivatecluster": False,
+            # Absent = local (non-AAD) accounts remain enabled.
+            "properties.disablelocalaccounts": False,
+            # Absent = Kubernetes RBAC enabled (the safe default; a live False
+            # means someone built/mutated the cluster with RBAC off).
+            "properties.enablerbac": True,
+        },
+    }
+
     WRITE_ONLY_PROPERTIES = {
         # SQL server admin password (never returned; comparing it would also
         # LEAK the desired value into the drift report)
@@ -739,7 +762,61 @@ class PropertyComparator:
         # be reported as drift. Examples: sku fields, tags added by policies,
         # Azure-managed system properties, etc.
         # Only report properties that are explicitly defined in Bicep template.
+        # EXCEPTION: security sentinels (SECURITY_SENTINELS) - for those paths a
+        # live-added key IS the drift (e.g. authorizedIPRanges set out-of-band).
+        diffs.extend(
+            PropertyComparator._check_security_sentinels(
+                bicep_properties, bicep_flat, deployed_flat
+            )
+        )
 
+        return diffs
+
+    @staticmethod
+    def _check_security_sentinels(
+        bicep_properties: Dict, bicep_flat: Dict, deployed_flat: Dict
+    ) -> List[PropertyDiff]:
+        """Flag live values on sentinel paths the template omits.
+
+        For each SECURITY_SENTINELS path of this resource type that the
+        template does not declare (neither the path itself nor any child),
+        compare the live value against the documented absent-default; a
+        deviation is reported as change_type "added" - the key was introduced
+        on the live resource out-of-band.
+        """
+        rtype = str(bicep_properties.get("type", "")).lower()
+        sentinels = PropertyComparator.SECURITY_SENTINELS.get(rtype)
+        if not sentinels:
+            return []
+
+        bicep_keys = {k.lower() for k in bicep_flat}
+        deployed_by_lower = {k.lower(): k for k in deployed_flat}
+        diffs = []
+        for path, default in sentinels.items():
+            if path in bicep_keys or any(k.startswith(path + ".") for k in bicep_keys):
+                continue  # template declares it - generic comparison owns it
+            deployed_key = deployed_by_lower.get(path)
+            if deployed_key is None:
+                continue  # absent live-side too
+            live_value = deployed_flat[deployed_key]
+            if live_value is None:
+                continue  # null means the default
+            if isinstance(default, list) and isinstance(live_value, list):
+                matches = sorted(str(v).lower() for v in live_value) == sorted(
+                    str(v).lower() for v in default
+                )
+            else:
+                matches = live_value == default
+            if not matches:
+                diffs.append(
+                    PropertyDiff(
+                        property_path=deployed_key,
+                        desired_value=default,
+                        actual_value=live_value,
+                        change_type="added",
+                        severity=PropertyComparator._get_severity(deployed_key),
+                    )
+                )
         return diffs
 
     @staticmethod
