@@ -196,12 +196,18 @@ ignore:
   - resource_type: "Microsoft.ApiManagement/service/operationTags"
     reason: "Operation tags auto-managed by API Management"
 
-  # Event Hub resources with unresolvable parameter-based names
-  # Child resources and namespaces cannot be matched/compared due to uniqueString()
-  # They are deployed correctly but drift detection has matching/property visibility issues
+  # NOTE: the Microsoft.EventHub/namespaces blanket property_drift ignore is
+  # deliberately GONE (same over-broad shape as the AKS one narrowed in #209):
+  # it swallowed namespace security posture - a disableLocalAuth/
+  # publicNetworkAccess flip, or a weakened minimumTlsVersion - which the
+  # security sentinels now compare. Placeholder-named namespaces smart-match
+  # since PR #185, so the original "cannot be matched" noise no longer exists.
+  # The ONE genuinely noisy property is scoped below: Azure force-enables zone
+  # redundancy in AZ-capable regions and ignores a declared false (immutable
+  # post-creation, so it can never be real drift).
   - resource_type: "Microsoft.EventHub/namespaces"
-    drift_type: "property_drift"
-    reason: "Namespace properties not fully exposed by Azure API - property drift only; a deleted/added namespace is still real drift"
+    property: "properties.zoneRedundant"
+    reason: "Platform-forced in AZ-capable regions; declared false is overridden at creation, immutable after"
 
   # NOTE: EventHub child resources (eventhubs, authorizationRules, consumer
   # groups) are deliberately NOT ignored anymore - they're expanded via ARM
