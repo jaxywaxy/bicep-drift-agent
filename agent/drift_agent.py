@@ -16,7 +16,7 @@ Recommended responsibilities:
 import json
 import logging
 import os
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict, field, replace
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -262,9 +262,23 @@ class DriftAgent:
         Returns:
             Human-readable analysis and recommendations.
         """
+        # matched_unresolvable entries are NOT drift - they record that a
+        # runtime-named resource was reconciled to its deployed counterpart.
+        # Feeding them to the analysis as findings both inflates the prompt
+        # (they dominated real estates ~30:3) and degrades the output: the
+        # model spends its answer caveating "unresolved" rows instead of
+        # analysing the actionable drift. They are reduced to a count.
+        all_drifts = drift_report.drifts or []
+        actionable = [d for d in all_drifts if d.drift_type != "matched_unresolvable"]
+        reconciled_count = len(all_drifts) - len(actionable)
+        if reconciled_count:
+            drift_report = replace(drift_report, drifts=actionable)
+
         findings = self._build_findings(drift_report)
         summary = self._build_summary(drift_report, findings)
-        context = self._format_drift_context(drift_report, findings, summary)
+        context = self._format_drift_context(
+            drift_report, findings, summary, reconciled_count=reconciled_count
+        )
 
         self.conversation_history = [
             {
@@ -602,6 +616,7 @@ Respond with:
         drift_report: DriftReport,
         findings: List[DriftFinding],
         summary: Dict[str, Any],
+        reconciled_count: int = 0,
     ) -> str:
         limited_findings = findings[: self.max_drift_items_for_prompt]
         omitted_count = max(0, len(findings) - len(limited_findings))
@@ -616,6 +631,14 @@ Respond with:
             "summary": summary,
             "findings": [asdict(finding) for finding in limited_findings],
             "omitted_findings_count": omitted_count,
+            "reconciled_resources": {
+                "count": reconciled_count,
+                "note": (
+                    "Runtime-named resources (uniqueString/format) reconciled to "
+                    "their deployed counterparts by smart matching. Informational, "
+                    "NOT drift - excluded from findings; do not analyse or caveat them."
+                ),
+            } if reconciled_count else None,
             "questions_to_answer": [
                 "Which findings are most important?",
                 "Which findings are likely expected Azure-managed resources?",
@@ -633,6 +656,9 @@ Respond with:
                 "Suggest concrete next actions.",
             ],
         }
+
+        if not reconciled_count:
+            context.pop("reconciled_resources", None)
 
         return "# Bicep Drift Analysis Request\n\n" + json.dumps(context, indent=2, default=str)
 
