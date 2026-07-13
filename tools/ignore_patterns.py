@@ -125,35 +125,43 @@ class IgnorePatternList:
 
             is_ignored = False
 
-            # For property-level drifts, also check against property names
+            # For property-level drifts, property-scoped patterns STRIP the
+            # matching properties from the drift rather than ignoring the whole
+            # record: a drift often carries an ignorable noisy property (AKS
+            # agentPoolProfiles) alongside a real finding (authorizedIPRanges
+            # added out-of-band) in the SAME record - dropping the record on any
+            # single match would swallow the real finding with the noise. The
+            # drift is only fully ignored when NO properties survive.
             if drift_type == "property_drift":
-                # Get property names that changed
                 details = drift.get("details", {})
-                changed_props = details.get("changed_properties", {})
-                prop_names = list(changed_props.keys())
+                changed_props = details.get("changed_properties", {}) or {}
+                last_reason = None
 
-                # Check if any pattern matches resource + property combination
                 for pattern in self.patterns:
-                    # If pattern has property field, check if it matches property names
-                    if pattern.property_regex:
-                        for prop_name in prop_names:
-                            resource_matches = (
-                                fnmatch.fnmatch(resource_type.lower(), pattern.resource_type_regex)
-                                if pattern.resource_type_regex else True
+                    if not pattern.property_regex:
+                        continue
+                    if pattern.resource_type_regex and not fnmatch.fnmatch(
+                            resource_type.lower(), pattern.resource_type_regex):
+                        continue
+                    if pattern.resource_name_regex and not fnmatch.fnmatch(
+                            resource_name.lower(), pattern.resource_name_regex):
+                        continue
+                    for prop_name in list(changed_props.keys()):
+                        prop_lower = prop_name.lower()
+                        # Match the property itself OR any nested sub-property, so a
+                        # pattern like "properties.networkAcls" also covers
+                        # "properties.networkAcls.defaultAction" / ".bypass".
+                        if (fnmatch.fnmatch(prop_lower, pattern.property_regex)
+                                or prop_lower.startswith(pattern.property_regex + ".")):
+                            drift.setdefault("ignored_properties", {})[prop_name] = (
+                                changed_props.pop(prop_name)
                             )
-                            if resource_matches:
-                                prop_lower = prop_name.lower()
-                                # Match the property itself OR any nested sub-property, so a
-                                # pattern like "properties.networkAcls" also covers
-                                # "properties.networkAcls.defaultAction" / ".bypass".
-                                if (fnmatch.fnmatch(prop_lower, pattern.property_regex)
-                                        or prop_lower.startswith(pattern.property_regex + ".")):
-                                    drift["ignored_reason"] = pattern.reason or "Matched ignore pattern"
-                                    ignored.append(drift)
-                                    is_ignored = True
-                                    break
-                    if is_ignored:
-                        break
+                            last_reason = pattern.reason or "Matched ignore pattern"
+
+                if last_reason is not None and not changed_props:
+                    drift["ignored_reason"] = last_reason
+                    ignored.append(drift)
+                    is_ignored = True
 
             # Standard pattern matching for non-property drifts or if not already ignored
             if not is_ignored:

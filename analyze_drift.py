@@ -367,8 +367,25 @@ def _detect_and_merge_property_drift(report_data: dict, ignore_list: IgnorePatte
         for d in property_drifts
     ]
     filtered_property_dicts, ignored_property_dicts = ignore_list.filter_drifts(raw_property_drifts)
-    filtered_property_names = {(d["type"], d["name"]) for d in filtered_property_dicts}
-    property_drifts = [d for d in property_drifts if (d.resource_type, d.resource_name) in filtered_property_names]
+    # Property-scoped ignore rules STRIP individual properties from a surviving
+    # drift (see IgnorePatternList.filter_drifts); mirror that stripping onto the
+    # detector objects, otherwise a stripped noisy property (agentPoolProfiles)
+    # would ride back into the report alongside the real finding it obscured.
+    surviving_props = {
+        (d["type"], d["name"]): set(d.get("details", {}).get("changed_properties", {}))
+        for d in filtered_property_dicts
+    }
+    kept_drifts = []
+    for d in property_drifts:
+        keep = surviving_props.get((d.resource_type, d.resource_name))
+        if keep is None:
+            continue
+        if d.drift_type == "modified" and d.property_diffs:
+            d.property_diffs = [pd for pd in d.property_diffs if pd.property_path in keep]
+            if not d.property_diffs:
+                continue
+        kept_drifts.append(d)
+    property_drifts = kept_drifts
 
     summary = DriftDetector.generate_summary(property_drifts)
 
