@@ -60,7 +60,7 @@ landing_zones:
 gh workflow run drift-lz-myteam.yml
 ```
 
-See [LANDING_ZONES.md](LANDING_ZONES.md) for complete setup.
+See [LANDING_ZONES.md](docs/LANDING_ZONES.md) for complete setup.
 
 ---
 
@@ -69,7 +69,7 @@ See [LANDING_ZONES.md](LANDING_ZONES.md) for complete setup.
 ✅ **Enterprise-ready (CAF-aligned)**
 
 - Multiple teams, multiple repos, multiple RGs
-- **Subscription-scoped landing zones**: scan a whole subscription (one sub = one LZ) or an RG glob in a single pass — see [LANDING_ZONES.md](LANDING_ZONES.md)
+- **Subscription-scoped landing zones**: scan a whole subscription (one sub = one LZ) or an RG glob in a single pass — see [LANDING_ZONES.md](docs/LANDING_ZONES.md)
 - Parallel drift checks, consolidated notifications
 
 ✅ **Accurate drift detection**
@@ -209,7 +209,7 @@ Copy `drift-lz-template.yml`, update:
 - Landing zone name
 - Workflow name
 
-See [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) for multi-team setups.
+See [ENTERPRISE_CONFIGURATION.md](docs/ENTERPRISE_CONFIGURATION.md) for multi-team setups.
 
 ---
 
@@ -293,7 +293,7 @@ az bicep build --file main.bicep --outfile template.json
 
 ### 5. Classify & Attribute
 
-- Tag each drift with an **owner**: `platform` (network fabric) or `workload` (apps/data) — see [LANDING_ZONES.md](LANDING_ZONES.md#platform-vs-workload-landing-zones)
+- Tag each drift with an **owner**: `platform` (network fabric) or `workload` (apps/data) — see [LANDING_ZONES.md](docs/LANDING_ZONES.md#platform-vs-workload-landing-zones)
 - Query the Activity Log (30-day window) for **change origin**: manual, Azure Policy (DINE/Modify via the assignment's managed identity), or system
 - Split policy-enforced changes into a governance section (not actionable drift)
 
@@ -331,9 +331,9 @@ See `.drift-ignore` for complete list of patterns and reasoning.
 
 ## Documentation
 
-- [LANDING_ZONES.md](LANDING_ZONES.md) — Full hybrid architecture guide
-- [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) — Multi-team setup
-- [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) — Notification configuration
+- [LANDING_ZONES.md](docs/LANDING_ZONES.md) — Full hybrid architecture guide
+- [ENTERPRISE_CONFIGURATION.md](docs/ENTERPRISE_CONFIGURATION.md) — Multi-team setup
+- [TEAM_NOTIFICATIONS.md](docs/TEAM_NOTIFICATIONS.md) — Notification configuration
 
 ---
 
