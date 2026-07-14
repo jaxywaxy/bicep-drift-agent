@@ -513,6 +513,13 @@ class PropertyComparator:
         # appliance = inspection bypass) are the classic unauthorized changes.
         "properties.securityrules",
         "properties.routes",
+        # Workload-identity federation trust boundary: repointing a federated
+        # credential's subject or issuer lets a DIFFERENT external repo/branch/
+        # IdP mint tokens as this managed identity - a persistence / supply-
+        # chain escalation, not a config tweak. Only federatedIdentityCredentials
+        # carry properties.subject / properties.issuer in the estate.
+        "properties.subject",
+        "properties.issuer",
         # Application Gateway / WAF security posture: WAF mode flip
         # (Prevention->Detection), disabling the WAF, or weakening the min TLS
         # version are all security-critical.
