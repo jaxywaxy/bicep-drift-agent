@@ -534,8 +534,13 @@ def _run_claude_analysis(agent, report_data: dict):
     """Build the DriftReport and, if an agent is available, run Claude analysis.
 
     Returns the analysis text (also stored in report_data['agent_analysis']), or
-    None when no API key is configured. Re-raises on Claude API failure so the
-    caller's handler still falls back to HTML generation.
+    None when no API key is configured OR the Claude call fails. A Claude failure
+    is NON-FATAL and swallowed here: the deterministic pipeline (smart matching,
+    ignore filtering, property drift, lifecycle) has already reconciled the
+    report, and the caller must still persist THAT - re-raising aborted Phase 2
+    before the persist and shipped the raw, un-reconciled Phase 1 dump (every
+    uniqueString-named resource false-flagged extra_in_azure; seen live when the
+    API key ran out of credit).
     """
     drifts = [
         Drift(
@@ -568,9 +573,22 @@ def _run_claude_analysis(agent, report_data: dict):
         report_data["agent_analysis"] = agent_analysis
         return agent_analysis
     except Exception as e:
-        logger.error(f"✗ Claude analysis failed: {type(e).__name__}: {str(e)[:200]}", exc_info=True)
-        print(f"[ERROR] Claude API call failed: {type(e).__name__}")
-        raise
+        msg = str(e)
+        # Surface the two most common operational failures in plain language;
+        # both are configuration issues, not drift-processing bugs.
+        if "credit balance is too low" in msg or "billing" in msg.lower():
+            hint = "Anthropic API credit exhausted - top up at console.anthropic.com/settings/billing"
+        elif "authentication" in msg.lower() or "401" in msg or "invalid x-api-key" in msg.lower():
+            hint = "ANTHROPIC_API_KEY is invalid or revoked"
+        else:
+            hint = "Claude analysis unavailable this run"
+        logger.error(f"✗ Claude analysis failed ({type(e).__name__}): {hint}")
+        logger.warning(
+            "Continuing without AI analysis/recommendations - the deterministic "
+            "drift report (smart matching, filtering, property drift) is unaffected."
+        )
+        print(f"[WARNING] Claude analysis skipped: {hint}")
+        return None
 
 
 def _recover_deployed_name(resource_type: str, event_resource_id: str) -> str:
