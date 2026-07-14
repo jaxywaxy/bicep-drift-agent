@@ -58,6 +58,17 @@ class BuildDigestTests(unittest.TestCase):
         msg = build_digest([_event("a")], {"report_url": "u"}, platform="teams")
         self.assertIn("**Bicep Drift Detected**", msg)
 
+    def test_teams_platform_uses_blank_line_breaks(self):
+        # Teams markdown collapses single newlines into one paragraph.
+        msg = build_digest([_event("a"), _event("b")], {"report_url": "u"}, platform="teams")
+        self.assertNotIn("\n•", msg.replace("\n\n", ""))
+        self.assertEqual(msg.count("\n\n"), 3)  # header|line|line|footer
+
+    def test_slack_platform_uses_single_newlines(self):
+        msg = build_digest([_event("a"), _event("b")], {"report_url": "u"}, platform="slack")
+        self.assertNotIn("\n\n", msg)
+        self.assertEqual(msg.count("\n"), 3)
+
     def test_no_report_url_omits_footer(self):
         msg = build_digest([_event("a")], {})
         self.assertNotIn("Report:", msg)

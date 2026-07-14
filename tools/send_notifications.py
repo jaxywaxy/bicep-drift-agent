@@ -173,8 +173,14 @@ def build_digest(events: List[DriftEvent], context: Dict[str, str], platform: st
     Mirrors the CI job summary ([DRIFT]/[EXTRA]/[MISSING] one-liners) instead of
     one message per drift carrying the full Claude recommendation - the channel
     gets the what, the report gets the how.
+
+    Teams renders {"text": ...} as markdown where a single newline is NOT a
+    line break - the lines would collapse into one paragraph - so it joins
+    with blank lines (and ** bold); Slack uses \\n and * bold.
     """
-    bold = "*" if platform.lower() == "slack" else "**"
+    is_slack = platform.lower() == "slack"
+    bold = "*" if is_slack else "**"
+    separator = "\n" if is_slack else "\n\n"
     critical = sum(1 for e in events if (e.severity or "").lower() == "critical")
     header = f":warning: {bold}Bicep Drift Detected{bold} — {len(events)} issue(s)"
     if critical:
@@ -191,7 +197,7 @@ def build_digest(events: List[DriftEvent], context: Dict[str, str], platform: st
 
     report_url = context.get("report_url", "")
     footer = f"{bold}Report:{bold} {report_url}" if report_url else ""
-    return "\n".join(filter(None, [header, *lines, footer]))
+    return separator.join(filter(None, [header, *lines, footer]))
 
 
 # Webhook URLs are bearer secrets (anyone holding one can post to the channel),
