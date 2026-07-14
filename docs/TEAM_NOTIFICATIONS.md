@@ -358,6 +358,31 @@ links to.
 
 ---
 
+## Workload-Team Report Access: the LZ Drift Issue
+
+The digest's default report link is the **Actions run in the drift-agent
+repo**, which requires read access to that repo — and granting it would expose
+*every* landing zone's reports to every team. Instead, each run publishes the
+drift result as a **rolling GitHub issue in the landing zone's own repo**
+(`Drift Report — <lz>`, label `drift-report`), which the workload team can
+already read:
+
+- **Drift found** → the issue is created (or its body updated) with the same
+  one-liners as the digest, per resource group, plus the full per-resource
+  recommendations in collapsible sections.
+- **Scan clean** → the open issue is closed with a "✅ Drift resolved" comment.
+- Teams routed with `owners: [workload]` get the **issue URL** as their
+  `{{ report_url }}`; platform/unrouted teams keep the Actions-run link (full
+  artifacts). The raw issue link is also available as `{{ issue_url }}` in
+  custom templates.
+
+**Token requirement:** issue publication uses `BICEP_REPO_TOKEN` (the same
+secret used to fetch LZ repos), which must have **`issues: write`** on the
+landing-zone repos. If the token is missing or read-only, publication is
+skipped with a warning — notifications still send, linking to the Actions run.
+
+---
+
 ## Advanced: Custom Templates
 
 Adding a `template` opts the team out of the digest: the template renders
