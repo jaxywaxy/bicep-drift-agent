@@ -170,7 +170,10 @@ class RouterOwnerRoutingTests(unittest.TestCase):
         sent = []
         with mock.patch.object(router, "_send_to_slack", side_effect=lambda u, m: sent.append(m) or True):
             router.send_notifications(self.events, {"report_url": "r"})
-        self.assertEqual(len(sent), 2)  # both events, backward compatible
+        # One DIGEST message carrying both events (no per-event spam).
+        self.assertEqual(len(sent), 1)
+        self.assertIn("vnet", sent[0])
+        self.assertIn("app", sent[0])
 
 
 class WebhookSecretExpansionTests(unittest.TestCase):

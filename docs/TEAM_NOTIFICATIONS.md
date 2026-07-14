@@ -338,9 +338,31 @@ gh api repos/ORG/bicep-drift-agent/contents/.github/lz-index.yml
 
 ---
 
+## Message Format
+
+By default each team receives **one digest message per run** — the same
+one-liners as the GitHub Actions summary, plus a link to the run's report:
+
+```text
+⚠️ Bicep Drift Detected — 3 issue(s) (1 critical)
+• [DRIFT] Microsoft.ContainerRegistry/registries/acrtestdrift — 🚨 CRITICAL properties differ: properties.adminUserEnabled
+• [MISSING] Microsoft.Authorization/locks/keyvault-cannotdelete — in Bicep but not deployed
+• [EXTRA] Microsoft.Storage/storageAccounts/stunmanaged — deployed but not in Bicep
+Report: https://github.com/<org>/<repo>/actions/runs/<id>
+```
+
+At most 20 drift lines are listed; further drifts collapse into an
+"… and N more — see the report" pointer. Claude remediation recommendations
+are **never** sent to chat — they live in the HTML/JSON report the message
+links to.
+
+---
+
 ## Advanced: Custom Templates
 
-To use custom message templates, add `template` to notifications:
+Adding a `template` opts the team out of the digest: the template renders
+**once per drift event** (the historic behavior), so expect one message per
+drift:
 
 ```yaml
 notifications:

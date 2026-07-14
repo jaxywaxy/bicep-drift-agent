@@ -162,6 +162,38 @@ class MessageTemplate:
         return message
 
 
+# A digest lists at most this many drift lines; the rest collapse into a
+# "... and N more" pointer at the report.
+DIGEST_MAX_LINES = 20
+
+
+def build_digest(events: List[DriftEvent], context: Dict[str, str], platform: str = "slack") -> str:
+    """One channel message per run: GitHub-summary-style drift lines + report link.
+
+    Mirrors the CI job summary ([DRIFT]/[EXTRA]/[MISSING] one-liners) instead of
+    one message per drift carrying the full Claude recommendation - the channel
+    gets the what, the report gets the how.
+    """
+    bold = "*" if platform.lower() == "slack" else "**"
+    critical = sum(1 for e in events if (e.severity or "").lower() == "critical")
+    header = f":warning: {bold}Bicep Drift Detected{bold} — {len(events)} issue(s)"
+    if critical:
+        header += f" ({critical} critical)"
+
+    lines = []
+    for event in events[:DIGEST_MAX_LINES]:
+        line = f"• [{event.event_type}] {event.resource_type}/{event.resource_name}"
+        if event.details:
+            line += f" — {event.details.splitlines()[0]}"
+        lines.append(line)
+    if len(events) > DIGEST_MAX_LINES:
+        lines.append(f"… and {len(events) - DIGEST_MAX_LINES} more — see the report")
+
+    report_url = context.get("report_url", "")
+    footer = f"{bold}Report:{bold} {report_url}" if report_url else ""
+    return "\n".join(filter(None, [header, *lines, footer]))
+
+
 # Webhook URLs are bearer secrets (anyone holding one can post to the channel),
 # so LZ configs reference them as ${DRIFT_WEBHOOK_*} placeholders instead of
 # committing them in plaintext. Placeholders resolve from the environment, then
@@ -298,11 +330,13 @@ class NotificationRouter:
                 failed_teams.append(team_name)
             all_success = all_success and success
 
-        # Fallback to legacy webhooks if no team config
-        if not self.teams:
+        # Fallback to legacy webhooks if no team config. (These calls used to
+        # pass (url, event, context) into two-argument senders - a TypeError on
+        # any run that actually reached them - so the digest is also the fix.)
+        if not self.teams and events:
             if self.legacy_slack_url:
                 success = self._send_to_slack(
-                    self.legacy_slack_url, events[0] if events else None, context
+                    self.legacy_slack_url, build_digest(events, context, platform="slack")
                 )
                 if not success:
                     failed_teams.append("legacy-slack")
@@ -310,7 +344,7 @@ class NotificationRouter:
 
             if self.legacy_teams_url:
                 success = self._send_to_teams(
-                    self.legacy_teams_url, events[0] if events else None, context
+                    self.legacy_teams_url, build_digest(events, context, platform="teams")
                 )
                 if not success:
                     failed_teams.append("legacy-teams")
@@ -363,11 +397,19 @@ class NotificationRouter:
                 logger.warning(f"{team_name}: Teams webhook secret unresolved; cannot notify")
                 success = False
 
+        # Default: ONE digest message per channel per run (summary lines + report
+        # link). A team-configured custom template keeps the historic per-event
+        # rendering - it opted into its own format.
+
         # Send to Slack if configured
         if slack_url:
-            template = MessageTemplate(template_str, platform="slack")
-            for event in filtered_events:
-                message = template.render(self._event_context(context, event))
+            if template_str:
+                template = MessageTemplate(template_str, platform="slack")
+                for event in filtered_events:
+                    message = template.render(self._event_context(context, event))
+                    success = self._send_to_slack(slack_url, message) and success
+            else:
+                message = build_digest(filtered_events, context, platform="slack")
                 success = self._send_to_slack(slack_url, message) and success
             if success:
                 logger.info(f"{team_name}: Slack notification sent ({len(filtered_events)} event(s))")
@@ -376,9 +418,13 @@ class NotificationRouter:
 
         # Send to Teams if configured
         if teams_url:
-            template = MessageTemplate(template_str, platform="teams")
-            for event in filtered_events:
-                message = template.render(self._event_context(context, event))
+            if template_str:
+                template = MessageTemplate(template_str, platform="teams")
+                for event in filtered_events:
+                    message = template.render(self._event_context(context, event))
+                    success = self._send_to_teams(teams_url, message) and success
+            else:
+                message = build_digest(filtered_events, context, platform="teams")
                 success = self._send_to_teams(teams_url, message) and success
             if success:
                 logger.info(f"{team_name}: Teams notification sent ({len(filtered_events)} event(s))")
@@ -458,38 +504,6 @@ class NotificationRouter:
             return False
 
 
-def extract_recommendations_from_reports() -> Dict[str, str]:
-    """Extract recommendations from JSON drift reports in reports/ directory.
-
-    Returns:
-        Dict mapping "<type>/<name>" to that resource's recommendation string.
-    """
-    recommendations = {}
-    try:
-        import pathlib
-        reports_dir = pathlib.Path("reports")
-
-        if not reports_dir.exists():
-            return recommendations
-
-        for json_file in reports_dir.glob("*-drift.json"):
-            try:
-                with open(json_file, "r") as f:
-                    report = json.load(f)
-
-                for drift in report.get("drifts", []):
-                    resource_key = f"{drift.get('type', 'Unknown')}/{drift.get('name', 'Unknown')}"
-                    if "recommendation" in drift and drift["recommendation"]:
-                        recommendations[resource_key] = drift["recommendation"]
-            except Exception as e:
-                logger.warning(f"Could not read {json_file}: {e}", exc_info=True)
-
-    except Exception as e:
-        logger.warning(f"Error extracting recommendations: {e}", exc_info=True)
-
-    return recommendations
-
-
 def get_html_report_url() -> str:
     """Find the HTML report URL if available."""
     try:
@@ -567,9 +581,9 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
         details = "in Bicep but not deployed"
     else:
         details = ""
-    rec = drift.get("recommendation")
-    if rec:
-        details = f"{details}\n💡 {rec}" if details else f"💡 {rec}"
+    # Recommendations intentionally stay OUT of notification events: a full
+    # Claude remediation (markdown, code blocks, ~1KB+) per message made the
+    # channel unreadable. The report carries them; the message links to it.
     return DriftEvent(
         event_type=event_type,
         resource_type=drift.get("type", "Unknown"),
@@ -733,17 +747,10 @@ if __name__ == "__main__":
         logger.info("Parsing drift output (text)...")
         events = parse_drift_output(output_file)
 
-    logger.info("Extracting AI recommendations from reports...")
-    recommendations = extract_recommendations_from_reports()
+    # Recommendations deliberately do NOT go into chat messages (they made each
+    # Slack post ~1KB of markdown per drift) - the report carries them and the
+    # digest links to it.
     html_report_info = get_html_report_url()
-
-    # Enrich events with recommendations
-    if recommendations:
-        logger.info(f"Found {len(recommendations)} recommendation(s)")
-        for event in events:
-            resource_key = f"{event.resource_type}/{event.resource_name}"
-            if resource_key in recommendations:
-                event.details = f"{event.details}\n💡 Recommendation: {recommendations[resource_key]}"
 
     router = NotificationRouter()
 
@@ -760,8 +767,6 @@ if __name__ == "__main__":
 
     if events:
         logger.info(f"Sending notifications for {len(events)} event(s)...")
-        if recommendations:
-            logger.info(f"(including {len(recommendations)} AI-generated recommendations)")
         success = router.send_notifications(events, context)
         sys.exit(0 if success else 1)
     else:
