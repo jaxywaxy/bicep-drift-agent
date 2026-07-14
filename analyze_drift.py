@@ -687,13 +687,47 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
     return actionable
 
 
-def _generate_recommendations(agent, drifts_to_analyze: list) -> None:
+def _recommendation_priority(drift: dict) -> tuple:
+    """Sort key: worst property severity first, then drift-type weight.
+
+    Ensures that when the per-run recommendation cap bites, the Claude calls are
+    spent on critical property drift and deletions, not extras.
+    """
+    severity_rank = {"critical": 0, "warning": 1, "info": 2}
+    changed = (drift.get("details") or {}).get("changed_properties") or {}
+    worst = min(
+        (
+            severity_rank.get((change.get("severity") or "").lower(), 3)
+            for change in changed.values()
+            if isinstance(change, dict)
+        ),
+        default=3,
+    )
+    type_rank = {
+        "property_drift": 0,
+        "modified": 0,
+        "missing_in_azure": 1,
+        "extra_in_azure": 2,
+    }.get(drift.get("drift_type"), 3)
+    return (worst, type_rank)
+
+
+def _generate_recommendations(agent, drifts_to_analyze: list, live_resource_count: int = -1) -> None:
     """Generate a per-drift remediation recommendation via Claude (if available).
 
     Skips 'matched_unresolvable' entries: they are informational (a runtime-named
     resource reconciled to its live counterpart), not actionable drift, so a
     remediation recommendation is meaningless — and, at one Claude call each,
     these dominate the run's wall time.
+
+    Two guards bound the run's Claude spend (a scan of a deleted RG once made
+    54 calls / $0.88 / 7+ minutes for near-identical "redeploy" advice):
+    - Estate-level event: everything missing and live state empty means the RG
+      was deleted/emptied or state enumeration failed - one shared note, zero
+      per-drift calls; the analysis narrative carries the estate-level advice.
+    - DRIFT_MAX_RECOMMENDATIONS (default 15, <=0 for unlimited) caps calls,
+      prioritised by property severity then drift type; capped drifts get a
+      static note instead.
     """
     rec_targets = [
         d for d in drifts_to_analyze
@@ -701,33 +735,74 @@ def _generate_recommendations(agent, drifts_to_analyze: list) -> None:
     ]
     skipped_informational = len(drifts_to_analyze) - len(rec_targets)
 
-    if agent and rec_targets:
-        logger.info(f"Generating recommendations via Claude for {len(rec_targets)} actionable drift(s)...")
-        if skipped_informational:
-            logger.info(f"Skipping {skipped_informational} informational (matched_unresolvable) drift(s)")
-        recommendations_count = 0
-        for i, drift in enumerate(rec_targets, 1):
-            try:
-                drift_name = drift.get("name", "unknown")
-                logger.debug(f"[{i}/{len(rec_targets)}] {drift_name}...")
-
-                recommendation = agent.get_drift_recommendation(
-                    resource_type=drift.get("type", ""),
-                    resource_name=drift_name,
-                    drift_type=drift.get("drift_type", ""),
-                    details=drift.get("details"),
-                )
-
-                drift["recommendation"] = recommendation.strip() if recommendation else "No recommendation generated"
-                recommendations_count += 1
-
-            except Exception as e:
-                logger.warning(f"Failed to generate recommendation for {drift_name}: {str(e)[:50]}", exc_info=True)
-                drift["recommendation"] = f"Could not generate recommendation: {str(e)[:100]}"
-
-        logger.info(f"Generated recommendations for {recommendations_count}/{len(rec_targets)} drifts")
-    elif not agent:
+    if not agent:
         logger.info("Skipping Claude recommendations (no API key)")
+        return
+    if not rec_targets:
+        return
+
+    all_missing = all(d.get("drift_type") == "missing_in_azure" for d in rec_targets)
+    if all_missing and live_resource_count == 0 and len(rec_targets) > 1:
+        logger.warning(
+            f"All {len(rec_targets)} drift(s) are missing_in_azure and live state is empty - "
+            "resource group deleted/emptied, or live-state enumeration failed. "
+            "Skipping per-drift recommendations; see the analysis narrative."
+        )
+        estate_note = (
+            "Estate-level event: every declared resource is missing and live state "
+            "is empty. Verify the resource group / scope / credentials first "
+            "(`az group show`, `az resource list`); if the emptiness is real and "
+            "unintended, one deployment of the template restores the whole estate. "
+            "Per-resource recommendations were skipped - see the analysis summary."
+        )
+        for drift in rec_targets:
+            drift["recommendation"] = estate_note
+        return
+
+    try:
+        max_recs = int(os.environ.get("DRIFT_MAX_RECOMMENDATIONS", "15"))
+    except ValueError:
+        max_recs = 15
+    prioritized = sorted(rec_targets, key=_recommendation_priority)
+    if max_recs > 0 and len(prioritized) > max_recs:
+        claude_targets, capped = prioritized[:max_recs], prioritized[max_recs:]
+        logger.warning(
+            f"Capping Claude recommendations at {max_recs} of {len(prioritized)} drift(s) "
+            "(DRIFT_MAX_RECOMMENDATIONS); lower-priority drifts get a static note."
+        )
+        for drift in capped:
+            drift["recommendation"] = (
+                f"Recommendation generation capped at {max_recs} per run "
+                "(DRIFT_MAX_RECOMMENDATIONS). Reconcile by redeploying the Bicep "
+                "template, and see the analysis summary for estate-wide guidance."
+            )
+    else:
+        claude_targets = prioritized
+
+    logger.info(f"Generating recommendations via Claude for {len(claude_targets)} actionable drift(s)...")
+    if skipped_informational:
+        logger.info(f"Skipping {skipped_informational} informational (matched_unresolvable) drift(s)")
+    recommendations_count = 0
+    for i, drift in enumerate(claude_targets, 1):
+        try:
+            drift_name = drift.get("name", "unknown")
+            logger.debug(f"[{i}/{len(claude_targets)}] {drift_name}...")
+
+            recommendation = agent.get_drift_recommendation(
+                resource_type=drift.get("type", ""),
+                resource_name=drift_name,
+                drift_type=drift.get("drift_type", ""),
+                details=drift.get("details"),
+            )
+
+            drift["recommendation"] = recommendation.strip() if recommendation else "No recommendation generated"
+            recommendations_count += 1
+
+        except Exception as e:
+            logger.warning(f"Failed to generate recommendation for {drift_name}: {str(e)[:50]}", exc_info=True)
+            drift["recommendation"] = f"Could not generate recommendation: {str(e)[:100]}"
+
+    logger.info(f"Generated recommendations for {recommendations_count}/{len(claude_targets)} drifts")
 
 
 def _generate_html_report(report_label: str, resource_group: str, bicep_file: str) -> None:
@@ -830,7 +905,10 @@ def main():
         # so the CI summary matches the report and excludes policy-enforced changes.
         _print_drift_summary(report_data.get("drifts", []))
 
-        _generate_recommendations(agent, drifts_to_analyze)
+        _generate_recommendations(
+            agent, drifts_to_analyze,
+            live_resource_count=len(report_data.get("live_resources") or []),
+        )
 
         # Per-run cost telemetry: exact token usage (from each response's usage
         # block) and the estimated USD cost of this run's Claude calls. Stored
