@@ -522,6 +522,32 @@ def _run_claude_analysis(agent, report_data: dict):
         raise
 
 
+def _recover_deployed_name(resource_type: str, event_resource_id: str) -> str:
+    """Extract the real deployed name for resource_type from an activity-log id.
+
+    A deleted placeholder-named resource (log-[86c9cbf6]) has no live row to
+    read the real name from, but its activity-log delete event carries the true
+    Azure id (.../workspaces/log-3s7c7weddxr3s). Parse the provider section -
+    [namespace, type1, name1, type2, name2, ...] - verify the type chain
+    matches, and return the joined name segments ('parent/child' for children).
+    Returns "" when the id doesn't parse or is for a different type.
+    """
+    if not event_resource_id or not resource_type:
+        return ""
+    provider_tail = event_resource_id.split("/providers/")[-1].split("/")
+    type_segments = resource_type.split("/")  # [namespace, type1, type2, ...]
+    types_in_id = [s.lower() for s in provider_tail[1::2]]
+    names_in_id = provider_tail[2::2]
+    if (
+        len(provider_tail) < 3
+        or provider_tail[0].lower() != type_segments[0].lower()
+        or types_in_id != [s.lower() for s in type_segments[1:]]
+        or len(names_in_id) != len(types_in_id)
+    ):
+        return ""
+    return "/".join(names_in_id)
+
+
 def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
     """Phase 3/4: attribute each drift via the Activity Log, split out
     policy/system-enforced changes, and tag actionable drift with its owner.
@@ -567,6 +593,25 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
             # Narrow the RG-wide events down to the ONE operation that explains this
             # drift (delete for missing, write/update for modified).
             relevant_logs = select_relevant_activity(activity_logs, drift.get("drift_type", ""))
+
+            # A deleted placeholder-named resource reports its bicep expression
+            # ('log-[86c9cbf6]') because there is no live row to read the real
+            # name from - but the matched activity event carries the true Azure
+            # id. Recover it so the report, CI summary, and recommendation use
+            # the actual deployed name. Only relevant_logs are trusted: they are
+            # already narrowed to the operation explaining THIS drift, whereas
+            # the wider type-substring match could carry a sibling's events.
+            # Local import: smart_matching's name-form check, not a new dependency.
+            from tools.smart_matching import _has_unresolvable_expression
+            if relevant_logs and _has_unresolvable_expression(bicep_name):
+                for event in relevant_logs:
+                    real_name = _recover_deployed_name(resource_type, event.get("resource_id") or "")
+                    if real_name and real_name != bicep_name:
+                        drift["bicep_name_expression"] = bicep_name
+                        drift["name"] = real_name
+                        resource_id = event.get("resource_id")
+                        logger.info(f"  Resolved deployed name: {bicep_name} -> {real_name}")
+                        break
 
             lifecycle = build_resource_lifecycle(resource_id, relevant_logs)
             drift["lifecycle"] = lifecycle.to_dict()
