@@ -147,7 +147,8 @@ class PublishFlowTests(unittest.TestCase):
 
 
 class WorkloadLinkRoutingTests(unittest.TestCase):
-    """Workload-routed teams link to the LZ issue; platform teams keep the run."""
+    """Every team links to the LZ issue when one exists (it carries the run
+    link for platform folks); the Actions run is the fallback."""
 
     def _events(self):
         return [DriftEvent(event_type="MISSING", resource_type="Microsoft.Web/sites",
@@ -164,7 +165,7 @@ class WorkloadLinkRoutingTests(unittest.TestCase):
             router.send_notifications(self._events(), context)
         return dict(sent)
 
-    def test_workload_team_gets_issue_url_platform_gets_run_url(self):
+    def test_all_teams_get_issue_url_when_published(self):
         sent = self._sent(
             {"app-team": {"slack": "https://hooks/w", "owners": ["workload"]},
              "platform-team": {"slack": "https://hooks/p", "owners": ["platform"]}},
@@ -172,7 +173,7 @@ class WorkloadLinkRoutingTests(unittest.TestCase):
         )
         self.assertIn("https://gh/lz/issues/7", sent["https://hooks/w"])
         self.assertNotIn("https://gh/run/1", sent["https://hooks/w"])
-        self.assertIn("https://gh/run/1", sent["https://hooks/p"])
+        self.assertIn("https://gh/lz/issues/7", sent["https://hooks/p"])
 
     def test_no_issue_url_leaves_run_link(self):
         sent = self._sent(
@@ -181,12 +182,28 @@ class WorkloadLinkRoutingTests(unittest.TestCase):
         )
         self.assertIn("https://gh/run/1", sent["https://hooks/w"])
 
-    def test_unrouted_team_keeps_run_link(self):
+    def test_unrouted_team_gets_issue_link(self):
+        # The live case: the flat single-channel config (no owners key) must
+        # link to the issue too.
         sent = self._sent(
             {"everything": {"slack": "https://hooks/all"}},
             {"report_url": "https://gh/run/1", "issue_url": "https://gh/lz/issues/7"},
         )
-        self.assertIn("https://gh/run/1", sent["https://hooks/all"])
+        self.assertIn("https://gh/lz/issues/7", sent["https://hooks/all"])
+
+    def test_custom_template_can_use_run_url(self):
+        with mock.patch.dict(os.environ, {"DRIFT_NOTIFICATIONS": json.dumps(
+            {"t": {"slack": "https://hooks/t",
+                   "template": "{{ report_url }} | {{ run_url }}"}}
+        )}, clear=False):
+            router = NotificationRouter()
+        sent = []
+        with mock.patch.object(router, "_send_to_slack",
+                               side_effect=lambda u, m: sent.append(m) or True):
+            router.send_notifications(self._events()[:1],
+                                      {"report_url": "https://gh/run/1",
+                                       "issue_url": "https://gh/lz/issues/7"})
+        self.assertEqual(sent[0], "https://gh/lz/issues/7 | https://gh/run/1")
 
 
 if __name__ == "__main__":

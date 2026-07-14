@@ -371,10 +371,12 @@ already read:
   one-liners as the digest, per resource group, plus the full per-resource
   recommendations in collapsible sections.
 - **Scan clean** → the open issue is closed with a "✅ Drift resolved" comment.
-- Teams routed with `owners: [workload]` get the **issue URL** as their
-  `{{ report_url }}`; platform/unrouted teams keep the Actions-run link (full
-  artifacts). The raw issue link is also available as `{{ issue_url }}` in
-  custom templates.
+- When an issue was published, **every team's** `{{ report_url }}` is the
+  issue link — workload teams can't read the drift-agent repo, and the issue
+  body carries the workflow-run link so platform teams are one click from the
+  full artifacts. Without an issue (e.g. missing token), the link falls back
+  to the Actions run. Custom templates get both: `{{ issue_url }}` and
+  `{{ run_url }}`.
 
 **Token requirement:** issue publication uses `BICEP_REPO_TOKEN` (the same
 secret used to fetch LZ repos), which must have **`issues: write`** on the
