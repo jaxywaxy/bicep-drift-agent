@@ -388,11 +388,31 @@ jobs:
           fetch-depth: 1
           token: ${{ secrets.BICEP_REPO_TOKEN || github.token }}
 
+      - name: Publish drift issue to landing-zone repo
+        id: lz_issue
+        if: always()
+        env:
+          # Needs issues:write on the LZ repo. Falls back to github.token
+          # (works only when the LZ config lives in THIS repo); a missing or
+          # under-scoped token skips publication with a warning - never fails.
+          DRIFT_ISSUE_TOKEN: ${{ secrets.BICEP_REPO_TOKEN || github.token }}
+          PYTHONUNBUFFERED: '1'
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Reports (*-drift.json) were downloaded into the workspace root.
+          python3 tools/publish_lz_issue.py . \
+            "${{ needs.load-config.outputs.lz-repo }}" \
+            "${{ needs.load-config.outputs.lz-name }}" \
+            "$RUN_URL"
+
       - name: Send consolidated notifications
         if: always()
         env:
           CONFIG_PATH: ${{ needs.load-config.outputs.lz-config-path }}
           LZ_NAME: ${{ needs.load-config.outputs.lz-name }}
+          # Workload-routed teams link here instead of the Actions run (which
+          # needs drift-agent repo read access they typically don't have).
+          DRIFT_ISSUE_URL: ${{ steps.lz_issue.outputs.issue_url }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           # Full secrets context for ${DRIFT_WEBHOOK_*} placeholder expansion in

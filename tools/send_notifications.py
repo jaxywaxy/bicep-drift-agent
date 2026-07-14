@@ -403,6 +403,15 @@ class NotificationRouter:
                 logger.warning(f"{team_name}: Teams webhook secret unresolved; cannot notify")
                 success = False
 
+        # Workload teams usually cannot read the drift-agent repo, so the
+        # Actions-run link is a 404 for them. When the run published a drift
+        # issue in the LZ repo (which workload teams CAN read), teams routed to
+        # workload owners link there instead; platform/unrouted teams keep the
+        # Actions run (full artifacts).
+        issue_url = context.get("issue_url", "")
+        if issue_url and owner_filter.owners and "workload" in owner_filter.owners:
+            context = {**context, "report_url": issue_url}
+
         # Default: ONE digest message per channel per run (summary lines + report
         # link). A team-configured custom template keeps the historic per-event
         # rendering - it opted into its own format.
@@ -762,6 +771,9 @@ if __name__ == "__main__":
 
     context = {
         "report_url": report_url,
+        # Set when the run published a drift issue in the LZ repo; teams routed
+        # to workload owners get this as their report link (see _send_to_team).
+        "issue_url": os.environ.get("DRIFT_ISSUE_URL", "").strip(),
         "total_events": str(len(events)),
         "drift_count": str(len([e for e in events if e.event_type == "DRIFT"])),
         "extra_count": str(len([e for e in events if e.event_type == "EXTRA"])),
