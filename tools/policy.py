@@ -66,43 +66,54 @@ def fetch_policy_resources(
     Scope filtering matches RBAC's: an RG scan owns assignments AT/under the
     RG (inherited sub/MG-level assignments belong to broader scans); a
     subscription scan owns sub-level ones plus selector-matched RGs.
-    Fail-soft: errors return ([], []) with a warning.
+
+    A failed fetch RAISES after one retry. It must not fail-soft to ([], []):
+    an empty result is indistinguishable from "no live assignments", and the
+    caller would compare the template against it and fabricate missing_in_azure
+    for every declared assignment (seen live: one transient connection reset ->
+    false 'policy assignment missing' finding). The caller catches and skips
+    the policy check entirely.
     """
+    from azure.identity import DefaultAzureCredential
+    from azure.mgmt.resourcegraph import ResourceGraphClient
+    from azure.mgmt.resourcegraph.models import QueryRequest
+
+    credential = credential or DefaultAzureCredential()
+    client = ResourceGraphClient(credential)
+
+    def _query(kql: str) -> List[Dict]:
+        rows: List[Dict] = []
+        skip_token = None
+        while True:
+            request = QueryRequest(
+                subscriptions=[subscription_id],
+                query=kql,
+                options={"skip_token": skip_token} if skip_token else None,
+            )
+            response = client.resources(request)
+            rows.extend(response.data or [])
+            skip_token = getattr(response, "skip_token", None)
+            if not skip_token:
+                break
+        return rows
+
+    def _fetch_raw() -> Tuple[List[Dict], List[Dict]]:
+        return (
+            _query(
+                "policyresources"
+                " | where type =~ 'microsoft.authorization/policyassignments'"
+            ),
+            _query(
+                "policyresources"
+                " | where type =~ 'microsoft.authorization/policyexemptions'"
+            ),
+        )
+
     try:
-        from azure.identity import DefaultAzureCredential
-        from azure.mgmt.resourcegraph import ResourceGraphClient
-        from azure.mgmt.resourcegraph.models import QueryRequest
-
-        credential = credential or DefaultAzureCredential()
-        client = ResourceGraphClient(credential)
-
-        def _query(kql: str) -> List[Dict]:
-            rows: List[Dict] = []
-            skip_token = None
-            while True:
-                request = QueryRequest(
-                    subscriptions=[subscription_id],
-                    query=kql,
-                    options={"skip_token": skip_token} if skip_token else None,
-                )
-                response = client.resources(request)
-                rows.extend(response.data or [])
-                skip_token = getattr(response, "skip_token", None)
-                if not skip_token:
-                    break
-            return rows
-
-        raw_assignments = _query(
-            "policyresources"
-            " | where type =~ 'microsoft.authorization/policyassignments'"
-        )
-        raw_exemptions = _query(
-            "policyresources"
-            " | where type =~ 'microsoft.authorization/policyexemptions'"
-        )
+        raw_assignments, raw_exemptions = _fetch_raw()
     except Exception as e:
-        logger.warning(f"Could not fetch policy resources (skipping policy drift): {e}")
-        return [], []
+        logger.warning(f"Policy resource fetch failed ({e}); retrying once...")
+        raw_assignments, raw_exemptions = _fetch_raw()
 
     def _shape(row: Dict) -> Dict:
         props = row.get("properties", {}) or {}

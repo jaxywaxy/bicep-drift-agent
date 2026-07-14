@@ -508,6 +508,11 @@ class PropertyComparator:
         "properties.enablesoftdelete",
         # AI content filters - loosening one is a governance event
         "properties.contentfilters",
+        # Network security: NSG rule tampering (an out-of-band allow-any
+        # inbound rule) and route changes (next hop flipped off the firewall
+        # appliance = inspection bypass) are the classic unauthorized changes.
+        "properties.securityrules",
+        "properties.routes",
         # Application Gateway / WAF security posture: WAF mode flip
         # (Prevention->Detection), disabling the WAF, or weakening the min TLS
         # version are all security-critical.
