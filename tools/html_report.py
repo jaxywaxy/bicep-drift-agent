@@ -4,6 +4,8 @@ Generate HTML reports from drift analysis results.
 
 import json
 import html
+
+import markdown
 import logging
 from pathlib import Path
 from datetime import datetime
@@ -359,68 +361,11 @@ _REPORT_CSS = """            * {
                 line-height: 1.4;
             }
 
-            .recommendation-item {
-                background: #f0f7ff;
-                border: 1px solid #e0e7ff;
-                border-left: 4px solid #0066cc;
-                border-radius: 6px;
-                padding: 18px;
-                margin-bottom: 18px;
-                display: flex;
-                flex-direction: column;
-            }
 
-            .recommendation-header {
-                display: flex;
-                gap: 12px;
-                align-items: flex-start;
-                margin-bottom: 12px;
-                font-weight: 600;
-                color: #333;
-                flex-wrap: wrap;
-                word-break: break-word;
-            }
 
-            .recommendation-header strong {
-                flex: 1;
-                min-width: 200px;
-                word-break: break-word;
-            }
 
-            .recommendation-number {
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 28px;
-                height: 28px;
-                background: #0066cc;
-                color: white;
-                border-radius: 50%;
-                font-size: 12px;
-                font-weight: 700;
-                flex-shrink: 0;
-            }
 
-            .recommendation-resource {
-                font-size: 12px;
-                color: #666;
-                margin-bottom: 8px;
-                font-family: monospace;
-            }
 
-            .recommendation-text {
-                background: white;
-                padding: 14px;
-                border-radius: 4px;
-                line-height: 1.8;
-                color: #333;
-                font-size: 14px;
-                word-break: break-word;
-                overflow-wrap: break-word;
-                white-space: normal;
-                max-width: 100%;
-                overflow: visible;
-            }
 
             .matched-item {
                 background: #f0f9ff;
@@ -534,6 +479,40 @@ _REPORT_CSS = """            * {
                 margin-bottom: 4px;
             }
 
+            .section.agent-analysis {
+                background: linear-gradient(135deg, #f0f7ff 0%, #ffffff 100%);
+                border-left: 4px solid #0066cc;
+            }
+
+            .analysis-content {
+                background: white;
+                padding: 16px;
+                border-radius: 6px;
+                line-height: 1.8;
+                margin-top: 12px;
+            }
+
+            .analysis-content p { margin-bottom: 12px; color: #333; }
+            .analysis-content h1 { font-size: 20px; margin: 4px 0 10px; }
+            .analysis-content h2 {
+                font-size: 18px; font-weight: 600; color: #333;
+                margin-top: 16px; margin-bottom: 8px; border: none; padding-bottom: 0;
+            }
+            .analysis-content h3 { font-size: 16px; font-weight: 600; color: #555; margin: 14px 0 8px; }
+            .analysis-content h4 { font-size: 14px; font-weight: 600; color: #666; margin: 12px 0 6px; }
+            .analysis-content strong { color: #0066cc; font-weight: 700; }
+            .analysis-content ul, .analysis-content ol { margin: 0 0 12px 22px; }
+            .analysis-content li { margin-bottom: 6px; }
+            .analysis-content code {
+                background: #f5f5f5; padding: 2px 6px; border-radius: 3px;
+                font-family: monospace; color: #d73a49; word-break: break-word;
+            }
+            .analysis-content pre { margin-bottom: 12px; }
+            .analysis-content pre code { background: none; color: inherit; padding: 0; }
+            .analysis-content table { margin: 8px 0 14px; font-size: 13px; }
+            .analysis-content th, .analysis-content td { padding: 8px 10px; }
+            .analysis-content hr { border: none; border-top: 1px solid #e9ecef; margin: 16px 0; }
+
             footer {
                 text-align: center;
                 padding: 20px;
@@ -566,27 +545,9 @@ _REPORT_CSS = """            * {
                     font-size: 10px;
                 }
 
-                .recommendation-item {
-                    padding: 12px;
-                    margin-bottom: 12px;
-                }
 
-                .recommendation-header {
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: 8px;
-                }
 
-                .recommendation-text {
-                    padding: 10px;
-                    font-size: 13px;
-                }
 
-                .recommendation-number {
-                    width: 24px;
-                    height: 24px;
-                    font-size: 10px;
-                }
             }"""
 
 
@@ -622,6 +583,9 @@ def generate_html_report(
     # including them here painted empty 'Modified {}' rows in the drift table and
     # inflated the totals/status.
     drifts = [d for d in data.get("drifts", []) if d.get("drift_type") != "matched_unresolvable"]
+    # The consolidated remediation narrative (one Claude call for the whole
+    # estate) - it replaced the per-drift recommendation cards.
+    agent_analysis = data.get("agent_analysis")
     total = len(drifts)
     missing = len([d for d in drifts if "missing" in d["drift_type"]])
     extra = len([d for d in drifts if "extra" in d["drift_type"]])
@@ -640,7 +604,6 @@ def generate_html_report(
 
     # Generate drift rows and recommendations
     drift_rows = ""
-    recommendations_html = ""
 
     for i, drift in enumerate(drifts, 1):
         drift_type = drift["drift_type"]
@@ -676,25 +639,6 @@ def generate_html_report(
         </tr>
         """
 
-        # Build recommendations section
-        recommendation = drift.get("recommendation", "")
-        if recommendation:
-            # Process recommendation text to handle long strings better
-            # Replace newlines with <br> for proper display, escape HTML first
-            rec_text = html.escape(recommendation)
-            rec_text = rec_text.replace('\n', '<br>')
-
-            recommendations_html += f"""
-        <div class="recommendation-item">
-            <div class="recommendation-header">
-                <span class="recommendation-number">#{i}</span>
-                <strong>{html.escape(drift['name'])}</strong>
-                {type_badge}
-            </div>
-            <div class="recommendation-resource">{html.escape(drift['type'])}</div>
-            <div class="recommendation-text">{rec_text}</div>
-        </div>
-        """
 
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -757,7 +701,7 @@ def generate_html_report(
                 {_render_drift_section(total, drift_rows)}
             </div>
 
-            {_render_recommendations_section(total, recommendations_html)}
+            {_render_agent_analysis_section(agent_analysis)}
 
             {_render_policy_enforced_section(data)}
 
@@ -1194,42 +1138,34 @@ def _render_smart_matched_section(data: dict) -> str:
             """
 
 
-def _render_recommendations_section(total: int, recommendations_html: str) -> str:
-    """Render recommendations section HTML."""
-    if total == 0 or not recommendations_html.strip():
+def _render_agent_analysis_section(agent_analysis: str) -> str:
+    """Render the consolidated remediation analysis (Claude's single narrative).
+
+    This replaced the per-drift recommendation cards. The narrative is ONE call
+    that sees every drift at once, so it can order the work, flag "investigate
+    before you overwrite this", and recommend a what-if first - none of which N
+    isolated per-resource calls could do (all five in a real 5-drift run
+    independently said "redeploy the Bicep template" and none mentioned
+    what-if). It also costs O(1) instead of O(N).
+
+    Rendered via markdown (the narrative uses tables, lists and inline code).
+    The text is HTML-ESCAPED FIRST: it is model output that quotes live
+    resource names, so a name like '<script>' must never become markup.
+    Escaping cannot break the markdown, which uses #, *, |, - and `.
+    """
+    if not agent_analysis:
         return ""
 
+    analysis_html = markdown.markdown(
+        html.escape(agent_analysis),
+        extensions=["tables", "fenced_code", "sane_lists"],
+    )
     return f"""
-            <div class="section">
-                <h2>💡 Remediation Recommendations</h2>
-                <p>Claude AI has generated the following recommendations to resolve each drift:</p>
-                <div style="margin-top: 16px;">
-                    {recommendations_html}
+            <div class="section agent-analysis">
+                <h2>🛠️ Remediation Analysis</h2>
+                <p>Claude's analysis of the drift, its likely cause, and the order to fix it in:</p>
+                <div class="analysis-content">
+                    {analysis_html}
                 </div>
             </div>
             """
-
-
-if __name__ == "__main__":
-    import sys
-    try:
-        from .logger import setup_logging
-    except ImportError:
-        # When run as standalone script, add parent directory to path
-        sys.path.insert(0, str(Path(__file__).parent))
-        from logger import setup_logging
-
-    setup_logging(level="INFO")
-
-    if len(sys.argv) < 3:
-        logger.error("Usage: python -m tools.html_report <drift-json> <output-html>")
-        sys.exit(1)
-
-    json_file = Path(sys.argv[1])
-    html_file = Path(sys.argv[2])
-
-    if not json_file.exists():
-        logger.error(f"{json_file} not found")
-        sys.exit(1)
-
-    generate_html_report(json_file, html_file, "resource-group", "main.bicep")
