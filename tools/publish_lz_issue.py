@@ -31,9 +31,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from .send_notifications import events_from_report, DriftEvent  # noqa: F401
+    from .send_notifications import events_from_report
 except ImportError:
-    from send_notifications import events_from_report, DriftEvent  # noqa: F401
+    from send_notifications import events_from_report
 
 logger = logging.getLogger(__name__)
 
