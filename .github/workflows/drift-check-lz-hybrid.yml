@@ -270,28 +270,17 @@ jobs:
             echo "" >> "$DRIFT_FILE"
           done
 
-          # Count issues (handle empty file gracefully)
-          if [ -f "$DRIFT_FILE" ]; then
-            DRIFT_COUNT=$(grep -c "^\[DRIFT\]" "$DRIFT_FILE" 2>/dev/null || true)
-            EXTRA_COUNT=$(grep -c "^\[EXTRA\]" "$DRIFT_FILE" 2>/dev/null || true)
-            MISSING_COUNT=$(grep -c "^\[MISSING\]" "$DRIFT_FILE" 2>/dev/null || true)
-            DRIFT_COUNT=${DRIFT_COUNT:-0}
-            EXTRA_COUNT=${EXTRA_COUNT:-0}
-            MISSING_COUNT=${MISSING_COUNT:-0}
-          else
-            DRIFT_COUNT=0
-            EXTRA_COUNT=0
-            MISSING_COUNT=0
-          fi
-
-          TOTAL_ISSUES=$((DRIFT_COUNT + EXTRA_COUNT + MISSING_COUNT))
-
-          echo "drift_count=$DRIFT_COUNT" >> $GITHUB_OUTPUT
-          echo "extra_count=$EXTRA_COUNT" >> $GITHUB_OUTPUT
-          echo "missing_count=$MISSING_COUNT" >> $GITHUB_OUTPUT
-          echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
-
-          echo "Results: $DRIFT_COUNT drift(s), $EXTRA_COUNT extra, $MISSING_COUNT missing"
+          # Count issues from the JSON reports, NOT by grepping the log above.
+          # The log is the run's only diagnostic record (stdout/stderr are
+          # redirected into it) but it is a terrible source of truth: grepping
+          # it for "^[DRIFT]" ties the headline number to log formatting and
+          # cannot tell "no drift" from "no report". It failed exactly that way
+          # in production - a Claude credit error aborted Phase 2 before the
+          # summary printed, so grep returned 0 while the report held 37
+          # actionable drifts. count_drifts.py reads the same JSON the report
+          # and notifications use, and FAILS if no report exists.
+          # (This job checks the agent out under drift-tools/, hence the path.)
+          python3 drift-tools/tools/count_drifts.py drift-tools/reports
 
       - name: Prepare reports for upload
         if: always()
@@ -353,32 +342,14 @@ jobs:
             [ -f "$file" ] && echo "" >> consolidated_drift_report.txt
           done
 
-          # Count totals (handle empty file and grep edge cases)
-          if [ -f consolidated_drift_report.txt ] && [ -s consolidated_drift_report.txt ]; then
-            TOTAL_DRIFT=$(grep -c "^\[DRIFT\]" consolidated_drift_report.txt 2>/dev/null || true)
-            TOTAL_EXTRA=$(grep -c "^\[EXTRA\]" consolidated_drift_report.txt 2>/dev/null || true)
-            TOTAL_MISSING=$(grep -c "^\[MISSING\]" consolidated_drift_report.txt 2>/dev/null || true)
-            TOTAL_DRIFT=${TOTAL_DRIFT:-0}
-            TOTAL_EXTRA=${TOTAL_EXTRA:-0}
-            TOTAL_MISSING=${TOTAL_MISSING:-0}
-          else
-            TOTAL_DRIFT=0
-            TOTAL_EXTRA=0
-            TOTAL_MISSING=0
-          fi
-
-          TOTAL_ISSUES=$((TOTAL_DRIFT + TOTAL_EXTRA + TOTAL_MISSING))
-
-          echo "total_issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
-          echo "total_drift=$TOTAL_DRIFT" >> $GITHUB_OUTPUT
-          echo "total_extra=$TOTAL_EXTRA" >> $GITHUB_OUTPUT
-          echo "total_missing=$TOTAL_MISSING" >> $GITHUB_OUTPUT
-
-          echo "✓ Consolidated Results:"
-          echo "  - DRIFT (configuration changes): $TOTAL_DRIFT"
-          echo "  - EXTRA (orphaned resources): $TOTAL_EXTRA"
-          echo "  - MISSING (undeployed resources): $TOTAL_MISSING"
-          echo "  - TOTAL ISSUES: $TOTAL_ISSUES"
+          # Totals come from the JSON reports (downloaded into the workspace
+          # root by the artifact step), not from grepping the concatenated log.
+          # The log stays for diagnosis; it is not a source of truth. See
+          # tools/count_drifts.py.
+          # Emits drift_count / extra_count / missing_count / total_issues -
+          # the SAME keys as the per-check step (this step used to emit
+          # total_drift/total_extra/total_missing for the identical facts).
+          python3 tools/count_drifts.py .
 
       - name: Checkout external repo for notifications config
         uses: actions/checkout@v7
@@ -477,9 +448,9 @@ jobs:
         run: |
           LZ="${{ needs.load-config.outputs.lz-name }}"
           TOTAL="${{ steps.consolidate.outputs.total_issues }}"
-          DRIFT="${{ steps.consolidate.outputs.total_drift }}"
-          EXTRA="${{ steps.consolidate.outputs.total_extra }}"
-          MISSING="${{ steps.consolidate.outputs.total_missing }}"
+          DRIFT="${{ steps.consolidate.outputs.drift_count }}"
+          EXTRA="${{ steps.consolidate.outputs.extra_count }}"
+          MISSING="${{ steps.consolidate.outputs.missing_count }}"
 
           {
             echo "## 🏗️ Landing Zone: $LZ"
