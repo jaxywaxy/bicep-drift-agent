@@ -154,6 +154,11 @@ def _find_best_match(bicep_resource: Dict, candidates: List[Dict]) -> Dict:
     """
     Find the best matching Azure resource from candidates.
 
+    Returns None when no candidate is a credible match. A WRONG match is far
+    worse than none: it fabricates property drift against an unrelated resource
+    AND orphans the real one (which then false-flags extra/missing). Seen live:
+    a function app's 'format(...)/appsettings' matched 'app-test-drift/web'.
+
     Uses heuristics like creation time, naming conventions, etc.
     """
     if not candidates:
@@ -165,6 +170,21 @@ def _find_best_match(bicep_resource: Dict, candidates: List[Dict]) -> Dict:
     # storage from a 'logging' one ('jacquidevstl') when several of the same type
     # exist. Longest-common-prefix is robust to the glued-on function tokens.
     bicep_name = (bicep_resource.get('name') or '').lower()
+
+    # 'parent/child' names: the CHILD LEAF is the resource's identity, so it must
+    # correspond exactly - an 'appsettings' config is never a 'web' config, no
+    # matter how the (possibly unresolved) parent segment scores. Mirrors the
+    # sibling guard in property_drift._match_by_fuzzy_tokens. Parent segments are
+    # deliberately NOT compared: they are frequently unresolved expressions.
+    if "/" in bicep_name:
+        leaf = bicep_name.rsplit("/", 1)[1]
+        candidates = [
+            c for c in candidates
+            if "/" in (c.get('name') or '')
+            and (c.get('name') or '').lower().rsplit("/", 1)[1] == leaf
+        ]
+        if not candidates:
+            return None
 
     def _common_prefix_len(a: str, b: str) -> int:
         n = 0
@@ -185,16 +205,26 @@ def _find_best_match(bicep_resource: Dict, candidates: List[Dict]) -> Dict:
     # Prefix + suffix: a child name like 'sqldrift[86c9cbf6]/driftdb' shares
     # the same prefix with every sibling of the same server ('.../driftdb' and
     # '.../master'); the literal CHILD segment at the end disambiguates.
-    best, best_score, best_len = None, -1, 0
+    best, best_prefix, best_suffix, best_score = None, 0, 0, -1
     for c in candidates:
         cname = (c.get('name') or '').lower()
         p = _common_prefix_len(bicep_name, cname)
         s = _common_suffix_len(bicep_name, cname)
         if p + s > best_score:
-            best_score, best_len, best = p + s, p, c
+            best_score, best_prefix, best_suffix, best = p + s, p, s, c
 
-    # Require a meaningful shared prefix; otherwise fall back to the first.
-    return best if best_len >= 3 else candidates[0]
+    # Accept on the SAME signal the winner was selected with (prefix OR suffix).
+    # Validating on the PREFIX alone discarded correct winners whose bicep name
+    # leads with an unresolved expression - "format('func-drift-{0}', ...)"
+    # shares only 'f' with 'func-drift-<hash>', so the real match was thrown away
+    # and candidates[0] returned instead (live: matched 'app-test-drift/web').
+    if len(candidates) == 1 or best_prefix >= 3 or best_suffix >= 3:
+        return best if best is not None else candidates[0]
+
+    # No signal at all (a fully unresolved name expression, e.g. two storage
+    # accounts sharing "toLower(format('{0}st{1}', ...))"): pair in order. Each
+    # match consumes its candidate, so N bicep <-> N live still pair up 1:1.
+    return candidates[0]
 
 
 def annotate_drifts_with_matches(
