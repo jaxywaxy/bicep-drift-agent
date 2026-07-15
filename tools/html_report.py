@@ -21,6 +21,575 @@ def _esc(value) -> str:
     return html.escape(str(value))
 
 
+# Report stylesheet. Extracted from the html_content f-string: the CSS is
+# fully static, and living inside an f-string forced every one of its 168
+# braces to be doubled ({{ / }}), so it could not be read, linted, or pasted
+# into a browser as real CSS. Kept as a plain (non-f) string - interpolated
+# once into the template - so the braces are literal again.
+_REPORT_CSS = """            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+                background: #f5f5f5;
+                color: #333;
+                line-height: 1.6;
+            }
+
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+
+            header {
+                background: white;
+                padding: 30px 20px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+
+            header h1 {
+                font-size: 28px;
+                margin-bottom: 10px;
+            }
+
+            .status {
+                display: inline-block;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-weight: 600;
+                margin-bottom: 15px;
+            }
+
+            .status.success {
+                background: #d4edda;
+                color: #155724;
+            }
+
+            .status.warning {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            .meta {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+                margin-top: 15px;
+                font-size: 14px;
+            }
+
+            .meta-item {
+                background: #f8f9fa;
+                padding: 10px;
+                border-radius: 4px;
+                border-left: 3px solid #0066cc;
+            }
+
+            .meta-label {
+                font-weight: 600;
+                color: #555;
+            }
+
+            .meta-value {
+                color: #333;
+                margin-top: 5px;
+                word-break: break-all;
+            }
+
+            .metrics {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+
+            .metric-card {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                text-align: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+
+            .metric-card.total {
+                border-top: 4px solid #ff9800;
+            }
+
+            .metric-card.missing {
+                border-top: 4px solid #f44336;
+            }
+
+            .metric-card.extra {
+                border-top: 4px solid #2196f3;
+            }
+
+            .metric-card.modified {
+                border-top: 4px solid #ff9800;
+            }
+
+            .metric-number {
+                font-size: 32px;
+                font-weight: 700;
+                margin: 10px 0;
+                color: #333;
+            }
+
+            .metric-label {
+                font-size: 12px;
+                color: #666;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .section {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+
+            .section h2 {
+                font-size: 20px;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 2px solid #f0f0f0;
+            }
+
+            .no-drift {
+                text-align: center;
+                padding: 40px 20px;
+                color: #666;
+            }
+
+            .no-drift svg {
+                width: 64px;
+                height: 64px;
+                margin-bottom: 15px;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+            }
+
+            th {
+                background: #f8f9fa;
+                padding: 12px;
+                text-align: left;
+                font-weight: 600;
+                color: #333;
+                border-bottom: 2px solid #e9ecef;
+                word-break: break-word;
+            }
+
+            td {
+                padding: 12px;
+                border-bottom: 1px solid #e9ecef;
+                word-break: break-word;
+                white-space: normal;
+                overflow-wrap: break-word;
+            }
+
+            td code {
+                word-break: break-all;
+                display: block;
+            }
+
+            tr:hover {
+                background: #f8f9fa;
+            }
+
+            .badge {
+                display: inline-block;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 12px;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+
+            .badge.missing {
+                background: #ffebee;
+                color: #c62828;
+            }
+
+            .badge.extra {
+                background: #e3f2fd;
+                color: #1565c0;
+            }
+
+            .badge.modified {
+                background: #fff3e0;
+                color: #e65100;
+            }
+
+            .badge.origin-policy {
+                background: #e8f5e9;
+                color: #2e7d32;
+                border: 1px solid #81c784;
+            }
+
+            .badge.origin-system {
+                background: #e8f5e9;
+                color: #2e7d32;
+                border: 1px solid #81c784;
+            }
+
+            .badge.origin-manual {
+                background: #ffebee;
+                color: #c62828;
+                border: 1px solid #ef5350;
+            }
+
+            .badge.origin-unknown {
+                background: #f5f5f5;
+                color: #666;
+                border: 1px solid #ccc;
+            }
+
+            .lifecycle-timeline {
+                margin-top: 15px;
+                padding: 12px;
+                background: #fafafa;
+                border-left: 4px solid #1976d2;
+                border-radius: 4px;
+                font-size: 13px;
+            }
+
+            .lifecycle-header {
+                margin-bottom: 10px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #ddd;
+                font-weight: bold;
+            }
+
+            .lifecycle-event {
+                margin-bottom: 10px;
+                padding: 8px;
+                background: white;
+                border-left: 3px solid #999;
+                display: flex;
+                gap: 12px;
+                align-items: flex-start;
+                flex-wrap: wrap;
+            }
+
+            .lifecycle-event.timeline-create {
+                border-left-color: #4caf50;
+                background: #f1f8e9;
+            }
+
+            .lifecycle-event.timeline-delete {
+                border-left-color: #f44336;
+                background: #ffebee;
+            }
+
+            .lifecycle-event.timeline-modify {
+                border-left-color: #ff9800;
+                background: #fff3e0;
+            }
+
+            .timeline-event-time {
+                font-weight: bold;
+                color: #1976d2;
+                min-width: 80px;
+            }
+
+            .timeline-event-op {
+                background: #e0e0e0;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-weight: bold;
+                font-size: 11px;
+                text-transform: uppercase;
+                min-width: 60px;
+                text-align: center;
+            }
+
+            .timeline-event-actor {
+                color: #555;
+                font-family: monospace;
+                font-size: 12px;
+                flex: 1;
+                min-width: 150px;
+            }
+
+            .timeline-event-method {
+                color: #888;
+                font-size: 12px;
+            }
+
+            .timeline-event-reason {
+                width: 100%;
+                color: #666;
+                padding-top: 4px;
+                border-top: 1px solid #eee;
+                font-style: italic;
+            }
+
+            .lifecycle-deleted {
+                margin-top: 10px;
+                padding: 10px;
+                background: #ffebee;
+                border: 1px solid #f44336;
+                border-radius: 4px;
+                color: #c62828;
+            }
+
+            .lifecycle-empty {
+                padding: 10px;
+                color: #999;
+                font-style: italic;
+            }
+
+            pre {
+                background: #f5f5f5;
+                padding: 10px;
+                border-radius: 4px;
+                overflow-x: auto;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+
+            .recommendation-item {
+                background: #f0f7ff;
+                border: 1px solid #e0e7ff;
+                border-left: 4px solid #0066cc;
+                border-radius: 6px;
+                padding: 18px;
+                margin-bottom: 18px;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .recommendation-header {
+                display: flex;
+                gap: 12px;
+                align-items: flex-start;
+                margin-bottom: 12px;
+                font-weight: 600;
+                color: #333;
+                flex-wrap: wrap;
+                word-break: break-word;
+            }
+
+            .recommendation-header strong {
+                flex: 1;
+                min-width: 200px;
+                word-break: break-word;
+            }
+
+            .recommendation-number {
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                width: 28px;
+                height: 28px;
+                background: #0066cc;
+                color: white;
+                border-radius: 50%;
+                font-size: 12px;
+                font-weight: 700;
+                flex-shrink: 0;
+            }
+
+            .recommendation-resource {
+                font-size: 12px;
+                color: #666;
+                margin-bottom: 8px;
+                font-family: monospace;
+            }
+
+            .recommendation-text {
+                background: white;
+                padding: 14px;
+                border-radius: 4px;
+                line-height: 1.8;
+                color: #333;
+                font-size: 14px;
+                word-break: break-word;
+                overflow-wrap: break-word;
+                white-space: normal;
+                max-width: 100%;
+                overflow: visible;
+            }
+
+            .matched-item {
+                background: #f0f9ff;
+                border: 1px solid #bfe7f5;
+                border-left: 4px solid #0284c7;
+                border-radius: 6px;
+                padding: 16px;
+                margin-bottom: 16px;
+            }
+
+            .matched-header {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+                margin-bottom: 12px;
+                font-weight: 600;
+                color: #333;
+            }
+
+            .matched-badge {
+                display: inline-block;
+                padding: 4px 8px;
+                background: #0284c7;
+                color: white;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+            }
+
+            .matched-details {
+                background: white;
+                padding: 12px;
+                border-radius: 4px;
+                font-size: 13px;
+                line-height: 1.8;
+            }
+
+            .matched-details div {
+                margin-bottom: 8px;
+            }
+
+            .matched-details .label {
+                font-weight: 600;
+                color: #555;
+                display: inline-block;
+                min-width: 120px;
+            }
+
+            .matched-details code {
+                background: #f5f5f5;
+                padding: 2px 6px;
+                border-radius: 3px;
+                font-family: monospace;
+                color: #d73a49;
+            }
+
+            .property-change {
+                background: white;
+                border: 1px solid #e0e0e0;
+                border-left: 3px solid #ff9800;
+                border-radius: 4px;
+                padding: 12px;
+                margin-bottom: 12px;
+                font-size: 13px;
+            }
+
+            .property-change.critical {
+                border-left-color: #f44336;
+                background: #ffebee;
+            }
+
+            .property-change.warning {
+                border-left-color: #ff9800;
+                background: #fff3e0;
+            }
+
+            .property-change.info {
+                border-left-color: #2196f3;
+                background: #e3f2fd;
+            }
+
+            .property-path {
+                font-family: monospace;
+                font-weight: 600;
+                color: #333;
+                margin-bottom: 8px;
+            }
+
+            .property-values {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 16px;
+                margin-top: 8px;
+            }
+
+            .property-value {
+                padding: 8px;
+                background: #f5f5f5;
+                border-radius: 3px;
+                font-family: monospace;
+                font-size: 12px;
+                word-break: break-all;
+            }
+
+            .property-value-label {
+                font-size: 11px;
+                font-weight: 600;
+                color: #666;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+            }
+
+            footer {
+                text-align: center;
+                padding: 20px;
+                color: #999;
+                font-size: 12px;
+            }
+
+            @media (max-width: 768px) {
+                .container {
+                    padding: 10px;
+                }
+
+                header {
+                    padding: 15px;
+                }
+
+                header h1 {
+                    font-size: 20px;
+                }
+
+                table {
+                    font-size: 12px;
+                }
+
+                td, th {
+                    padding: 8px;
+                }
+
+                pre {
+                    font-size: 10px;
+                }
+
+                .recommendation-item {
+                    padding: 12px;
+                    margin-bottom: 12px;
+                }
+
+                .recommendation-header {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 8px;
+                }
+
+                .recommendation-text {
+                    padding: 10px;
+                    font-size: 13px;
+                }
+
+                .recommendation-number {
+                    width: 24px;
+                    height: 24px;
+                    font-size: 10px;
+                }
+            }"""
+
+
 def generate_html_report(
     drift_json_file: Path,
     output_file: Path,
@@ -137,568 +706,7 @@ def generate_html_report(
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Bicep Drift Report - {html.escape(resource_group)}</title>
         <style>
-            * {{
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }}
-
-            body {{
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-                background: #f5f5f5;
-                color: #333;
-                line-height: 1.6;
-            }}
-
-            .container {{
-                max-width: 1200px;
-                margin: 0 auto;
-                padding: 20px;
-            }}
-
-            header {{
-                background: white;
-                padding: 30px 20px;
-                border-radius: 8px;
-                margin-bottom: 20px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }}
-
-            header h1 {{
-                font-size: 28px;
-                margin-bottom: 10px;
-            }}
-
-            .status {{
-                display: inline-block;
-                padding: 8px 16px;
-                border-radius: 20px;
-                font-weight: 600;
-                margin-bottom: 15px;
-            }}
-
-            .status.success {{
-                background: #d4edda;
-                color: #155724;
-            }}
-
-            .status.warning {{
-                background: #fff3cd;
-                color: #856404;
-            }}
-
-            .meta {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                gap: 15px;
-                margin-top: 15px;
-                font-size: 14px;
-            }}
-
-            .meta-item {{
-                background: #f8f9fa;
-                padding: 10px;
-                border-radius: 4px;
-                border-left: 3px solid #0066cc;
-            }}
-
-            .meta-label {{
-                font-weight: 600;
-                color: #555;
-            }}
-
-            .meta-value {{
-                color: #333;
-                margin-top: 5px;
-                word-break: break-all;
-            }}
-
-            .metrics {{
-                display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 15px;
-                margin-bottom: 20px;
-            }}
-
-            .metric-card {{
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                text-align: center;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }}
-
-            .metric-card.total {{
-                border-top: 4px solid #ff9800;
-            }}
-
-            .metric-card.missing {{
-                border-top: 4px solid #f44336;
-            }}
-
-            .metric-card.extra {{
-                border-top: 4px solid #2196f3;
-            }}
-
-            .metric-card.modified {{
-                border-top: 4px solid #ff9800;
-            }}
-
-            .metric-number {{
-                font-size: 32px;
-                font-weight: 700;
-                margin: 10px 0;
-                color: #333;
-            }}
-
-            .metric-label {{
-                font-size: 12px;
-                color: #666;
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-            }}
-
-            .section {{
-                background: white;
-                padding: 20px;
-                border-radius: 8px;
-                margin-bottom: 20px;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            }}
-
-            .section h2 {{
-                font-size: 20px;
-                margin-bottom: 15px;
-                padding-bottom: 10px;
-                border-bottom: 2px solid #f0f0f0;
-            }}
-
-            .no-drift {{
-                text-align: center;
-                padding: 40px 20px;
-                color: #666;
-            }}
-
-            .no-drift svg {{
-                width: 64px;
-                height: 64px;
-                margin-bottom: 15px;
-            }}
-
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
-            }}
-
-            th {{
-                background: #f8f9fa;
-                padding: 12px;
-                text-align: left;
-                font-weight: 600;
-                color: #333;
-                border-bottom: 2px solid #e9ecef;
-                word-break: break-word;
-            }}
-
-            td {{
-                padding: 12px;
-                border-bottom: 1px solid #e9ecef;
-                word-break: break-word;
-                white-space: normal;
-                overflow-wrap: break-word;
-            }}
-
-            td code {{
-                word-break: break-all;
-                display: block;
-            }}
-
-            tr:hover {{
-                background: #f8f9fa;
-            }}
-
-            .badge {{
-                display: inline-block;
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-size: 12px;
-                font-weight: 600;
-                text-transform: uppercase;
-            }}
-
-            .badge.missing {{
-                background: #ffebee;
-                color: #c62828;
-            }}
-
-            .badge.extra {{
-                background: #e3f2fd;
-                color: #1565c0;
-            }}
-
-            .badge.modified {{
-                background: #fff3e0;
-                color: #e65100;
-            }}
-
-            .badge.origin-policy {{
-                background: #e8f5e9;
-                color: #2e7d32;
-                border: 1px solid #81c784;
-            }}
-
-            .badge.origin-system {{
-                background: #e8f5e9;
-                color: #2e7d32;
-                border: 1px solid #81c784;
-            }}
-
-            .badge.origin-manual {{
-                background: #ffebee;
-                color: #c62828;
-                border: 1px solid #ef5350;
-            }}
-
-            .badge.origin-unknown {{
-                background: #f5f5f5;
-                color: #666;
-                border: 1px solid #ccc;
-            }}
-
-            .lifecycle-timeline {{
-                margin-top: 15px;
-                padding: 12px;
-                background: #fafafa;
-                border-left: 4px solid #1976d2;
-                border-radius: 4px;
-                font-size: 13px;
-            }}
-
-            .lifecycle-header {{
-                margin-bottom: 10px;
-                padding-bottom: 8px;
-                border-bottom: 1px solid #ddd;
-                font-weight: bold;
-            }}
-
-            .lifecycle-event {{
-                margin-bottom: 10px;
-                padding: 8px;
-                background: white;
-                border-left: 3px solid #999;
-                display: flex;
-                gap: 12px;
-                align-items: flex-start;
-                flex-wrap: wrap;
-            }}
-
-            .lifecycle-event.timeline-create {{
-                border-left-color: #4caf50;
-                background: #f1f8e9;
-            }}
-
-            .lifecycle-event.timeline-delete {{
-                border-left-color: #f44336;
-                background: #ffebee;
-            }}
-
-            .lifecycle-event.timeline-modify {{
-                border-left-color: #ff9800;
-                background: #fff3e0;
-            }}
-
-            .timeline-event-time {{
-                font-weight: bold;
-                color: #1976d2;
-                min-width: 80px;
-            }}
-
-            .timeline-event-op {{
-                background: #e0e0e0;
-                padding: 2px 6px;
-                border-radius: 3px;
-                font-weight: bold;
-                font-size: 11px;
-                text-transform: uppercase;
-                min-width: 60px;
-                text-align: center;
-            }}
-
-            .timeline-event-actor {{
-                color: #555;
-                font-family: monospace;
-                font-size: 12px;
-                flex: 1;
-                min-width: 150px;
-            }}
-
-            .timeline-event-method {{
-                color: #888;
-                font-size: 12px;
-            }}
-
-            .timeline-event-reason {{
-                width: 100%;
-                color: #666;
-                padding-top: 4px;
-                border-top: 1px solid #eee;
-                font-style: italic;
-            }}
-
-            .lifecycle-deleted {{
-                margin-top: 10px;
-                padding: 10px;
-                background: #ffebee;
-                border: 1px solid #f44336;
-                border-radius: 4px;
-                color: #c62828;
-            }}
-
-            .lifecycle-empty {{
-                padding: 10px;
-                color: #999;
-                font-style: italic;
-            }}
-
-            pre {{
-                background: #f5f5f5;
-                padding: 10px;
-                border-radius: 4px;
-                overflow-x: auto;
-                font-size: 12px;
-                line-height: 1.4;
-            }}
-
-            .recommendation-item {{
-                background: #f0f7ff;
-                border: 1px solid #e0e7ff;
-                border-left: 4px solid #0066cc;
-                border-radius: 6px;
-                padding: 18px;
-                margin-bottom: 18px;
-                display: flex;
-                flex-direction: column;
-            }}
-
-            .recommendation-header {{
-                display: flex;
-                gap: 12px;
-                align-items: flex-start;
-                margin-bottom: 12px;
-                font-weight: 600;
-                color: #333;
-                flex-wrap: wrap;
-                word-break: break-word;
-            }}
-
-            .recommendation-header strong {{
-                flex: 1;
-                min-width: 200px;
-                word-break: break-word;
-            }}
-
-            .recommendation-number {{
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                width: 28px;
-                height: 28px;
-                background: #0066cc;
-                color: white;
-                border-radius: 50%;
-                font-size: 12px;
-                font-weight: 700;
-                flex-shrink: 0;
-            }}
-
-            .recommendation-resource {{
-                font-size: 12px;
-                color: #666;
-                margin-bottom: 8px;
-                font-family: monospace;
-            }}
-
-            .recommendation-text {{
-                background: white;
-                padding: 14px;
-                border-radius: 4px;
-                line-height: 1.8;
-                color: #333;
-                font-size: 14px;
-                word-break: break-word;
-                overflow-wrap: break-word;
-                white-space: normal;
-                max-width: 100%;
-                overflow: visible;
-            }}
-
-            .matched-item {{
-                background: #f0f9ff;
-                border: 1px solid #bfe7f5;
-                border-left: 4px solid #0284c7;
-                border-radius: 6px;
-                padding: 16px;
-                margin-bottom: 16px;
-            }}
-
-            .matched-header {{
-                display: flex;
-                gap: 10px;
-                align-items: center;
-                margin-bottom: 12px;
-                font-weight: 600;
-                color: #333;
-            }}
-
-            .matched-badge {{
-                display: inline-block;
-                padding: 4px 8px;
-                background: #0284c7;
-                color: white;
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: 700;
-                text-transform: uppercase;
-            }}
-
-            .matched-details {{
-                background: white;
-                padding: 12px;
-                border-radius: 4px;
-                font-size: 13px;
-                line-height: 1.8;
-            }}
-
-            .matched-details div {{
-                margin-bottom: 8px;
-            }}
-
-            .matched-details .label {{
-                font-weight: 600;
-                color: #555;
-                display: inline-block;
-                min-width: 120px;
-            }}
-
-            .matched-details code {{
-                background: #f5f5f5;
-                padding: 2px 6px;
-                border-radius: 3px;
-                font-family: monospace;
-                color: #d73a49;
-            }}
-
-            .property-change {{
-                background: white;
-                border: 1px solid #e0e0e0;
-                border-left: 3px solid #ff9800;
-                border-radius: 4px;
-                padding: 12px;
-                margin-bottom: 12px;
-                font-size: 13px;
-            }}
-
-            .property-change.critical {{
-                border-left-color: #f44336;
-                background: #ffebee;
-            }}
-
-            .property-change.warning {{
-                border-left-color: #ff9800;
-                background: #fff3e0;
-            }}
-
-            .property-change.info {{
-                border-left-color: #2196f3;
-                background: #e3f2fd;
-            }}
-
-            .property-path {{
-                font-family: monospace;
-                font-weight: 600;
-                color: #333;
-                margin-bottom: 8px;
-            }}
-
-            .property-values {{
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 16px;
-                margin-top: 8px;
-            }}
-
-            .property-value {{
-                padding: 8px;
-                background: #f5f5f5;
-                border-radius: 3px;
-                font-family: monospace;
-                font-size: 12px;
-                word-break: break-all;
-            }}
-
-            .property-value-label {{
-                font-size: 11px;
-                font-weight: 600;
-                color: #666;
-                text-transform: uppercase;
-                margin-bottom: 4px;
-            }}
-
-            footer {{
-                text-align: center;
-                padding: 20px;
-                color: #999;
-                font-size: 12px;
-            }}
-
-            @media (max-width: 768px) {{
-                .container {{
-                    padding: 10px;
-                }}
-
-                header {{
-                    padding: 15px;
-                }}
-
-                header h1 {{
-                    font-size: 20px;
-                }}
-
-                table {{
-                    font-size: 12px;
-                }}
-
-                td, th {{
-                    padding: 8px;
-                }}
-
-                pre {{
-                    font-size: 10px;
-                }}
-
-                .recommendation-item {{
-                    padding: 12px;
-                    margin-bottom: 12px;
-                }}
-
-                .recommendation-header {{
-                    flex-direction: column;
-                    align-items: flex-start;
-                    gap: 8px;
-                }}
-
-                .recommendation-text {{
-                    padding: 10px;
-                    font-size: 13px;
-                }}
-
-                .recommendation-number {{
-                    width: 24px;
-                    height: 24px;
-                    font-size: 10px;
-                }}
-            }}
+{_REPORT_CSS}
         </style>
     </head>
     <body>
