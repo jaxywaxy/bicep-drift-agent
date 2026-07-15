@@ -504,6 +504,17 @@ class PropertyComparator:
         "properties.minimumtlsversion",
         "properties.minimaltlsversion",
         "properties.httpsonly",
+        # App Service / Function App transport, in BOTH declaration shapes:
+        # inline on the site ("properties.siteConfig.ftpsState") and on the
+        # config/web child ("properties.ftpsState"). Bare substrings cover both;
+        # only Microsoft.Web/sites(+/config) carry them. ftpsState=AllAllowed
+        # means FTP credentials in PLAINTEXT while the site still reports
+        # httpsOnly=true; "mintlsversion" also picks up scmMinTlsVersion, the
+        # Kudu/SCM endpoint's floor. (Declared TLS floors are generic-compared
+        # as critical - they are never security SENTINELS, because the
+        # absent-default is creation-API-version-dependent.)
+        "ftpsstate",
+        "mintlsversion",
         # Key Vault data-destruction protection.
         "properties.enablesoftdelete",
         # AI content filters - loosening one is a governance event

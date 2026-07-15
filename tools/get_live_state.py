@@ -1008,12 +1008,32 @@ def _expand_appservice_config(resources: List[Dict], token: Optional[str] = None
             continue
         try:
             web = _call(f"https://management.azure.com{sid}/config/web?api-version={api}")
+            web_props = web.get("properties", {}) or {}
             children.append({
                 "type": "Microsoft.Web/sites/config", "name": f"{sname}/web",
                 "location": None, "tags": {}, "sku": None, "kind": None,
-                "properties": web.get("properties", {}) or {},
+                "properties": web_props,
                 "id": web.get("id"), "resource_group": site.get("resource_group"),
             })
+            # Overlay the authoritative config/web values onto the SITE's own
+            # siteConfig. Resource Graph returns siteConfig as a ~93-key schema
+            # with nearly every value NULL (ftpsState and minTlsVersion included),
+            # and the comparator skips null deployed values to avoid false
+            # positives - so a template declaring siteConfig INLINE on the site
+            # (the common bicep pattern) had those properties silently skipped
+            # and NEVER compared. Seen live: a function app's ftpsState flipped
+            # FtpsOnly -> AllAllowed (plaintext FTP credentials) produced no
+            # drift at all, while the real value sat unused in the web child.
+            # Nulls from the GET are not overlaid: they must not clobber a value
+            # Resource Graph did resolve.
+            site_props = site.get("properties")
+            if not isinstance(site_props, dict):
+                site_props = {}
+                site["properties"] = site_props
+            existing_cfg = site_props.get("siteConfig")
+            merged = dict(existing_cfg) if isinstance(existing_cfg, dict) else {}
+            merged.update({k: v for k, v in web_props.items() if v is not None})
+            site_props["siteConfig"] = merged
         except Exception as e:
             logger.debug(f"Could not fetch config/web for {sname}: {e}")
         try:
