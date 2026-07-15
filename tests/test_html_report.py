@@ -129,16 +129,35 @@ class HtmlReportRenderTests(unittest.TestCase):
         self.assertIn("properties.securityRules", h)
         self.assertIn("critical", h.lower())
 
-    def test_recommendation_rendered(self):
-        self.assertIn("Remove the allow-rdp-anywhere rule.", _render())
+    def test_agent_analysis_rendered(self):
+        # The consolidated remediation narrative is now the report's remediation
+        # content. (298ed60 had removed it as duplicating the per-drift
+        # recommendation cards; those cards are gone - the narrative is ONE call
+        # that sees every drift, so it can order the work and say "investigate
+        # before overwriting", which N blind per-resource calls could not.)
+        h = _render()
+        self.assertIn("Remediation Analysis", h)
+        self.assertIn("Three drifts found.", h)
 
-    def test_agent_analysis_deliberately_not_rendered(self):
-        # The Claude narrative is INTENTIONALLY absent from the HTML: 298ed60
-        # removed it because it repeated the metric cards, the Drift Details
-        # table and the per-drift recommendations. It still ships in the JSON
-        # report and reports/<label>-analysis.md (both land in the CI artifact).
-        # Pinned so it is not "helpfully" re-added as duplication.
-        self.assertNotIn("Three drifts found.", _render())
+    def test_per_drift_recommendation_cards_are_gone(self):
+        # The old O(N)-call cards. Pinned so the fan-out is not reintroduced.
+        self.assertNotIn('class="recommendation-item"', _render())
+
+    def test_analysis_markdown_is_rendered_not_raw(self):
+        h = _render(agent_analysis="## Plan\n\n| Order | Action |\n|---|---|\n| 1 | Redeploy |")
+        self.assertIn("<table>", h)
+        self.assertIn("<h2>Plan</h2>", h)
+        self.assertNotIn("|---|---|", h)
+
+    def test_analysis_cannot_inject_markup(self):
+        # The narrative is model output quoting live resource names.
+        h = _render(agent_analysis="## Plan\n\n<script>alert(1)</script> and <img src=x onerror=y>")
+        self.assertNotIn("<script>alert(1)</script>", h)
+        self.assertNotIn("<img src=x", h)
+        self.assertIn("&lt;script&gt;", h)
+
+    def test_no_analysis_section_when_absent(self):
+        self.assertNotIn("Remediation Analysis", _render(agent_analysis=None))
 
     def test_agent_usage_footer_shows_cost(self):
         h = _render()

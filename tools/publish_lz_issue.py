@@ -101,7 +101,7 @@ def build_issue_body(reports_dir: str, lz_name: str, run_url: str) -> Tuple[str,
     sections = []
     total = 0
     critical = 0
-    recommendations: List[Tuple[str, str]] = []
+    analyses: List[Tuple[str, str]] = []
 
     for rg, report, report_path in _load_reports(reports_dir):
         # Same event shape as the channel digest, so the issue lines and the
@@ -124,12 +124,13 @@ def build_issue_body(reports_dir: str, lz_name: str, run_url: str) -> Tuple[str,
             lines.append(line)
         sections.append(f"### `{rg}`\n\n" + "\n".join(lines))
 
-        for drift in report.get("drifts", []):
-            rec = drift.get("recommendation")
-            if rec and drift.get("drift_type") != "matched_unresolvable":
-                recommendations.append(
-                    (f"{drift.get('type', '?')}/{drift.get('name', '?')}", rec)
-                )
+        # The consolidated remediation narrative: ONE Claude call that saw every
+        # drift, so it orders the work and can say "investigate before you
+        # overwrite this" - which the per-resource recommendations it replaced
+        # could not, being blind to each other.
+        analysis = report.get("agent_analysis")
+        if analysis:
+            analyses.append((rg, analysis))
 
     scanned = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     header = [
@@ -143,13 +144,16 @@ def build_issue_body(reports_dir: str, lz_name: str, run_url: str) -> Tuple[str,
     ]
     body_parts = ["\n".join(header)] + sections
 
-    if recommendations:
-        rec_blocks = ["## 💡 Recommendations"]
-        for resource, rec in recommendations:
-            rec_blocks.append(
-                f"<details>\n<summary><code>{resource}</code></summary>\n\n{rec}\n\n</details>"
-            )
-        body_parts.append("\n\n".join(rec_blocks))
+    if analyses:
+        # Collapsed: the drift list above is the summary; open this for the plan.
+        # GitHub renders the markdown (tables, lists, code) natively - no
+        # conversion needed, unlike the HTML report.
+        blocks = ["## 🛠️ Remediation Analysis"]
+        multi = len(analyses) > 1
+        for rg, analysis in analyses:
+            summary = f"Remediation plan{f' — {rg}' if multi else ''} (click to expand)"
+            blocks.append(f"<details>\n<summary>{summary}</summary>\n\n{analysis}\n\n</details>")
+        body_parts.append("\n\n".join(blocks))
 
     body_parts.append(
         "_Updated automatically by the drift-detection pipeline; this issue closes "

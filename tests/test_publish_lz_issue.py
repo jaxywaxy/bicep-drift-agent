@@ -22,8 +22,10 @@ from tools import publish_lz_issue as pli
 from tools.send_notifications import NotificationRouter, DriftEvent
 
 
-def _write_report(directory, rg="rg-app", drifts=None):
+def _write_report(directory, rg="rg-app", drifts=None, analysis=None):
     report = {"resource_group": rg, "drifts": drifts if drifts is not None else []}
+    if analysis is not None:
+        report["agent_analysis"] = analysis
     path = os.path.join(directory, f"{rg}-drift.json")
     with open(path, "w") as f:
         json.dump(report, f)
@@ -44,9 +46,10 @@ def _drift(name="app1", rec=None, owner="workload"):
 
 
 class BuildIssueBodyTests(unittest.TestCase):
-    def test_body_contains_marker_digest_and_recommendations(self):
+    def test_body_contains_marker_digest_and_analysis(self):
         with tempfile.TemporaryDirectory() as d:
-            _write_report(d, drifts=[_drift(rec="Redeploy the template.")])
+            _write_report(d, drifts=[_drift()],
+                          analysis="## Remediation Plan\n\n| Order | Action |\n|---|---|\n| 1 | Redeploy |")
             body, total = pli.build_issue_body(d, "test-resources", "https://gh/run/1")
         self.assertEqual(total, 1)
         self.assertIn(pli.ISSUE_MARKER, body)
@@ -54,17 +57,30 @@ class BuildIssueBodyTests(unittest.TestCase):
         self.assertIn("**[MISSING]** `Microsoft.Web/sites/app1`", body)
         self.assertIn("_(owner: workload)_", body)
         self.assertIn("[workflow run](https://gh/run/1)", body)
+        self.assertIn("Remediation Analysis", body)
         self.assertIn("<details>", body)
-        self.assertIn("Redeploy the template.", body)
+        # GitHub renders markdown natively - the table must be passed through
+        # verbatim, NOT converted (unlike the HTML report).
+        self.assertIn("| Order | Action |", body)
+
+    def test_analysis_section_absent_when_no_analysis(self):
+        # e.g. no API key, or the Claude call failed (non-fatal).
+        with tempfile.TemporaryDirectory() as d:
+            _write_report(d, drifts=[_drift()])
+            body, total = pli.build_issue_body(d, "lz", "u")
+        self.assertEqual(total, 1)
+        self.assertNotIn("Remediation Analysis", body)
+        self.assertIn("**[MISSING]**", body)  # the drift list still renders
 
     def test_matched_unresolvable_excluded(self):
         with tempfile.TemporaryDirectory() as d:
             _write_report(d, drifts=[
                 {"type": "t", "name": "reconciled", "drift_type": "matched_unresolvable",
-                 "details": {}, "recommendation": "should not appear"},
-            ])
+                 "details": {}},
+            ], analysis="should not appear")
             body, total = pli.build_issue_body(d, "lz", "u")
         self.assertEqual(total, 0)
+        # No actionable drift -> no section for this RG at all.
         self.assertNotIn("should not appear", body)
 
     def test_multiple_rgs_get_sections(self):
