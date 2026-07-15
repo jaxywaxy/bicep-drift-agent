@@ -525,6 +525,13 @@ class PropertyComparator:
         # version are all security-critical.
         "properties.policysettings.mode",
         "properties.policysettings.state",
+        # WAF detection COVERAGE, not just its mode: the managed rule sets ARE
+        # the WAF's attack detection (an OWASP version downgrade silently drops
+        # rules), and requestBodyCheck=false stops payload inspection entirely
+        # (SQLi/XSS in POST bodies sail through) while the WAF still reads as
+        # Enabled/Prevention. Only WAF policies carry these paths.
+        "properties.managedrules",
+        "properties.policysettings.requestbodycheck",
         "properties.sslpolicy.minprotocolversion",
         "properties.webapplicationfirewallconfiguration.enabled",
         "properties.webapplicationfirewallconfiguration.firewallmode",
