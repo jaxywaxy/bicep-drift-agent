@@ -24,10 +24,16 @@ class _Report:
 
 
 def _report_data(drifts=None):
+    # Defaults to ONE actionable drift on purpose: with no actionable drift the
+    # analysis call is skipped entirely (see test_skip_clean_analysis), so these
+    # failure-path tests would never reach Claude and would prove nothing.
     return {
         "bicep_file": "bicep/main.bicep",
         "resource_group": "rg-x",
-        "drifts": drifts if drifts is not None else [],
+        "drifts": drifts if drifts is not None else [
+            {"type": "Microsoft.Web/sites", "name": "app1",
+             "drift_type": "missing_in_azure", "details": {}},
+        ],
     }
 
 

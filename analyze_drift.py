@@ -530,6 +530,42 @@ def _detect_and_merge_property_drift(report_data: dict, ignore_list: IgnorePatte
         )
 
 
+def _clean_estate_summary(report_data: dict, reconciled: int) -> str:
+    """The analysis narrative for a scan with no actionable drift, without Claude.
+
+    Carries the same information Claude's clean-run narrative did (it opened
+    "**No drift detected.**" and restated the counts) - all of which is already
+    known deterministically once drift_count is 0.
+    """
+    lines = [
+        "# Bicep Drift Analysis",
+        "",
+        "## Executive Summary",
+        "",
+        f"**No drift detected.** `{report_data.get('resource_group', 'unknown')}` matches "
+        f"`{report_data.get('bicep_file', 'the template')}`.",
+        "",
+        "- **Total drift findings: 0**",
+        "- **Blocking drift: None**",
+    ]
+    if reconciled:
+        lines.append(
+            f"- **Resources reconciled: {reconciled}** (runtime-named resources matched "
+            "to their deployed counterparts - informational, not drift)"
+        )
+    ignored = len(report_data.get("ignored_drifts") or [])
+    if ignored:
+        lines.append(f"- **Suppressed by ignore rules: {ignored}**")
+    lines += [
+        "",
+        "No action required.",
+        "",
+        "_Generated deterministically: with no actionable drift there is nothing to "
+        "analyse, so the Claude analysis call is skipped._",
+    ]
+    return "\n".join(lines)
+
+
 def _run_claude_analysis(agent, report_data: dict):
     """Build the DriftReport and, if an agent is available, run Claude analysis.
 
@@ -563,6 +599,24 @@ def _run_claude_analysis(agent, report_data: dict):
 
     if not agent:
         return None
+
+    # A clean estate is the COMMON case for a scheduled scan, and the analysis
+    # call is BY FAR the most expensive thing in the run. Measured on a real
+    # clean scan: 1 call, 1134 output tokens, $0.034, ~105s - i.e. ~75% of the
+    # run's wall clock - spent having Claude narrate "No drift detected", which
+    # drift_count already states deterministically. Skip the call and synthesise
+    # the summary. (matched_unresolvable entries are runtime-named resources
+    # reconciled to their deployed counterparts - informational, not drift; the
+    # agent already excludes them from the analysis prompt.)
+    actionable = [d for d in drifts if d.drift_type != "matched_unresolvable"]
+    if not actionable:
+        summary = _clean_estate_summary(report_data, reconciled=len(drifts) - len(actionable))
+        report_data["agent_analysis"] = summary
+        logger.info(
+            "No actionable drift - skipping the Claude analysis call "
+            "(deterministic summary instead)"
+        )
+        return summary
 
     logger.info("Calling Claude API for drift analysis...")
     try:
