@@ -4,7 +4,7 @@
 
 Bicep Drift Agent is designed to operate in enterprise Azure environments using a security-first approach. The platform performs read-only drift analysis across Azure subscriptions and landing zones without requiring long-lived credentials, privileged access, or stored secrets.
 
-The solution uses GitHub OpenID Connect (OIDC) and Azure Workload Identity Federation to authenticate GitHub Actions workflows directly with Azure Entra ID, eliminating the need for Azure client secrets in GitHub repositories. Authentication is short-lived, auditable, and scoped according to the principle of least privilege. 【1-909bca】
+The solution uses GitHub OpenID Connect (OIDC) and Azure Workload Identity Federation to authenticate GitHub Actions workflows directly with Azure Entra ID, eliminating the need for Azure client secrets in GitHub repositories. Authentication is short-lived, auditable, and scoped according to the principle of least privilege. 
 
 ---
 
@@ -54,7 +54,7 @@ ARM REST APIs
 Activity Logs
 ```
 
-Authentication is performed using GitHub-issued OIDC tokens rather than static credentials. When a workflow executes, GitHub issues a signed identity token which Azure Entra ID validates against a federated credential. Azure then exchanges the GitHub token for a short-lived Azure access token used by the drift agent. 【1-909bca】
+Authentication is performed using GitHub-issued OIDC tokens rather than static credentials. When a workflow executes, GitHub issues a signed identity token which Azure Entra ID validates against a federated credential. Azure then exchanges the GitHub token for a short-lived Azure access token used by the drift agent. 
 
 ### Benefits
 
@@ -63,7 +63,7 @@ Authentication is performed using GitHub-issued OIDC tokens rather than static c
 - Short-lived authentication tokens.
 - Full Azure Entra ID audit trail.
 - Reduced credential theft risk.
-- Centralised management through Azure Entra ID. 【1-909bca】
+- Centralised management through Azure Entra ID. 
 
 ---
 
@@ -77,7 +77,7 @@ The recommended deployment model grants the service principal:
 Reader
 ```
 
-at the Azure Management Group scope. 【1-909bca】
+at the Azure Management Group scope. 
 
 This provides visibility into:
 
@@ -105,7 +105,7 @@ Using management-group scope allows:
 - Reduced administrative overhead.
 - Centralised security management.
 
-The agent remains read-only regardless of subscription count. 【1-909bca】
+The agent remains read-only regardless of subscription count. 
 
 ---
 
@@ -166,7 +166,7 @@ AZURE_CLIENT_ID
 AZURE_TENANT_ID
 ```
 
-These are identifiers rather than secrets and are used to locate the federated application registration. Authentication occurs through OIDC token exchange rather than stored credentials. 【1-909bca】
+These are identifiers rather than secrets and are used to locate the federated application registration. Authentication occurs through OIDC token exchange rather than stored credentials. 
 
 ## Notification Webhooks
 
@@ -295,7 +295,7 @@ This enables security and operations teams to determine:
 - Which branch executed the workflow
 - When access occurred
 
-without relying on shared credentials. 【1-909bca】
+without relying on shared credentials. 
 
 ---
 
@@ -307,7 +307,7 @@ without relying on shared credentials. 【1-909bca】
 | Secret Expiry | OIDC token exchange removes credential rotation requirements |
 | Excessive Azure Permissions | Reader-only RBAC model |
 | Subscription Sprawl | Management-group scoped visibility |
-| Unauthorised Resource Changes | Platform operates read-only |
+| Unauthorised Resource Changes | Service operates read-only |
 | Secret Leakage in Config | Restricted webhook placeholder expansion |
 | Limited Audit Evidence | Azure Entra ID authentication logging |
 | Notification Exposure | Team-level routing and repository-based report publication |
@@ -337,4 +337,4 @@ Regular reviews should validate:
 
 # Security Summary
 
-Bicep Drift Agent is designed as a low-risk, read-only platform for enterprise Azure governance and operational visibility. By combining GitHub OIDC, Azure Workload Identity Federation, Reader-only RBAC permissions, and team-owned landing zone configuration, the platform minimises credential risk while providing enterprise-scale drift detection across Azure Landing Zones and Bicep-managed environments.
+Bicep Drift Agent is designed as a low-risk, read-only service for enterprise Azure governance and operational visibility. By combining GitHub OIDC, Azure Workload Identity Federation, Reader-only RBAC permissions, and team-owned landing zone configuration, the service minimises credential risk while providing enterprise-scale drift detection across Azure Landing Zones and Bicep-managed environments.

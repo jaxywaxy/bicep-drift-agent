@@ -508,10 +508,12 @@ TEAM_NOTIFICATIONS.md
 ---
 
 # Related Documentation
--- `README.md` — Solution overview and quick start
-- `ARCHITECTURE.md` — Architecture and system design
--`CAPABILITIES.md` — Supported drift detection capabilities
-- `AZURE_AHTHENTICATION.md` — GitHub OIDC configuration
-- `SECURITY_MODEL.md` — security architecture
-- `TEAM_NOTIFICATIONS.md` — Notification configuration
-- `OPERATIONS_RUNBOOK.md` — Operational support procedures
+
+- [README.md](../README.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [CAPABILITIES.md](CAPABILITIES.md) 
+- [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) - Teams and Slack Notification configuration
+- [LANDING_ZONES_OPERATIONS.md](LANDING_ZONES_OPERATIONS.md) — Landing Zone configuration
+- [AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md) - Azure authentication configuration
+- [SECURITY_MODEL.md](SECURITY_MODEL.md) - Security 
+- [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) - Runbook for Operations team
