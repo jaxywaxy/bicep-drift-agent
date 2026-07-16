@@ -2,11 +2,11 @@
 
 ## Overview
 
-Bicep Drift Agent is an enterprise drift detection platform for Azure environments managed with Bicep. It compares the desired state defined in Infrastructure as Code with the actual state deployed in Azure, identifies drift, enriches findings with governance and ownership context, and routes actionable reports to the teams responsible for remediation.
+Bicep Drift Agent is an enterprise drift detection service for Azure environments managed with Bicep. It compares the desired state defined in Infrastructure as Code with the actual state deployed in Azure, identifies drift, enriches findings with governance and ownership context, and routes actionable reports to the teams responsible for remediation.
 
 The solution is designed to support Azure Landing Zone and Cloud Adoption Framework (CAF) operating models, where multiple teams manage infrastructure across subscriptions, landing zones, and repositories.
 
-The platform follows a hybrid ownership model:
+The service follows a hybrid ownership model:
 
 - A central drift-agent repository owns workflows, drift detection logic, reporting, and orchestration.
 - Individual platform or application teams own their Bicep code, drift configuration, notification preferences, and ignore rules.
@@ -98,7 +98,7 @@ This model allows a single drift platform to service multiple teams without cent
 
 ## Azure Authentication Architecture
 
-The platform uses GitHub OIDC and Azure Workload Identity Federation for authentication. No Azure client secrets are stored in GitHub.
+The service uses GitHub OIDC and Azure Workload Identity Federation for authentication. No Azure client secrets are stored in GitHub.
 
 ### Authentication Flow
 
@@ -154,7 +154,7 @@ Team Repository
     └── drift-lz-config.yml
 ```
 
-A central index maintained by the drift platform identifies which landing zones should be scanned.
+A central index maintained by the drift service identifies which landing zones should be scanned.
 
 ```text
 Drift Agent Repository
@@ -253,7 +253,7 @@ This ownership model allows findings to be routed directly to the team capable o
 
 ## Governance and Security Analysis
 
-In addition to infrastructure drift, the platform evaluates governance and security controls.
+In addition to infrastructure drift, the service evaluates governance and security controls.
 
 ### Governance
 
@@ -277,7 +277,7 @@ These controls are evaluated separately from standard configuration drift to imp
 
 ## Reporting Architecture
 
-The platform generates multiple report formats for different audiences.
+The service generates multiple report formats for different audiences.
 
 | Output | Audience |
 |--------|----------|
