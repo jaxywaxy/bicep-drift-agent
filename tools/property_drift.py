@@ -686,6 +686,10 @@ class PropertyComparator:
         "properties.networkprofile.networkinterfaces",
         # App Service Plan properties (not returned by API)
         "properties.reserved",
+        # Provisioning-mode inputs (PostgreSQL/MySQL flexible servers, Cosmos
+        # restores, etc.) — consumed at create time, never returned by the API,
+        # so they always diff as desired-vs-null.
+        "properties.createmode",
     }
 
     @staticmethod
