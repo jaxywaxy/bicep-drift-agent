@@ -150,11 +150,37 @@ class HtmlReportRenderTests(unittest.TestCase):
         self.assertNotIn("|---|---|", h)
 
     def test_analysis_cannot_inject_markup(self):
-        # The narrative is model output quoting live resource names.
+        # The narrative is model output quoting live resource names. We escape
+        # only '<' (a tag cannot open without it) before markdown, which itself
+        # escapes the remaining '>' in prose - so blockquotes still work.
         h = _render(agent_analysis="## Plan\n\n<script>alert(1)</script> and <img src=x onerror=y>")
-        self.assertNotIn("<script>alert(1)</script>", h)
+        self.assertNotIn("<script>", h)
         self.assertNotIn("<img src=x", h)
         self.assertIn("&lt;script&gt;", h)
+
+    def test_analysis_code_block_quotes_not_double_escaped(self):
+        # Regression: html.escape() before markdown turned '"' into &quot;,
+        # then markdown escaped the '&' inside code -> literal &quot; shown in
+        # az CLI commands in the report.
+        cmd = 'az ad sp show --id c7ee07ee --query "{name:displayName, appId:appId}"'
+        h = _render(agent_analysis=f"## Plan\n\n```bash\n{cmd}\n```\n")
+        # Single-escaped &quot; in <code> is correct (renders as "); the bug
+        # was the double-escaped &amp;quot; rendering literally as &quot;.
+        self.assertNotIn("&amp;quot;", h)
+        self.assertIn("--query &quot;{name:displayName, appId:appId}&quot;", h)
+
+    def test_analysis_inline_code_angle_brackets_survive(self):
+        # '<assignment_id>' inside inline code must render as markdown-escaped
+        # code, not double-escaped and not live markup.
+        h = _render(agent_analysis="Run `az role assignment delete --ids <assignment_id>` first.")
+        self.assertIn("&lt;assignment_id&gt;", h)
+        self.assertNotIn("&amp;lt;", h)
+
+    def test_analysis_blockquote_renders(self):
+        # '>' was previously escaped, so "> Note:" showed as literal &gt; text.
+        h = _render(agent_analysis="## Plan\n\n> Note: verify before deleting.\n")
+        self.assertIn("<blockquote>", h)
+        self.assertNotIn("&gt; Note:", h)
 
     def test_no_analysis_section_when_absent(self):
         self.assertNotIn("Remediation Analysis", _render(agent_analysis=None))

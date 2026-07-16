@@ -4,6 +4,7 @@ Generate HTML reports from drift analysis results.
 
 import json
 import html
+import re
 
 import markdown
 import logging
@@ -1138,6 +1139,25 @@ def _render_smart_matched_section(data: dict) -> str:
             """
 
 
+# Fenced code blocks and inline code spans, in one alternation so split()
+# yields [text, code, text, code, ...] with code at odd indices.
+_MD_CODE_RE = re.compile(r"(```.*?```|`[^`\n]+`)", re.DOTALL)
+
+
+def _neutralize_raw_html(text: str) -> str:
+    """Escape '<' outside markdown code regions so model output cannot inject
+    markup. Code regions are left raw: python-markdown escapes &, < and >
+    inside code itself, so pre-escaping them there double-escapes (the
+    &quot;-in-az-commands bug). An unclosed fence falls through to the escaped
+    branch - cosmetic at worst, never unsafe.
+    """
+    parts = _MD_CODE_RE.split(text)
+    return "".join(
+        part if i % 2 else part.replace("<", "&lt;")
+        for i, part in enumerate(parts)
+    )
+
+
 def _render_agent_analysis_section(agent_analysis: str) -> str:
     """Render the consolidated remediation analysis (Claude's single narrative).
 
@@ -1149,15 +1169,19 @@ def _render_agent_analysis_section(agent_analysis: str) -> str:
     what-if). It also costs O(1) instead of O(N).
 
     Rendered via markdown (the narrative uses tables, lists and inline code).
-    The text is HTML-ESCAPED FIRST: it is model output that quotes live
+    Raw HTML is NEUTRALIZED FIRST: it is model output that quotes live
     resource names, so a name like '<script>' must never become markup.
-    Escaping cannot break the markdown, which uses #, *, |, - and `.
+    But a blanket html.escape() double-escaped code regions - markdown escapes
+    &/</> inside code spans/fences itself, so a pre-escaped quote in an az CLI
+    command rendered literally as &quot; in the report. Only '<' (the sole
+    character that can open a tag) is escaped, and only OUTSIDE code regions;
+    this also lets '>' blockquotes render instead of showing as &gt;.
     """
     if not agent_analysis:
         return ""
 
     analysis_html = markdown.markdown(
-        html.escape(agent_analysis),
+        _neutralize_raw_html(agent_analysis),
         extensions=["tables", "fenced_code", "sane_lists"],
     )
     return f"""
