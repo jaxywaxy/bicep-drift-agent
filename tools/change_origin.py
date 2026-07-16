@@ -244,8 +244,8 @@ def classify_change_origin(
 
     # Get most recent entry
     latest = activity_logs[0]
-    caller = latest.get('caller', '').lower()
-    operation = latest.get('operation', '').lower()
+    caller = (latest.get('caller') or '').lower()
+    operation = (latest.get('operation') or '').lower()
 
     # Check for policy-enforced changes. Besides caller/operation text, the most
     # reliable signal is a policyAssignmentId/policyDefinitionId in the event
@@ -317,7 +317,7 @@ def _classify_policy_change(
     """Classify Azure Policy-enforced changes. policy_name_hint names the policy
     when known from the assignment's managed identity (the resource write itself
     usually lacks a policyAssignmentId)."""
-    operation = entry.get('operation', '').lower()
+    operation = (entry.get('operation') or '').lower()
     props = entry.get('properties', {})
     timestamp = entry.get('timestamp')
 
@@ -458,8 +458,8 @@ def _create_lifecycle_event(entry: Dict[str, Any]) -> Optional[ResourceLifecycle
     """Create a lifecycle event from an Activity Log entry."""
     try:
         timestamp = entry.get('timestamp')
-        caller = entry.get('caller', 'Unknown').lower()
-        operation_name = entry.get('operation', 'Unknown').lower()
+        caller = (entry.get('caller') or 'Unknown').lower()
+        operation_name = (entry.get('operation') or 'Unknown').lower()
         status = entry.get('status', 'Unknown')
         props = entry.get('properties', {})
 
@@ -572,13 +572,13 @@ def _extract_method(caller: str, operation_name: str, props: Dict[str, Any]) -> 
     """Extract the method (Portal, CLI, SDK, ARM template, etc.)."""
     op_lower = operation_name.lower()
 
-    if "portal" in props.get('method', '').lower():
+    if "portal" in (props.get('method') or '').lower():
         return "Azure Portal"
-    elif "cli" in props.get('method', '').lower() or "cli" in caller.lower():
+    elif "cli" in (props.get('method') or '').lower() or "cli" in caller.lower():
         return "Azure CLI"
-    elif "powershell" in props.get('method', '').lower():
+    elif "powershell" in (props.get('method') or '').lower():
         return "PowerShell"
-    elif "sdk" in props.get('method', '').lower():
+    elif "sdk" in (props.get('method') or '').lower():
         return "Azure SDK"
     elif "terraform" in caller.lower():
         return "Terraform"
