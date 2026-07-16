@@ -241,6 +241,27 @@ az identity federated-credential list --identity-name $APP_ID
 
 ---
 
+## Scanning Identity vs Deployer Identity
+
+The drift agent recognises changes made by the identity it **runs as** as
+authorized IaC deployments automatically (it reads its own token claims at
+scan time). If your estates are **deployed by a different app registration**
+than the one the drift agent authenticates with — e.g. one OIDC app per repo,
+or separate deploy/scan identities for least privilege — add the deployer
+identities to `DRIFT_AUTHORIZED_DEPLOYERS` so their deploys are not reported
+as unauthorized manual changes:
+
+```yaml
+env:
+  DRIFT_AUTHORIZED_DEPLOYERS: "<deployer-sp-object-id>"
+```
+
+Use the service principal **object ID** (what the Activity Log `caller` field
+records), not the appId. See
+[CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md#authorized-deployers).
+
+---
+
 ## See Also
 
 - [LANDING_ZONES_OPERATIONS.md](LANDING_ZONES_OPERATIONS.md) — Landing Zone configuration

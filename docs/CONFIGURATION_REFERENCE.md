@@ -458,6 +458,37 @@ The following environment variables are recognised.
 | `INCLUDE_ROLE_ASSIGNMENTS` | Enable RBAC drift detection |
 | `INCLUDE_POLICY_ASSIGNMENTS` | Enable policy drift detection |
 | `ANTHROPIC_API_KEY` | Optional AI analysis |
+| `DRIFT_AUTHORIZED_DEPLOYERS` | Additional deployer identities (see below) |
+
+## Authorized Deployers
+
+Changes made by a known IaC deployer identity are attributed as
+**authorized deployments** in reports (🚀 Pipeline badge, low severity)
+rather than "manual change (unauthorized)". The drift itself stays in the
+actionable set — only the attribution changes.
+
+The identity the drift agent **runs as is always recognised automatically**
+(read from its own access-token claims at scan time). No configuration is
+needed when the agent scans with the same identity that deploys the estate.
+
+Set `DRIFT_AUTHORIZED_DEPLOYERS` only when an estate is deployed by a
+*different* identity than the one that scans it:
+
+```yaml
+env:
+  # Comma-separated. Accepts object IDs, appIds or UPNs - whatever form
+  # the Activity Log 'caller' field takes for that identity (object ID
+  # for service principals, email for users).
+  DRIFT_AUTHORIZED_DEPLOYERS: "aaaaaaaa-1111-2222-3333-444444444444,deployer@example.com"
+```
+
+Notes:
+
+- Azure Policy managed identities always classify as policy-enforced,
+  even if listed here.
+- Listing an identity does not suppress its drift; it only stops the
+  change-origin column labelling the pipeline's own deploys as
+  unauthorized manual changes.
 
 ---
 
