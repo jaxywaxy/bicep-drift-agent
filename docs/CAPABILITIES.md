@@ -2,6 +2,10 @@
 
 This document describes the drift detection, governance, security and operational capabilities supported by Bicep Drift Agent.
 
+The agent is designed for enterprise Azure environments and supports Cloud Adoption Framework (CAF) and Azure Landing Zone operating models, enabling platform and application teams to identify configuration drift, governance exceptions, unmanaged resources, and security-sensitive changes across subscriptions, resource groups, and landing zones.
+
+Use this document to understand what the agent can detect, how findings are classified, and the level of coverage available for different Azure resource types and operating scenarios. For solution design and implementation details, see `ARCHITECTURE.md`. For onboarding and operational guidance, see `LANDING_ZONE_OPERATIONS.md`. 
+
 ---
 
 # Capability Summary
