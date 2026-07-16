@@ -52,6 +52,46 @@ def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[st
         return {}
 
 
+def detect_scanning_identity(credential: Optional[Any] = None) -> set:
+    """
+    Return the identity aliases (lowercased) of the principal this scan
+    authenticates as, read from the access token's own claims.
+
+    The drift agent typically runs in the SAME pipeline (OIDC app) that
+    deploys the estate, so changes made by "self" are IaC deployments, not
+    manual drift. Discovering the identity at runtime makes this work at any
+    client with zero configuration - no deployer SP needs to be known in
+    advance (DRIFT_AUTHORIZED_DEPLOYERS covers deploy-with-A/scan-with-B
+    setups).
+
+    Aliases cover every form Activity Log 'caller' takes: 'oid' (service
+    principal / managed identity object id - the usual caller GUID), 'appid'
+    (client id), and 'upn'/'unique_name' (user email for az-login-as-user).
+    Decoding our own token is claim inspection, not signature validation - no
+    trust decision is made from it. Never raises (returns empty set on
+    failure).
+    """
+    import base64
+    import json as _json
+
+    try:
+        cred = credential or DefaultAzureCredential()
+        token = cred.get_token("https://management.azure.com/.default").token
+        payload_b64 = token.split(".")[1]
+        payload_b64 += "=" * (-len(payload_b64) % 4)  # restore stripped padding
+        claims = _json.loads(base64.urlsafe_b64decode(payload_b64))
+        aliases = {
+            str(claims[c]).lower()
+            for c in ("oid", "appid", "upn", "unique_name")
+            if claims.get(c)
+        }
+        logger.info(f"Scanning identity aliases: {sorted(aliases)}")
+        return aliases
+    except Exception as e:
+        logger.warning(f"Could not detect scanning identity: {e}")
+        return set()
+
+
 def fetch_resource_group_activity(
     subscription_id: str,
     resource_group: str,

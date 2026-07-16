@@ -45,7 +45,9 @@ from tools.activity_log import (
     fetch_resource_group_activity,
     match_activity_for_resource,
     fetch_policy_principal_ids,
+    detect_scanning_identity,
 )
+from tools.config import AUTHORIZED_DEPLOYERS
 from tools.ownership import classify_owner
 from tools.change_origin import (
     classify_change_origin,
@@ -694,6 +696,14 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
     rg_activity_events = fetch_resource_group_activity(subscription_id, resource_group, days=30)
     policy_principal_ids = fetch_policy_principal_ids(subscription_id, resource_group)
 
+    # Identities whose changes are authorized IaC deployments: the identity this
+    # scan runs as (auto-detected - typically the same OIDC app that deploys)
+    # plus any client-configured DRIFT_AUTHORIZED_DEPLOYERS. Their changes are
+    # attributed as pipeline deployments instead of "manual (unauthorized)";
+    # the drifts themselves stay actionable.
+    authorized_deployers = set(AUTHORIZED_DEPLOYERS) | detect_scanning_identity()
+    logger.info(f"Authorized deployer identities: {len(authorized_deployers)}")
+
     for drift in drifts_to_analyze:
         try:
             resource_type = drift.get("type", "")
@@ -736,10 +746,12 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
                         logger.info(f"  Resolved deployed name: {bicep_name} -> {real_name}")
                         break
 
-            lifecycle = build_resource_lifecycle(resource_id, relevant_logs)
+            lifecycle = build_resource_lifecycle(resource_id, relevant_logs, authorized_deployers)
             drift["lifecycle"] = lifecycle.to_dict()
 
-            origin_info = classify_change_origin(relevant_logs, policy_principal_ids)
+            origin_info = classify_change_origin(
+                relevant_logs, policy_principal_ids, authorized_deployers
+            )
             drift["change_origin"] = origin_info.to_dict()
 
             logger.info(
