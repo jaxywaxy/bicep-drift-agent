@@ -1,95 +1,252 @@
-# Bicep Drift Agent — Capabilities & Features
+# Bicep Drift Agent Capabilities
 
-An automated agent that detects **configuration drift** between Bicep templates
-(desired state) and live Azure (actual state), attributes each change to who or
-what made it, routes findings to the team that owns them, and delivers
-AI-generated remediation guidance. Runs as scheduled GitHub Actions against any
-number of landing zones from one central repo.
+This document describes the drift detection, governance, security and operational capabilities supported by Bicep Drift Agent.
 
-## Core Pipeline
+---
 
-1. **Compile & resolve** — Bicep → ARM, parameter resolution
-   (`.bicepparam` / `parameters.json` / env), subscription- or RG-scoped
-   templates auto-detected.
-2. **Live state** — Azure Resource Graph for speed, augmented via ARM REST for
-   everything the Graph doesn't index: management locks, Cosmos SQL
-   databases/containers, AI model deployments / RAI policies / Foundry
-   projects & connections, VNet peerings (expanded from properties),
-   cross-subscription resources (vending templates).
-3. **Deterministic diff** — three drift classes: `missing_in_azure`,
-   `extra_in_azure` (incl. orphaned/unmanaged cost), `property_drift`
-   (property-level, severity-rated, security paths flagged **critical**).
-4. **AI analysis (optional)** — Claude-generated per-drift remediation
-   recommendations and a narrative report; all deterministic detection runs
-   without an API key.
-5. **Report & notify** — JSON + styled HTML reports, grep-able CI summaries,
-   Slack/Teams notifications.
+# Capability Summary
 
-## Intelligent Matching (no false positives from generated names)
+| Category | Capability | Description |
+|-----------|------------|-------------|
+| Desired State Analysis | Bicep Compilation | Compiles Bicep into ARM templates for analysis |
+| Desired State Analysis | Parameter Resolution | Resolves parameters from `.bicepparam`, `parameters.json`, and environment values |
+| Desired State Analysis | Module Expansion | Flattens nested deployments and modules |
+| Live State Collection | Azure Resource Graph | Primary source for Azure resource state |
+| Live State Collection | ARM REST Augmentation | Collects resources not indexed in Resource Graph |
+| Drift Detection | Property Drift | Detects configuration differences on deployed resources |
+| Drift Detection | Missing Resources | Resources defined in Bicep but absent from Azure |
+| Drift Detection | Unmanaged Resources | Resources present in Azure but absent from Bicep |
+| Smart Matching | Runtime Generated Names | Matches resources using `uniqueString()`, `guid()` and similar patterns |
+| Ownership | Platform Routing | Routes platform-owned drift to platform teams |
+| Ownership | Workload Routing | Routes workload-owned drift to workload teams |
+| Attribution | Activity Log Correlation | Identifies who or what changed a resource |
+| Attribution | Policy Awareness | Separates Azure Policy remediation from actionable drift |
+| Governance | RBAC Drift | Detects role assignment changes |
+| Governance | Policy Drift | Detects policy assignments and exemptions |
+| Security | Network Boundary Changes | Detects firewall and ACL changes |
+| Security | Privileged Access Drift | Detects high-risk RBAC changes |
+| Reporting | HTML Reports | Human-readable reports |
+| Reporting | JSON Reports | Machine-readable output |
+| Notifications | Slack | Slack webhook integration |
+| Notifications | Teams | Microsoft Teams webhook integration |
+| Operations | Multi-Landing Zone | Scan many landing zones from one repository |
+| Operations | Subscription Scope | Scan entire subscriptions |
+| Operations | Resource Group Scope | Scan individual resource groups |
+| Security | GitHub OIDC | Secretless Azure authentication using Workload Identity Federation |
 
-- **Smart matching** for runtime-generated names (`uniqueString`, `guid`,
-  placeholders) — matched by type + prefix/suffix, then property-compared.
-- Parent-qualified child names, case-insensitive types/locations/resource ids,
-  null-vs-default normalization (networkAcls), Azure read-only augmentation
-  tolerated via bicep-driven subset comparison, write-only secrets never
-  compared (or leaked into reports).
-- **Layered ignore profiles** — agent baseline (universal Azure noise) merged
-  with each landing zone's own `.drift-ignore` (type-, name-, and
-  property-scoped patterns).
+---
 
-## Change Attribution (Phase 3)
+# Desired State Analysis
 
-- Activity Log correlation: **who changed it, when, and how** for each drift.
-- Azure Policy awareness: DINE/Modify/remediation writes (by policy managed
-  identities) are split out as *expected governance*, not actionable drift —
-  while a human writing a policy object stays actionable.
-- Terraform/system-managed callers identified.
+| Capability | Details |
+|------------|---------|
+| Bicep Compilation | Converts Bicep to ARM templates |
+| Parameter Resolution | Resolves environment variables, `.bicepparam`, and `parameters.json` |
+| Expression Resolution | Resolves common ARM expressions and parameter references |
+| Module Expansion | Processes nested deployments and modules |
+| Subscription Templates | Supports subscription-scoped deployments |
+| Resource Group Templates | Supports resource-group-scoped deployments |
 
-## Governance & Security Drift (identity-matched, not name-matched)
+---
 
-- **RBAC role assignments** — out-of-band grants with grantor + timestamp from
-  the RBAC API (no log-retention limit); privileged roles (Owner, Contributor,
-  UAA, RBAC Admin) flagged `⚠️ PRIVILEGED`.
-- **Policy assignments & exemptions** — out-of-band assignments with
-  provenance; exemptions flagged as audit-critical waivers with expiry.
-- **Key Vault / Storage / AI accounts** — networkAcls (defaultAction flips,
-  hand-added ipRules/vnet rules as exact sets), Key Vault access policies
-  (per-principal, permissions as sets).
-- **AI resources** — model deployments (version pinning, TPM capacity bumps),
-  custom content-filter (RAI) policy loosening per name+source, Foundry
-  projects/connections.
+# Live State Collection
 
-## Landing-Zone Operations (CAF/ALZ)
+| Capability | Source |
+|------------|--------|
+| Azure Resources | Azure Resource Graph |
+| Locks | ARM REST |
+| Cosmos DB Child Resources | ARM REST |
+| VNet Peerings | Expanded from Azure properties |
+| AI Model Deployments | ARM REST |
+| AI Safety Policies | ARM REST |
+| Foundry Projects | ARM REST |
+| Foundry Connections | ARM REST |
+| Cross-Subscription Resources | Resource Graph and ARM REST |
 
-- One central agent scans many LZs (`lz-index.yml`): per-LZ repo, config,
-  schedule; subscription-scoped scans with RG wildcards/globs.
-- **Owner routing** — every drift tagged `platform` or `workload` (network
-  fabric vs app resources, with NSG-rule and grant-scope nuances) and routed
-  to the right team's channel.
-- **Notifications** — multi-team Slack/Teams with per-team drift-type +
-  owner filters, custom templates, webhook URLs referenced as
-  `${DRIFT_WEBHOOK_*}` secrets (never plaintext; redirects treated as
-  delivery failures).
+---
 
-## Quality & Safety
+# Drift Detection
 
-- 216 unit tests (stdlib, no Azure needed); every capability additionally
-  verified live end-to-end (introduce drift → detect → notify → revert → clean).
-- Fail-soft data collection (a blocked API never kills the scan); kill
-  switches per subsystem (`INCLUDE_ROLE_ASSIGNMENTS`,
-  `INCLUDE_POLICY_ASSIGNMENTS`); GitHub OIDC to Azure (no stored credentials).
+## Drift Types
 
-## Coverage Summary
+| Type | Description |
+|--------|-------------|
+| Property Drift | Resource exists but configuration differs |
+| Missing Resource | Defined in Bicep but not deployed |
+| Extra Resource | Exists in Azure but not defined in Bicep |
 
-Everything in Azure Resource Graph plus expanded children — live-validated on:
-storage, App Service, Key Vault, Logic Apps, Log Analytics, Event Hubs,
-Cosmos DB (+children), ACR, ACI, SQL Server/DB, Azure OpenAI / AI Services /
-Foundry (+children), Service Bus, Traffic Manager, DNS zones, Monitor
-action groups & metric alerts, VNets/subnets/peerings/NSGs/route tables/NAT,
-private endpoints, locks, RBAC, and Azure Policy. Newer additions handled but
-not yet live-verified: load balancers and Application Gateways (+ WAF policy;
-owner-tagged platform, WAF mode / SSL-min-version critical), Front Door
-Standard/Premium (+ endpoints/origin groups/origins/routes/security policies;
-route TLS-downgrade flagged critical), SQL firewall rules, Data Collection
-Rules + DCR associations (silenced-telemetry drift), diagnostic settings,
-Defender pricings, and Container Apps (ingress exposure flagged critical).
+## Detection Characteristics
+
+| Capability | Description |
+|------------|-------------|
+| Property-Level Comparison | Compares individual properties |
+| Severity Classification | Security-sensitive findings flagged as critical |
+| Azure Normalisation | Handles casing, defaults and Azure-generated values |
+| Subset Comparison | Ignores Azure-added read-only metadata |
+| Write-Only Protection | Secrets and write-only values not compared or exposed |
+
+---
+
+# Intelligent Matching
+
+| Capability | Description |
+|------------|-------------|
+| Runtime Name Detection | Supports `uniqueString()`, `guid()` and generated names |
+| Parent-Child Resource Matching | Handles nested Azure resources |
+| Resource Type Normalisation | Case-insensitive type matching |
+| Null vs Default Handling | Prevents false positives caused by Azure defaults |
+| Ignore Profiles | Supports platform and landing-zone specific exclusions |
+
+---
+
+# Change Attribution
+
+| Capability | Description |
+|------------|-------------|
+| Activity Log Analysis | Identifies likely origin of changes |
+| User Attribution | Records who changed a resource where possible |
+| Policy Attribution | Identifies Modify and DeployIfNotExists actions |
+| Terraform Attribution | Separates Terraform-managed activity |
+| System Attribution | Identifies Azure-managed changes |
+
+---
+
+# Governance Capabilities
+
+## RBAC Drift
+
+| Capability | Description |
+|------------|-------------|
+| Role Assignment Detection | Finds out-of-band assignments |
+| Privileged Role Detection | Flags Owner, Contributor, UAA and RBAC Administrator roles |
+| Grant Attribution | Records who granted access and when |
+| Scope Awareness | Supports RG and subscription scope |
+
+## Policy Drift
+
+| Capability | Description |
+|------------|-------------|
+| Policy Assignment Detection | Finds unmanaged policy assignments |
+| Policy Exemption Detection | Detects exemption creation and expiry |
+| Definition Tracking | Correlates assignments with definitions |
+| Governance Classification | Separates governance changes from resource drift |
+
+---
+
+# Security Capabilities
+
+| Area | Detection |
+|--------|-----------|
+| Key Vault | Access policies, firewall settings, network ACLs |
+| Storage Accounts | Firewall configuration and network ACLs |
+| RBAC | Privileged assignments |
+| AI Services | Model deployments and safety policy changes |
+| Networking | Added firewall rules, route changes and access paths |
+| Exemptions | Policy waivers and exceptions |
+
+Critical findings are flagged where a detected change increases exposure or reduces security controls.
+
+---
+
+# Ownership & Routing
+
+| Owner | Resource Types |
+|----------|---------------|
+| Platform | VNets, subnets, route tables, network fabric, platform governance |
+| Workload | Applications, data services, storage, Key Vaults, workloads |
+| Mixed | NSG resources are platform-owned, security rules are workload-owned |
+
+---
+
+# Notifications
+
+| Capability | Description |
+|------------|-------------|
+| Slack | Webhook-based notifications |
+| Teams | Webhook-based notifications |
+| Owner Routing | Send findings to responsible teams |
+| Event Filtering | Filter by drift type |
+| Custom Templates | Team-specific message formats |
+| Consolidated Reports | Single notification per landing zone |
+
+---
+
+# Reporting
+
+| Format | Purpose |
+|---------|---------|
+| JSON | Integration and automation |
+| HTML | Human-readable reporting |
+| GitHub Summary | CI/CD visibility |
+| GitHub Issue Publication | Landing-zone-specific reporting |
+
+---
+
+# Supported Resource Coverage
+
+## Fully Validated
+
+- Storage Accounts
+- App Services
+- Key Vault
+- Logic Apps
+- Log Analytics
+- Event Hubs
+- Cosmos DB
+- Azure Container Registry
+- Azure Container Instances
+- SQL Server
+- SQL Database
+- Azure OpenAI / Azure AI Services
+- Azure AI Foundry
+- Service Bus
+- Traffic Manager
+- DNS Zones
+- Virtual Networks
+- Subnets
+- NSGs
+- Route Tables
+- NAT Gateway
+- Private Endpoints
+- Locks
+- RBAC
+- Azure Policy
+
+## Recently Added
+
+- Load Balancers
+- Application Gateways
+- WAF Policies
+- Front Door Standard/Premium
+- SQL Firewall Rules
+- Data Collection Rules
+- DCR Associations
+- Diagnostic Settings
+- Defender Plans
+- Container Apps
+
+---
+
+# Operational Characteristics
+
+| Capability | Description |
+|------------|-------------|
+| Multi-Team Support | Multiple teams from one agent |
+| Multi-Repository Support | Scan across many Bicep repositories |
+| Subscription Scanning | Whole landing-zone scans |
+| RG Selectors | Explicit names, glob patterns, or wildcard selection |
+| Parallel Processing | Multiple checks execute concurrently |
+| Fail-Soft Collection | Partial failures do not stop scans |
+| GitHub OIDC Authentication | No Azure credentials stored in GitHub |
+
+---
+
+# Quality & Validation
+
+| Capability | Description |
+|------------|-------------|
+| Unit Test Coverage | Comprehensive automated testing |
+| End-to-End Validation | Live validation of drift scenarios |
+| Least Privilege Access | Reader-only Azure permissions |
+| Secretless Authentication | GitHub OIDC Workload Identity Federation |
+| Safe Drift Detection | Read-only operation, no remediation changes performed |
