@@ -110,8 +110,27 @@ Use this document to understand what the agent can detect, how findings are clas
 | Activity Log Analysis | Identifies likely origin of changes |
 | User Attribution | Records who changed a resource where possible |
 | Policy Attribution | Identifies Modify and DeployIfNotExists actions |
+| Deployer Attribution | Recognises the IaC pipeline's own changes as authorized deployments |
 | Terraform Attribution | Separates Terraform-managed activity |
 | System Attribution | Identifies Azure-managed changes |
+
+## Deployer Attribution
+
+Changes made by the pipeline identity that deploys the estate are attributed
+as **authorized deployments** (🚀 Pipeline badge, low severity) instead of
+"manual change (unauthorized)". The drift itself remains actionable — a
+pipeline-created orphan is still drift; only the attribution changes.
+
+Deployer identities are never hardcoded:
+
+| Source | How |
+|--------|-----|
+| Scanning identity (automatic) | The identity the scan authenticates as is read from its own access-token claims (object ID, appId, UPN). When the agent runs in the same pipeline that deploys — the common case — no configuration is needed. |
+| `DRIFT_AUTHORIZED_DEPLOYERS` | Optional comma-separated allowlist (object IDs, appIds or UPNs) for estates deployed with a *different* identity than the one that scans. |
+
+Attribution precedence: Azure Policy managed identities always classify as
+policy-enforced, even if listed as deployers; deployer attribution wins over
+Terraform/manual.
 
 ---
 
