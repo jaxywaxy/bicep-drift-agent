@@ -30,6 +30,7 @@ class ChangeOrigin(str, Enum):
     MANUAL_CHANGE = "manual_change"
     TERRAFORM_CHANGE = "terraform_change"
     SYSTEM_MANAGED = "system_managed"
+    AUTHORIZED_DEPLOYMENT = "authorized_deployment"
     UNKNOWN = "unknown"
 
 
@@ -38,6 +39,7 @@ class ChangeCategory(str, Enum):
     COMPLIANCE_ENFORCED = "compliance_enforced"
     UNAUTHORIZED = "unauthorized"
     UNMANAGED = "unmanaged"
+    AUTHORIZED = "authorized"
     UNKNOWN = "unknown"
 
 
@@ -218,6 +220,7 @@ def select_relevant_activity(
 def classify_change_origin(
     activity_logs: Optional[List[Dict[str, Any]]],
     policy_principal_ids: Optional[set] = None,
+    authorized_deployers: Optional[set] = None,
 ) -> ChangeOriginInfo:
     """
     Classify the origin of a drift based on Activity Log entries.
@@ -229,6 +232,13 @@ def classify_change_origin(
             (DINE/Modify act through the assignment's identity - the caller is a
             GUID, not "Azure Policy", and the resource write often lacks a
             policyAssignmentId).
+        authorized_deployers: lowercased identity aliases (object ids, appIds,
+            UPNs) of IaC pipeline identities - the scanning identity plus any
+            DRIFT_AUTHORIZED_DEPLOYERS config. A change by one of these is an
+            authorized deployment, not a manual/unauthorized change. NOTE:
+            expected stays False - the DRIFT is still actionable (a
+            pipeline-created orphan is still drift); only the attribution and
+            severity change, so authorized deploys don't scream "unauthorized".
 
     Returns:
         ChangeOriginInfo with classification and metadata
@@ -281,6 +291,23 @@ def classify_change_origin(
             timestamp=latest.get('timestamp'),
             changed_by=caller,
             reason=f"System-managed resource modified by {caller}",
+        )
+
+    # Check for authorized deployer identities (the scanning identity and any
+    # configured DRIFT_AUTHORIZED_DEPLOYERS). Checked AFTER policy/system (a
+    # policy MSI write stays policy-attributed) and BEFORE terraform/manual
+    # (an allowlisted deployer wins). expected=False keeps the drift in the
+    # actionable set - only attribution and severity change.
+    if authorized_deployers and caller in authorized_deployers:
+        return ChangeOriginInfo(
+            origin=ChangeOrigin.AUTHORIZED_DEPLOYMENT,
+            category=ChangeCategory.AUTHORIZED,
+            severity=ChangeSeverity.LOW,
+            expected=False,
+            timestamp=latest.get('timestamp'),
+            changed_by=caller,
+            method=latest.get('method', 'Unknown'),
+            reason=f"Deployed by authorized pipeline identity {caller}",
         )
 
     # Check for Terraform
@@ -420,7 +447,8 @@ def _is_system_managed(caller: str) -> bool:
 
 def build_resource_lifecycle(
     resource_id: str,
-    activity_logs: Optional[List[Dict[str, Any]]]
+    activity_logs: Optional[List[Dict[str, Any]]],
+    authorized_deployers: Optional[set] = None,
 ) -> ResourceLifecycle:
     """
     Build complete resource lifecycle from Activity Log entries.
@@ -436,7 +464,7 @@ def build_resource_lifecycle(
     sorted_logs = sorted(activity_logs, key=lambda x: x.get('timestamp', ''), reverse=False)
 
     for entry in sorted_logs:
-        event = _create_lifecycle_event(entry)
+        event = _create_lifecycle_event(entry, authorized_deployers)
         if event:
             lifecycle.events.append(event)
 
@@ -454,7 +482,10 @@ def build_resource_lifecycle(
     return lifecycle
 
 
-def _create_lifecycle_event(entry: Dict[str, Any]) -> Optional[ResourceLifecycleEvent]:
+def _create_lifecycle_event(
+    entry: Dict[str, Any],
+    authorized_deployers: Optional[set] = None,
+) -> Optional[ResourceLifecycleEvent]:
     """Create a lifecycle event from an Activity Log entry."""
     try:
         timestamp = entry.get('timestamp')
@@ -467,7 +498,9 @@ def _create_lifecycle_event(entry: Dict[str, Any]) -> Optional[ResourceLifecycle
         op_type = _classify_operation_type(operation_name)
 
         # Determine origin and context
-        origin, policy_info = _classify_origin_context(caller, operation_name, props)
+        origin, policy_info = _classify_origin_context(
+            caller, operation_name, props, authorized_deployers
+        )
 
         # Extract method
         method = _extract_method(caller, operation_name, props)
@@ -519,7 +552,8 @@ def _classify_operation_type(operation_name: str) -> OperationType:
 def _classify_origin_context(
     caller: str,
     operation_name: str,
-    props: Dict[str, Any]
+    props: Dict[str, Any],
+    authorized_deployers: Optional[set] = None,
 ) -> tuple[ChangeOrigin, Dict[str, str]]:
     """
     Classify origin and extract context.
@@ -551,6 +585,10 @@ def _classify_origin_context(
     # System managed
     if _is_system_managed(caller):
         return ChangeOrigin.SYSTEM_MANAGED, {}
+
+    # Authorized deployer (scanning identity / DRIFT_AUTHORIZED_DEPLOYERS)
+    if authorized_deployers and caller_lower in authorized_deployers:
+        return ChangeOrigin.AUTHORIZED_DEPLOYMENT, {}
 
     # Terraform
     if "terraform" in caller_lower or "terraform" in op_lower:
@@ -616,6 +654,8 @@ def _build_event_reason(
         return f"System-managed change by {actor}"
     elif origin == ChangeOrigin.TERRAFORM_CHANGE:
         return "Modified by Terraform (external IaC)"
+    elif origin == ChangeOrigin.AUTHORIZED_DEPLOYMENT:
+        return f"Deployed by authorized pipeline identity {actor}"
     elif origin == ChangeOrigin.MANUAL_CHANGE:
         return f"Manual change by {actor}"
     else:

@@ -757,6 +757,12 @@ def _get_origin_badge(change_origin: dict) -> str:
     if origin == 'system_managed':
         return '<span class="badge origin-system" title="System-managed change">✅ System</span>'
 
+    # Authorized IaC deployment (green) - the scanning identity or a configured
+    # DRIFT_AUTHORIZED_DEPLOYERS pipeline identity made the change. The drift
+    # itself is still actionable; only the attribution is benign.
+    if origin == 'authorized_deployment':
+        return '<span class="badge origin-system" title="Deployed by an authorized pipeline identity">🚀 Pipeline</span>'
+
     # Manual/unauthorized changes (red)
     if origin in ('manual_change', 'terraform_change'):
         icon = '⚠️' if origin == 'manual_change' else '🔄'

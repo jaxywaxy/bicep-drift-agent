@@ -84,6 +84,7 @@ class LifecycleRenameTests(unittest.TestCase):
         }
         with mock.patch.object(analyze_drift, "fetch_resource_group_activity", return_value=events), \
              mock.patch.object(analyze_drift, "fetch_policy_principal_ids", return_value=set()), \
+             mock.patch.object(analyze_drift, "detect_scanning_identity", return_value=set()), \
              mock.patch.object(analyze_drift, "match_activity_for_resource", return_value=events):
             analyze_drift._build_lifecycle_and_split(report, "rg-x")
         return report["drifts"][0] if report["drifts"] else report["policy_enforced_drifts"][0]

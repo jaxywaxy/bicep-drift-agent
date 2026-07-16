@@ -18,6 +18,20 @@ BICEP_BUILD_TIMEOUT = int(os.environ.get("DRIFT_BICEP_TIMEOUT", "120"))
 WEBHOOK_TIMEOUT_SECONDS = int(os.environ.get("DRIFT_WEBHOOK_TIMEOUT", "10"))
 """Timeout in seconds for Slack/Teams webhook POSTs (tools/send_notifications.py)."""
 
+# ===== Change-Origin Classification =====
+
+AUTHORIZED_DEPLOYERS = frozenset(
+    p.strip().lower()
+    for p in os.environ.get("DRIFT_AUTHORIZED_DEPLOYERS", "").split(",")
+    if p.strip()
+)
+"""Identities whose Activity Log changes are authorized IaC deployments, not
+manual drift (tools/change_origin.py). Comma-separated object IDs, appIds or
+UPNs - whatever form the client's Activity Log 'caller' takes. The identity
+the scan itself runs as is ALWAYS treated as a deployer automatically
+(tools/activity_log.py:detect_scanning_identity), so this is only needed when
+a client deploys with a different identity than they scan with."""
+
 # ===== Logging =====
 
 LOG_LEVEL = os.environ.get("DRIFT_LOG_LEVEL", "INFO").upper()
