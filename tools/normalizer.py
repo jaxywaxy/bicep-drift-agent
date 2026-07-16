@@ -652,9 +652,20 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
         if resource_type == "Microsoft.Resources/deployments":
             nested_template = resource.get("properties", {}).get("template", {})
             if nested_template:
-                nested_params = _extract_nested_parameters(
+                # Start from the nested template's own parameter DEFAULTS, then
+                # overlay what the parent passes. A module param the parent omits
+                # (e.g. postgres adminUsername defaulting to 'pgadmin') otherwise
+                # never resolves and falls back to its NAME, flagging false
+                # property drift against the live value.
+                nested_params = extract_parameters(nested_template)
+                passed_params = _extract_nested_parameters(
                     resource.get("properties", {}), parameters, variables
                 )
+                for pname, pval in passed_params.items():
+                    if pval is not None:
+                        nested_params[pname] = pval
+                    else:
+                        nested_params.setdefault(pname, None)
                 nested_vars = extract_variables(nested_template)
                 nested_resources = flatten_resources(nested_template, nested_params, nested_vars)
                 # Cross-scope module (scope: resourceGroup(otherSub, rg)): stamp the
