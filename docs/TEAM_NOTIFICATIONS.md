@@ -53,8 +53,8 @@ notifications:
     owners: [workload]
 ```
 
-Then create the secret in the **drift agent repo** (where the workflows run —
-not the LZ repo):
+Then create the secret in the repository where the workflows run (for example,
+the central drift agent repository) — not the landing-zone repo:
 
 ```bash
 gh secret set DRIFT_WEBHOOK_PLATFORM --body "https://outlook.webhook.office.com/webhookb2/..."
@@ -320,8 +320,8 @@ cat .github/drift-lz-config.yml | grep -A3 notifications
 **Check 4: Landing zone is in index**
 
 ```bash
-# Verify LZ is in drift-agent repo's lz-index.yml
-gh api repos/ORG/bicep-drift-agent/contents/.github/lz-index.yml
+# Verify LZ is in the central drift agent repo's lz-index.yml (replace placeholders)
+gh api repos/ORG/DRIFT_AGENT_REPO/contents/.github/lz-index.yml
 ```
 
 ### Messages Malformed

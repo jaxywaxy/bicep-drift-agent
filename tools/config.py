@@ -1,5 +1,5 @@
 """
-Configuration management for the bicep-drift-agent.
+Configuration management for the drift agent example.
 
 Tunable runtime parameters, centralized with environment-variable overrides so
 operators can adjust behavior without changing code. Every value here is wired

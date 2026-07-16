@@ -1,0 +1,30 @@
+# CODEOWNERS
+#
+# This file defines default owners for code, docs, and infrastructure in this
+# example repository. Replace the placeholder team/user names with your
+# organisation's GitHub teams or usernames (for example: @your-org/platform-team).
+#
+# Format: <pattern> <owner1> <owner2>
+# See: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repository (change to a team or user)
+* @your-org/platform-team
+
+# Docs maintainers
+/docs/ @your-org/docs-team
+README.md @your-org/docs-team
+CONTRIBUTING.md @your-org/docs-team
+
+# CI, workflows and repo automation
+/.github/ @your-org/devops-team
+
+# Tools and scripts
+/tools/ @your-org/devops-team
+
+# Security and authentication guidance
+docs/AZURE_AUTHENTICATION.md @your-org/security-team
+
+# Optionally add specific owners for sensitive paths
+#/scripts/ @your-org/infra-team
+
+# If you prefer individual maintainers, replace team slugs with @username

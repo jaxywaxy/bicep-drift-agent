@@ -19,7 +19,7 @@ Azure Resources (Query-only access)
 ## Prerequisites
 
 - Azure subscription with Owner/Access Management permissions
-- GitHub repository (bicep-drift-agent)
+-- GitHub repository (your-org/your-repo)
 - Azure CLI installed and authenticated (`az login`)
 
 ## Setup Steps
@@ -52,7 +52,7 @@ az account management-group show --name $MGMT_GROUP
 # Set variables
 MGMT_GROUP="your-management-group-name"  # Update this
 TENANT_ID=$(az account show --query tenantId -o tsv)
-GITHUB_REPO="jaxywaxy/bicep-drift-agent"  # Update to your repo
+GITHUB_REPO="your-org/your-repo"  # Update to your repo
 
 echo "Creating OIDC federation for GitHub..."
 echo "Tenant ID: $TENANT_ID"
@@ -63,7 +63,7 @@ echo ""
 # Create app registration
 echo "Step 1/4: Creating app registration..."
 APP_ID=$(az ad app create \
-  --display-name "bicep-drift-agent-oidc" \
+  --display-name "drift-agent-oidc" \
   --query appId -o tsv)
 
 echo "✓ Created app: $APP_ID"
@@ -112,7 +112,7 @@ echo ""
 
 ### Step 3: Add GitHub Secrets
 
-In your bicep-drift-agent repository:
+In the repository where the workflows run (e.g. the central drift-agent repository or your CI repo):
 
 1. Go to **Settings** → **Secrets and variables** → **Actions**
 2. Click **New repository secret**
@@ -131,7 +131,7 @@ In your bicep-drift-agent repository:
 
 The federated credential above is scoped to:
 ```
-repo:jaxywaxy/bicep-drift-agent:ref:refs/heads/feature/cleanup-and-recommendations
+repo:your-org/your-repo:ref:refs/heads/feature/cleanup-and-recommendations
 ```
 
 **When you merge to main**, update the federated credential:
@@ -148,13 +148,13 @@ az identity federated-credential create \
   --name "github-oidc-main" \
   --identity-name $APP_ID \
   --issuer "https://token.actions.githubusercontent.com" \
-  --subject "repo:jaxywaxy/bicep-drift-agent:ref:refs/heads/main" \
+  --subject "repo:your-org/your-repo:ref:refs/heads/main" \
   --audiences "api://AzureADTokenExchange"
 ```
 
 Or, for all branches:
 ```bash
---subject "repo:jaxywaxy/bicep-drift-agent:*"
+--subject "repo:your-org/your-repo:*"
 ```
 
 ---

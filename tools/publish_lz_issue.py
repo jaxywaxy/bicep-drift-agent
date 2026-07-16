@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 GITHUB_API = os.environ.get("GITHUB_API_URL", "https://api.github.com")
 # Hidden marker locating "our" issue regardless of title edits.
-ISSUE_MARKER = "<!-- bicep-drift-agent:drift-report -->"
+# Use a generic marker (avoid embedding the repository name).
+ISSUE_MARKER = "<!-- drift-agent:drift-report -->"
 ISSUE_LABEL = "drift-report"
 REQUEST_TIMEOUT = 15
 
