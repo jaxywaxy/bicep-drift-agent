@@ -1,6 +1,6 @@
-# Bicep Drift Agent
+# Bicep Drift Agent (example)
 
-Enterprise drift detection for Azure environments managed with Bicep.
+Enterprise drift detection example for Azure environments managed with Bicep.
 
 Bicep Drift Agent continuously compares the desired state defined in Bicep with the actual state deployed in Azure, helping platform and application teams detect configuration drift, governance issues, unmanaged resources, and security-sensitive changes before they become operational problems.
 
@@ -114,10 +114,10 @@ The workflow is:
 
 The solution uses a hybrid ownership model.
 
-The central drift-agent repository owns:
+A centrally managed detection instance owns (example):
 
 - Detection logic
-- Workflows
+- Workflows and CI
 - Reporting
 - Notification framework
 
@@ -129,7 +129,7 @@ Each landing-zone team owns:
 - Notification preferences
 
 ```text
-drift-agent repository
+central drift-agent repository (example)
 │
 ├── .github/lz-index.yml
 └── GitHub Actions

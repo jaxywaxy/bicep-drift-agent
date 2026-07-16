@@ -1,8 +1,8 @@
 # Contributing
 
-Thank you for contributing to Bicep Drift Agent.
+Thank you for contributing to this example drift agent.
 
-This project is designed for enterprise Azure environments and focuses on reliable, accurate, and explainable drift detection for Bicep-managed infrastructure.
+This example demonstrates drift detection for enterprise Azure environments and focuses on reliable, accurate, and explainable drift detection for Bicep-managed infrastructure. Use it as a reference implementation or a starting point for your own, organisation-specific deployment.
 
 Before contributing, please review the project documentation:
 
@@ -16,11 +16,9 @@ Before contributing, please review the project documentation:
 
 # Development Workflow
 
-This repository uses a **branch and pull request model**.
+The project follows a **branch and pull request model**.
 
-Contributors should create feature branches directly from the repository and submit pull requests for review.
-
-Forks are not required.
+Contributors should create feature branches from the main branch in their fork or organization and submit pull requests for review against the central example or their own repository as appropriate.
 
 ## Workflow
 
@@ -75,11 +73,12 @@ docs/security-model
 - GitHub CLI
 - Bicep CLI
 
-## Clone Repository
+## Clone Example
 
 ```bash
 git clone <repository-url>
 
+# Change to the directory you cloned (example name shown)
 cd bicep-drift-agent
 ```
 
