@@ -204,6 +204,7 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Azure OpenAI / Azure AI Services
 - Azure AI Foundry
 - Service Bus
+- Service Bus Queues
 - Traffic Manager
 - DNS Zones
 - Virtual Networks
@@ -228,6 +229,9 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Diagnostic Settings
 - Defender Plans
 - Container Apps
+- Redis 
+- Recovery Services Vault
+
 
 ---
 

@@ -412,9 +412,13 @@ notifications:
 
 ---
 
-## See Also
+## Related Documentation
 
-- [Landing Zones Guide](LANDING_ZONES.md) — Full hybrid architecture
-- [Enterprise Configuration](ENTERPRISE_CONFIGURATION.md) — Setup for organizations
-- [Slack Incoming Webhooks](https://api.slack.com/messaging/webhooks)
-- [Teams Webhooks](https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/connectors-using)
+- [README.md](../README.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [CAPABILITIES.md](CAPABILITIES.md) 
+- [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) - Teams and Slack Notification configuration
+- [LANDING_ZONES_OPERATIONS.md](LANDING_ZONES_OPERATIONS.md) — Landing Zone configuration
+- [AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md) - Azure authentication configuration
+- [SECURITY_MODEL.md](SECURITY_MODEL.md) - Security 
+- [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) - Runbook for Operations team

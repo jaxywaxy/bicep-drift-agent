@@ -243,5 +243,5 @@ az identity federated-credential list --identity-name $APP_ID
 
 ## See Also
 
-- [LANDING_ZONES.md](LANDING_ZONES.md) — Landing Zone configuration
-- [ENTERPRISE_CONFIGURATION.md](ENTERPRISE_CONFIGURATION.md) — Enterprise setup guide
+- [LANDING_ZONES_OPERATIONS.md](LANDING_ZONES_OPERATIONS.md) — Landing Zone configuration
+
