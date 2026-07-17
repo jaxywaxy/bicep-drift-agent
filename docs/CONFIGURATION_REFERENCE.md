@@ -472,13 +472,29 @@ The identity the drift agent **runs as is always recognised automatically**
 needed when the agent scans with the same identity that deploys the estate.
 
 Set `DRIFT_AUTHORIZED_DEPLOYERS` only when an estate is deployed by a
-*different* identity than the one that scans it:
+*different* identity than the one that scans it.
+
+**Recommended: repository variable.** The bundled workflows already pass the
+repository variable `DRIFT_AUTHORIZED_DEPLOYERS` into the scan job — no
+workflow edits needed:
+
+```bash
+# Comma-separated. Accepts object IDs, appIds or UPNs - whatever form
+# the Activity Log 'caller' field takes for that identity (object ID
+# for service principals, email for users).
+gh variable set DRIFT_AUTHORIZED_DEPLOYERS \
+  --body "aaaaaaaa-1111-2222-3333-444444444444,deployer@example.com"
+```
+
+(Or in the GitHub UI: **Settings → Secrets and variables → Actions →
+Variables**.) It is a variable, not a secret: identity object IDs are not
+sensitive, and keeping them visible aids review.
+
+**Custom pipelines:** if you run the tool outside the bundled workflows, set
+the same value as an environment variable on the analyze step:
 
 ```yaml
 env:
-  # Comma-separated. Accepts object IDs, appIds or UPNs - whatever form
-  # the Activity Log 'caller' field takes for that identity (object ID
-  # for service principals, email for users).
   DRIFT_AUTHORIZED_DEPLOYERS: "aaaaaaaa-1111-2222-3333-444444444444,deployer@example.com"
 ```
 
@@ -507,7 +523,7 @@ Notes:
 
 | Secret | Purpose |
 |----------|----------|
-| `BICEP_REPO_TOKEN` | Access private repositories |
+| `BICEP_REPO_TOKEN` | PAT for cross-repo access: checkout of private LZ/bicep repos + publishing drift issues to LZ repos (needs `issues: write` there). Falls back to `github.token` (same-repo only) |
 | `DRIFT_WEBHOOK_*` | Slack/Teams notifications |
 | `ANTHROPIC_API_KEY` | AI-generated recommendations |
 

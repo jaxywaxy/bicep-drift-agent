@@ -248,14 +248,14 @@ authorized IaC deployments automatically (it reads its own token claims at
 scan time). If your estates are **deployed by a different app registration**
 than the one the drift agent authenticates with — e.g. one OIDC app per repo,
 or separate deploy/scan identities for least privilege — add the deployer
-identities to `DRIFT_AUTHORIZED_DEPLOYERS` so their deploys are not reported
-as unauthorized manual changes:
+identities to the `DRIFT_AUTHORIZED_DEPLOYERS` **repository variable** so
+their deploys are not reported as unauthorized manual changes:
 
-```yaml
-env:
-  DRIFT_AUTHORIZED_DEPLOYERS: "<deployer-sp-object-id>"
+```bash
+gh variable set DRIFT_AUTHORIZED_DEPLOYERS --body "<deployer-sp-object-id>"
 ```
 
+The bundled workflows pass this variable into the scan job automatically.
 Use the service principal **object ID** (what the Activity Log `caller` field
 records), not the appId. See
 [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md#authorized-deployers).
