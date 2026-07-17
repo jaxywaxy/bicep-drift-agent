@@ -192,6 +192,12 @@ jobs:
     env:
       AZURE_SUBSCRIPTION_ID: ${{ needs.load-config.outputs.lz-subscription-id }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Extra IaC deployer identities (object IDs/appIds/UPNs, comma-separated)
+      # whose changes are attributed as pipeline deployments instead of manual
+      # drift. The scanning identity is always recognised automatically; set
+      # the repo variable only when estates are deployed by a DIFFERENT
+      # identity than the one this workflow scans with.
+      DRIFT_AUTHORIZED_DEPLOYERS: ${{ vars.DRIFT_AUTHORIZED_DEPLOYERS || '' }}
       NODE_OPTIONS: --no-warnings=DEP0005
     steps:
       - name: Azure Login (OIDC)
