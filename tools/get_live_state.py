@@ -849,6 +849,13 @@ _CHILD_EXPANSION_SPECS = [
      "2023-12-15-preview", "Microsoft.EventGrid/topics/eventSubscriptions", None),
     ("microsoft.eventgrid/systemtopics", "eventSubscriptions",
      "2023-12-15-preview", "Microsoft.EventGrid/systemTopics/eventSubscriptions", None),
+    # Azure Firewall Policy rule collection groups hold the actual firewall
+    # rules; the policy row itself is nearly empty. Invisible to Resource
+    # Graph, so without expansion declared RCGs false-flag missing_in_azure
+    # and an out-of-band allow rule (THE classic firewall drift) goes
+    # undetected.
+    ("microsoft.network/firewallpolicies", "ruleCollectionGroups",
+     "2023-09-01", "Microsoft.Network/firewallPolicies/ruleCollectionGroups", None),
 ]
 
 # Record sets list with their concrete type in the response (…/dnszones/A etc.);

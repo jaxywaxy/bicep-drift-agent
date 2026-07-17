@@ -546,6 +546,26 @@ class PropertyComparator:
         "properties.sslpolicy.minprotocolversion",
         "properties.webapplicationfirewallconfiguration.enabled",
         "properties.webapplicationfirewallconfiguration.firewallmode",
+        # Azure Firewall (policy + classic). The rule collections ARE the
+        # firewall: an out-of-band allow rule, an action flip, or a priority
+        # reshuffle silently opens traffic paths - the NSG securityRules
+        # equivalent. threatIntelMode Alert/Deny->Off disables threat
+        # intelligence while the firewall still reads healthy; whitelisting an
+        # IP/FQDN exempts it from TI; DNS settings changes (proxy off, custom
+        # servers) redirect name resolution; intrusionDetection covers Premium
+        # IDPS mode downgrades. Classic (non-policy) firewalls carry the three
+        # inline *RuleCollections paths instead.
+        "properties.rulecollections",
+        "properties.threatintelmode",
+        "properties.threatintelwhitelist",
+        "properties.dnssettings",
+        "properties.intrusiondetection",
+        "properties.applicationrulecollections",
+        "properties.networkrulecollections",
+        "properties.natrulecollections",
+        # Detaching/swapping the policy on the firewall resource re-bases its
+        # entire rule set.
+        "properties.firewallpolicy",
         # Container Apps ingress exposure: turning ingress public or allowing
         # insecure (http) traffic is a security posture change.
         "properties.configuration.ingress.external",
@@ -988,6 +1008,15 @@ class PropertyComparator:
         # Hate/Completion), so the generic name-keyed matcher pairs them wrongly
         # - and a filter loosened out-of-band must be drift.
         if kl.endswith("properties.contentfilters"):
+            return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
+        # Azure Firewall plain-string lists. Elements carry no 'name', so the
+        # generic subset compare is vacuous when the bicep side is empty - an
+        # out-of-band threat-intel whitelist entry (exempting an IP/FQDN from
+        # TI) or an added custom DNS server (resolution hijack) would be
+        # invisible. Exact-set semantics make live-added entries drift.
+        if (kl.endswith(".threatintelwhitelist.ipaddresses")
+                or kl.endswith(".threatintelwhitelist.fqdns")
+                or kl.endswith(".dnssettings.servers")):
             return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
         return None
 
