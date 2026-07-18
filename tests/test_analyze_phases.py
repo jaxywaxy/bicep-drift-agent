@@ -149,6 +149,27 @@ class TestDriftTypeCounts(unittest.TestCase):
         )
 
 
+class TestFinalizeDriftCount(unittest.TestCase):
+    """drift_count is stamped in Phase 1 on the raw drift list; after Phase 2/3
+    reconciliation the drifts array is shorter, so the persisted count must be
+    recomputed to match (the 40-vs-36 discrepancy seen in live reports)."""
+
+    def test_recomputes_from_final_array(self):
+        report = {"drift_count": 40, "drifts": [{"drift_type": "property_drift"}]
+                  + [{"drift_type": "matched_unresolvable"} for _ in range(33)]}
+        self.assertEqual(ad._finalize_drift_count(report), 34)
+        self.assertEqual(report["drift_count"], 34)
+
+    def test_empty_array_is_zero(self):
+        report = {"drift_count": 12, "drifts": []}
+        self.assertEqual(ad._finalize_drift_count(report), 0)
+        self.assertEqual(report["drift_count"], 0)
+
+    def test_missing_drifts_key_is_zero(self):
+        report = {"drift_count": 7}
+        self.assertEqual(ad._finalize_drift_count(report), 0)
+
+
 class TestClaudeAnalysisNoAgent(unittest.TestCase):
     def test_analysis_without_agent_returns_none(self):
         report = {"bicep_file": "m.bicep", "resource_group": "rg", "drifts": []}
