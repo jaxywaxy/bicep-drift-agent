@@ -568,6 +568,22 @@ def _clean_estate_summary(report_data: dict, reconciled: int) -> str:
     return "\n".join(lines)
 
 
+def _finalize_drift_count(report_data: dict) -> int:
+    """Recompute drift_count from the FINAL drifts array and store it.
+
+    Phase 1 (run_drift_check) stamps drift_count = len(raw drifts). Phase 2/3
+    then reconcile - relabelling unresolvable-named extras to
+    matched_unresolvable and moving entries into ignored_drifts /
+    policy_enforced_drifts - which shortens the drifts array. Without this the
+    persisted drift_count stays at the stale Phase-1 value (e.g. 40 while the
+    array holds 36), contradicting the reconciled counts. CI's count_drifts.py
+    recomputes independently, so only the report/HTML field was affected.
+    """
+    count = len(report_data.get("drifts") or [])
+    report_data["drift_count"] = count
+    return count
+
+
 def _drift_type_counts(drifts):
     """(missing, extra, modified) counts feeding DriftReport.total_drift.
 
@@ -939,6 +955,11 @@ def main():
         # Emit the grep-able summary from the FINAL actionable set (post Phase 3 split),
         # so the CI summary matches the report and excludes policy-enforced changes.
         _print_drift_summary(report_data.get("drifts", []))
+
+        # drift_count was stamped on the raw Phase-1 drifts; the array has since
+        # been reconciled (ignored/policy-split entries removed). Recompute so the
+        # persisted count matches the final array and the reconciled summary.
+        _finalize_drift_count(report_data)
 
 
         # Per-run cost telemetry: exact token usage (from each response's usage
