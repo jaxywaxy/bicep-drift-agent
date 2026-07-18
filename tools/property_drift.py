@@ -6,7 +6,7 @@ to detect configuration changes outside of IaC.
 """
 
 import logging
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional
 from dataclasses import dataclass
 from collections import defaultdict
 
@@ -802,6 +802,23 @@ class PropertyComparator:
                         )
                     continue
 
+                # Azure Firewall ruleCollections: emit GRANULAR per-collection /
+                # per-rule / per-field diffs instead of one opaque whole-array
+                # replacement. The generic subset compare only says "the array
+                # differs" and dumps both full arrays, which (a) buries the actual
+                # change under Azure's read-only field augmentation and (b) MISSES
+                # a scalar-list widening on its own - [443] is a subset of
+                # [443, 3389], so an added port is invisible unless some sibling
+                # (an action flip, an added rule) independently fails the match.
+                # The granular differ uses exact-set semantics on scalar rule
+                # lists so an out-of-band opening is caught by itself.
+                fw = PropertyComparator._compare_rule_collections(
+                    key, bicep_value, deployed_value
+                )
+                if fw is not None:
+                    diffs.extend(fw)
+                    continue
+
                 # Skip properties where Azure returns None (not exposed by API)
                 # This prevents false positives when Bicep has explicit values but
                 # the property isn't available in the Azure API response
@@ -1083,6 +1100,162 @@ class PropertyComparator:
         # Every leftover deployed rule must be covered by an unresolved slot;
         # anything beyond that was added out-of-band.
         return len(unmatched_deployed) <= unresolved_slots
+
+    @staticmethod
+    def _compare_rule_collections(
+        key: str, bicep_value: Any, deployed_value: Any
+    ) -> Optional[List["PropertyDiff"]]:
+        """Granular diff for Azure Firewall policy ``ruleCollections``.
+
+        Returns a list of PropertyDiff pinpointing the exact collection, rule,
+        and field that changed (empty when nothing material differs), or None to
+        fall through to the generic comparison when this isn't a ruleCollections
+        property or the shapes aren't both lists.
+
+        Paths read like ``properties.ruleCollections[net-deny-smb].action.type``
+        and ``...[net-allow].rules[allow-https-out].destinationPorts`` so a
+        reviewer sees "Deny->Allow" / "port 3389 added" directly instead of two
+        full-array dumps. Scalar rule lists (ports, addresses, fqdns) compare as
+        exact sets: a live-added element IS drift, unlike the vacuous subset
+        match the generic path applies.
+        """
+        if not key.lower().endswith(".rulecollections"):
+            return None
+        if not (isinstance(bicep_value, list) and isinstance(deployed_value, list)):
+            return None
+
+        sev = PropertyComparator._get_severity(key)  # "critical" (ruleCollections)
+
+        def name_of(el: Any) -> str:
+            return str(el.get("name", "")).lower() if isinstance(el, dict) else ""
+
+        diffs: List[PropertyDiff] = []
+        deployed_by_name = {name_of(c): c for c in deployed_value if isinstance(c, dict)}
+        bicep_names = set()
+
+        for b in bicep_value:
+            if not isinstance(b, dict):
+                continue
+            bname = name_of(b)
+            bicep_names.add(bname)
+            cpath = f"{key}[{b.get('name', '')}]"
+            d = deployed_by_name.get(bname)
+            if d is None:
+                diffs.append(PropertyDiff(cpath, b, None, "removed", sev))
+                continue
+
+            # action.type (Deny->Allow inversion is the classic tamper).
+            b_action = (b.get("action") or {}).get("type")
+            d_action = (d.get("action") or {}).get("type")
+            if (
+                b_action is not None
+                and d_action is not None
+                and not PropertyComparator._scalar_equal(b_action, d_action)
+            ):
+                diffs.append(
+                    PropertyDiff(f"{cpath}.action.type", b_action, d_action, "modified", sev)
+                )
+
+            # Remaining collection-scalar fields (priority, ruleCollectionType).
+            diffs.extend(
+                PropertyComparator._compare_fw_fields(
+                    cpath, b, d, sev, skip={"name", "action", "rules"}
+                )
+            )
+
+            # Rules within the collection.
+            diffs.extend(
+                PropertyComparator._compare_fw_rules(
+                    f"{cpath}.rules", b.get("rules") or [], d.get("rules") or [], sev
+                )
+            )
+
+        # Whole collections added out-of-band (a rogue rule-collection group
+        # inside the policy, not just a rule).
+        for d in deployed_value:
+            if isinstance(d, dict) and name_of(d) not in bicep_names:
+                diffs.append(
+                    PropertyDiff(f"{key}[{d.get('name', '')}]", None, d, "added", sev)
+                )
+
+        return diffs
+
+    @staticmethod
+    def _compare_fw_rules(
+        base_path: str, bicep_rules: list, deployed_rules: list, severity: str
+    ) -> List["PropertyDiff"]:
+        """Per-rule / per-field firewall rule diffs, keyed by rule name."""
+        def name_of(el: Any) -> str:
+            return str(el.get("name", "")).lower() if isinstance(el, dict) else ""
+
+        diffs: List[PropertyDiff] = []
+        deployed_by_name = {name_of(r): r for r in deployed_rules if isinstance(r, dict)}
+        bicep_names = set()
+
+        for b in bicep_rules:
+            if not isinstance(b, dict):
+                continue
+            bname = name_of(b)
+            bicep_names.add(bname)
+            rpath = f"{base_path}[{b.get('name', '')}]"
+            d = deployed_by_name.get(bname)
+            if d is None:
+                diffs.append(PropertyDiff(rpath, b, None, "removed", severity))
+                continue
+            diffs.extend(
+                PropertyComparator._compare_fw_fields(rpath, b, d, severity, skip={"name"})
+            )
+
+        # Rules added out-of-band (the allow-all-outbound exfil path).
+        for d in deployed_rules:
+            if isinstance(d, dict) and name_of(d) not in bicep_names:
+                diffs.append(
+                    PropertyDiff(f"{base_path}[{d.get('name', '')}]", None, d, "added", severity)
+                )
+
+        return diffs
+
+    @staticmethod
+    def _compare_fw_fields(
+        base_path: str, bicep_el: dict, deployed_el: dict, severity: str, skip: set
+    ) -> List["PropertyDiff"]:
+        """Compare the bicep-declared fields of one firewall element.
+
+        Scalar lists (destinationPorts, sourceAddresses, targetFqdns, ...) use
+        exact-set semantics - a widened/removed member is drift. Everything else
+        keeps subset semantics so Azure's read-only field augmentation
+        (ipv6Rule, sourceIpGroups: [], fqdnTags: [], ...) is not flagged.
+        """
+        diffs: List[PropertyDiff] = []
+        deployed_by_lower = {k.lower(): k for k in deployed_el}
+
+        for fk, fv in bicep_el.items():
+            if fk.lower() in {s.lower() for s in skip}:
+                continue
+            if PropertyComparator._has_unresolved_expressions(fv):
+                continue
+            dk = deployed_by_lower.get(fk.lower())
+            dv = deployed_el.get(dk) if dk is not None else None
+            if dv is None:
+                # Azure omits the field; only an explicit non-empty bicep value drifts.
+                if fv in (None, "", [], {}):
+                    continue
+                diffs.append(PropertyDiff(f"{base_path}.{fk}", fv, None, "modified", severity))
+                continue
+
+            if (
+                isinstance(fv, list)
+                and isinstance(dv, list)
+                and all(not isinstance(x, (dict, list)) for x in fv)
+                and all(not isinstance(x, (dict, list)) for x in dv)
+            ):
+                # Exact-set on scalar lists: order-insensitive, case-insensitive.
+                if sorted(str(x).lower() for x in fv) != sorted(str(x).lower() for x in dv):
+                    diffs.append(PropertyDiff(f"{base_path}.{fk}", fv, dv, "modified", severity))
+            elif not PropertyComparator._value_matches(fv, dv):
+                diffs.append(PropertyDiff(f"{base_path}.{fk}", fv, dv, "modified", severity))
+
+        return diffs
 
     @staticmethod
     def _access_policies_match(bicep_list: list, deployed_list: list) -> bool:

@@ -117,6 +117,38 @@ class TestPropertyDriftCanonicalDriftTypes(unittest.TestCase):
         self.assertEqual(leaked, [], "ignored extra leaked into property_drifts")
 
 
+class TestDriftTypeCounts(unittest.TestCase):
+    """The summary handed to the analysis agent derives total_drift from these
+    counts. property_drift must count as a modification or the summary reports
+    total_drift: 0 next to critical findings (the contradiction the agent flagged)."""
+
+    class _D:
+        def __init__(self, drift_type):
+            self.drift_type = drift_type
+
+    def test_property_drift_counts_as_modified(self):
+        missing, extra, modified = ad._drift_type_counts(
+            [self._D("property_drift"), self._D("property_drift")]
+        )
+        self.assertEqual((missing, extra, modified), (0, 0, 2))
+
+    def test_mixed_types_counted_by_bucket(self):
+        drifts = [
+            self._D("property_drift"),
+            self._D("missing_in_azure"),
+            self._D("extra_in_azure"),
+            self._D("modified"),
+        ]
+        missing, extra, modified = ad._drift_type_counts(drifts)
+        self.assertEqual((missing, extra, modified), (1, 1, 2))
+        self.assertEqual(missing + extra + modified, 4)
+
+    def test_matched_unresolvable_is_not_counted(self):
+        self.assertEqual(
+            ad._drift_type_counts([self._D("matched_unresolvable")]), (0, 0, 0)
+        )
+
+
 class TestClaudeAnalysisNoAgent(unittest.TestCase):
     def test_analysis_without_agent_returns_none(self):
         report = {"bicep_file": "m.bicep", "resource_group": "rg", "drifts": []}
