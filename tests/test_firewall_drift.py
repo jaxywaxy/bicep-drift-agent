@@ -139,6 +139,96 @@ class FirewallPolicyPostureTests(unittest.TestCase):
         )
 
 
+def _diffs(bicep, live):
+    return PropertyComparator.compare_properties(bicep, live)
+
+
+def _paths(bicep, live):
+    return {d.property_path for d in _diffs(bicep, live)}
+
+
+class GranularFirewallDiffTests(unittest.TestCase):
+    """The ruleCollections differ pinpoints the collection/rule/field that
+    changed instead of dumping both whole arrays - and catches a scalar-list
+    widening on its own, which the generic subset compare misses."""
+
+    def test_port_widening_by_addition_is_caught(self):
+        # THE latent false negative: ['443'] is a SUBSET of ['443','3389'], so
+        # the generic compare saw no drift unless a sibling change failed the
+        # match. Exact-set semantics on scalar rule lists flag the added port.
+        bicep = _rcg(port="443")
+        live = _rcg(port="443")
+        live["properties"]["ruleCollections"][0]["rules"][0]["destinationPorts"] = ["443", "3389"]
+        paths = _paths(bicep, live)
+        self.assertIn(
+            "properties.ruleCollections[net-rules].rules[allow-https-out].destinationPorts",
+            paths,
+        )
+
+    def test_action_flip_pinpointed(self):
+        diffs = _diffs(_rcg(action="Deny"), _rcg(action="Allow"))
+        hit = [d for d in diffs if d.property_path.endswith(".action.type")]
+        self.assertEqual(len(hit), 1)
+        self.assertEqual((hit[0].desired_value, hit[0].actual_value), ("Deny", "Allow"))
+        self.assertEqual(hit[0].severity, "critical")
+        # The change is isolated - no opaque whole-array properties.ruleCollections diff.
+        self.assertNotIn("properties.ruleCollections", _paths(_rcg("Deny"), _rcg("Allow")))
+
+    def test_added_rule_pinpointed_as_added(self):
+        live = _rcg()
+        live["properties"]["ruleCollections"][0]["rules"].append({
+            "ruleType": "NetworkRule",
+            "name": "allow-any-any",
+            "ipProtocols": ["Any"],
+            "sourceAddresses": ["*"],
+            "destinationAddresses": ["*"],
+            "destinationPorts": ["*"],
+        })
+        hit = [d for d in _diffs(_rcg(), live) if "allow-any-any" in d.property_path]
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0].change_type, "added")
+        self.assertEqual(hit[0].desired_value, None)
+
+    def test_rogue_collection_pinpointed_as_added(self):
+        live = _rcg()
+        live["properties"]["ruleCollections"].append({
+            "ruleCollectionType": "FirewallPolicyFilterRuleCollection",
+            "name": "rogue-collection",
+            "priority": 500,
+            "action": {"type": "Allow"},
+            "rules": [],
+        })
+        hit = [d for d in _diffs(_rcg(), live) if "rogue-collection" in d.property_path]
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0].change_type, "added")
+
+    def test_removed_rule_pinpointed(self):
+        bicep = _rcg()
+        bicep["properties"]["ruleCollections"][0]["rules"].append({
+            "ruleType": "NetworkRule",
+            "name": "deny-telnet",
+            "ipProtocols": ["TCP"],
+            "sourceAddresses": ["*"],
+            "destinationAddresses": ["*"],
+            "destinationPorts": ["23"],
+        })
+        hit = [d for d in _diffs(bicep, _rcg()) if "deny-telnet" in d.property_path]
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0].change_type, "removed")
+
+    def test_azure_augmentation_fields_not_flagged(self):
+        # Azure populates read-only fields on the live rule (ipv6Rule,
+        # sourceIpGroups: [], fqdnTags: [], ...). None of these are drift.
+        live = _rcg()
+        live["properties"]["ruleCollections"][0]["rules"][0].update({
+            "ipv6Rule": False,
+            "sourceIpGroups": [],
+            "destinationIpGroups": [],
+            "destinationFqdns": [],
+        })
+        self.assertEqual(_diffs(_rcg(), live), [])
+
+
 class FirewallChildExpansionTests(unittest.TestCase):
     def test_rcg_expansion_registered(self):
         spec = [s for s in _CHILD_EXPANSION_SPECS

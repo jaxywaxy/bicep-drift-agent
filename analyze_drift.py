@@ -568,6 +568,24 @@ def _clean_estate_summary(report_data: dict, reconciled: int) -> str:
     return "\n".join(lines)
 
 
+def _drift_type_counts(drifts):
+    """(missing, extra, modified) counts feeding DriftReport.total_drift.
+
+    Property drift is emitted with drift_type == "property_drift", which does
+    NOT contain the substring "modified" - so a naive `"modified" in drift_type`
+    check counts it as zero. That produced a summary with total_drift: 0 sitting
+    next to severity_counts.critical: 3, and the analysis agent (correctly) flagged
+    the contradiction and lowered its confidence. Count property_drift as a
+    modification explicitly.
+    """
+    missing = len([d for d in drifts if "missing" in d.drift_type])
+    extra = len([d for d in drifts if "extra" in d.drift_type])
+    modified = len(
+        [d for d in drifts if "modified" in d.drift_type or d.drift_type == "property_drift"]
+    )
+    return missing, extra, modified
+
+
 def _run_claude_analysis(agent, report_data: dict):
     """Build the DriftReport and, if an agent is available, run Claude analysis.
 
@@ -590,13 +608,14 @@ def _run_claude_analysis(agent, report_data: dict):
         for d in report_data.get("drifts", [])
     ]
 
+    missing, extra, modified = _drift_type_counts(drifts)
     drift_report = DriftReport(
         bicep_file=report_data["bicep_file"],
         resource_group=report_data["resource_group"],
         drifts=drifts,
-        total_missing=len([d for d in drifts if "missing" in d.drift_type]),
-        total_extra=len([d for d in drifts if "extra" in d.drift_type]),
-        total_modified=len([d for d in drifts if "modified" in d.drift_type]),
+        total_missing=missing,
+        total_extra=extra,
+        total_modified=modified,
     )
 
     if not agent:
