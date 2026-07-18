@@ -96,5 +96,61 @@ class AnalysisPromptTests(unittest.TestCase):
         self.assertEqual(len(report.drifts), 5)
 
 
+class AttributionInPromptTests(unittest.TestCase):
+    """The report already resolves who/how (change_origin) and the ARM id
+    (lifecycle.resource_id). Both must reach the agent so it cites them instead
+    of re-deriving attribution or caveating a 'null resource_id'."""
+
+    CHANGE_ORIGIN = {
+        "origin": "manual_change",
+        "category": "unauthorized",
+        "changed_by": "jacqui.anker@gmail.com",
+        "reason": "Manual change by jacqui.anker@gmail.com via None (unauthorized)",
+    }
+    RID = ("/subscriptions/xxx/resourceGroups/rg-x/providers/"
+           "Microsoft.Network/firewallPolicies/fwpol-drift-test")
+
+    def _prompt_ctx(self):
+        report = DriftReport(
+            bicep_file="bicep/main.bicep", resource_group="rg-x", total_modified=1,
+            drifts=[Drift(
+                resource_type="Microsoft.Network/firewallPolicies",
+                resource_name="fwpol-drift-test",
+                drift_type="property_drift",
+                severity="critical",
+                details={"changed_properties": {"properties.threatIntelMode": {}}},
+                resource_id=self.RID,
+                change_origin=self.CHANGE_ORIGIN,
+            )],
+        )
+        return AnalysisPromptTests()._agent_and_prompt(report)
+
+    def test_change_origin_reaches_prompt(self):
+        finding = self._prompt_ctx()["findings"][0]
+        self.assertEqual(finding["change_origin"], self.CHANGE_ORIGIN)
+
+    def test_resource_id_reaches_prompt(self):
+        finding = self._prompt_ctx()["findings"][0]
+        self.assertEqual(finding["resource_id"], self.RID)
+
+
+class RemediationGuidanceTests(unittest.TestCase):
+    """The system prompt must carry the Azure-specific remediation rules that
+    Opus previously got wrong (locks, redeploy scope, using existing attribution)."""
+
+    def test_prompt_encodes_azure_remediation_rules(self):
+        sp = DriftAgent._get_system_prompt()
+        # Locks don't stop config drift
+        self.assertIn("CanNotDelete", sp)
+        self.assertIn("blocks deletion", sp)
+        # Prefer the narrowest redeploy scope
+        self.assertIn("NARROWEST", sp)
+        # Don't tell the user to pull Activity Logs — attribution is provided
+        self.assertIn("Activity Logs", sp)
+        self.assertIn("change_origin", sp)
+        # Rogue top-level child needs explicit delete, not redeploy
+        self.assertIn("TOP-LEVEL child", sp)
+
+
 if __name__ == "__main__":
     unittest.main()
