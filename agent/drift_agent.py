@@ -157,6 +157,9 @@ class DriftFinding:
     confidence: float
     reason: str
     details: Dict[str, Any]
+    # Attribution from the report's change_origin (origin, changed_by, category,
+    # reason). Given to the agent so it cites who/how instead of re-deriving it.
+    change_origin: Optional[Dict[str, Any]] = None
 
 
 class DriftAgent:
@@ -429,6 +432,7 @@ Respond with:
             confidence=confidence,
             reason=reason,
             details=details,
+            change_origin=getattr(drift, "change_origin", None),
         )
 
     def _classify_category(
@@ -710,15 +714,25 @@ Your role is to:
 
 Important context:
 - Bicep is stateless, so drift detection requires comparing desired state with live Azure state.
-- Azure Resource Graph, What-If, Azure Policy, deployment history, and Activity Logs can all provide useful signals.
 - Child resources should be reasoned about by full resource ID where possible.
 - System-managed resources may appear as extra resources and may not require remediation.
 - Role assignments, diagnostic settings, locks, backup, public access, and policy exemptions are high-value governance/security checks.
 - Cost-sensitive changes include SKU, retention, replication, capacity, VM size, workspace retention, and premium tier changes.
 
+Attribution is already resolved for you - do NOT recommend pulling Activity Logs to find who/when:
+- Each finding carries `change_origin` (origin, category, changed_by, reason) and a `resource_id`. This is the answer to "who changed this and how", already correlated from the activity log.
+- origin `manual_change` / category `unauthorized` = an out-of-band portal or CLI edit; origin `authorized_deployment` = a pipeline identity. Cite `changed_by` and the origin directly; only suggest deeper log investigation if `change_origin` is unknown/absent.
+
+Remediation guidance (Azure specifics - apply these, they are common mistakes):
+- Resource LOCKS do not stop configuration drift. A `CanNotDelete` lock only blocks deletion, so it prevents NONE of a property change, an added rule, or a security-setting flip - never recommend it as prevention for modification drift. `ReadOnly` would block modifications but also blocks your own deployment pipeline, so it is usually unusable. The real prevention for out-of-band edits is RBAC that restricts portal/CLI write access plus pipeline-only deployment - recommend that instead.
+- Scope the redeploy to the NARROWEST unit that fixes the drift - the specific module or resource - not the whole `main.bicep`. A full-estate `what-if`/deploy to revert one resource has a large, unnecessary blast radius.
+- Bicep resource collections are replaced as a whole on redeploy (a PUT overwrites the array), so a redeploy removes rogue elements ADDED inside a managed collection. It does NOT delete a rogue TOP-LEVEL child added out-of-band (e.g. a standalone rule-collection group, a firewall rule) - that needs an explicit `az ... delete`. Say which case applies before promising a redeploy will clean it up.
+- Redeploy fixes declarative resources (firewall policy, RCGs, NSGs, Key Vault config). Do not claim "atomic, no sequencing" - some children require serialized writes the template already encodes via dependsOn; that ordering is the template's concern, not a manual step.
+
 Output style:
 - Use markdown.
-- Start with an executive summary.
+- Start with a "## TL;DR" section: 2-4 sentences a busy engineer can read in
+  ten seconds - what drifted, how bad, and the single next action.
 - Then provide priority findings.
 - Then provide remediation plan.
 - Then list caveats or confidence limitations.

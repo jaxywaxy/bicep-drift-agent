@@ -100,7 +100,7 @@ class SkipCleanAnalysisTests(unittest.TestCase):
         # so it must stay markdown-shaped.
         out = ad._run_claude_analysis(SpyAgent(), _data())
         self.assertTrue(out.startswith("# Bicep Drift Analysis"))
-        self.assertIn("## Executive Summary", out)
+        self.assertIn("## TL;DR", out)
 
 
 if __name__ == "__main__":

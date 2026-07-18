@@ -542,7 +542,7 @@ def _clean_estate_summary(report_data: dict, reconciled: int) -> str:
     lines = [
         "# Bicep Drift Analysis",
         "",
-        "## Executive Summary",
+        "## TL;DR",
         "",
         f"**No drift detected.** `{report_data.get('resource_group', 'unknown')}` matches "
         f"`{report_data.get('bicep_file', 'the template')}`.",
@@ -604,6 +604,11 @@ def _run_claude_analysis(agent, report_data: dict):
             resource_name=d["name"],
             drift_type=d["drift_type"],
             details=d.get("details"),
+            # The report already carries the ARM id and attribution; thread them
+            # to the agent so it reasons by id and cites the existing
+            # change_origin instead of telling the user to pull Activity Logs.
+            resource_id=(d.get("lifecycle") or {}).get("resource_id") or d.get("resource_id"),
+            change_origin=d.get("change_origin"),
         )
         for d in report_data.get("drifts", [])
     ]

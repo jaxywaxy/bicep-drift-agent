@@ -33,6 +33,11 @@ class Drift:
     severity: str = "info"  # "info", "warning", "critical"
     details: Optional[Dict[str, Any]] = None
     suggested_action: Optional[str] = None
+    # ARM resource id and change attribution, when the report carries them.
+    # Threaded to the analysis agent so it reasons by id and cites who changed
+    # what (from lifecycle/change_origin) instead of asking for Activity Logs.
+    resource_id: Optional[str] = None
+    change_origin: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
