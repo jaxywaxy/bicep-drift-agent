@@ -103,9 +103,9 @@ class AttributionInPromptTests(unittest.TestCase):
 
     CHANGE_ORIGIN = {
         "origin": "manual_change",
-        "category": "unauthorized",
+        "category": "out_of_band",
         "changed_by": "jacqui.anker@gmail.com",
-        "reason": "Manual change by jacqui.anker@gmail.com via None (unauthorized)",
+        "reason": "Manual change by jacqui.anker@gmail.com (out-of-band)",
     }
     RID = ("/subscriptions/xxx/resourceGroups/rg-x/providers/"
            "Microsoft.Network/firewallPolicies/fwpol-drift-test")
