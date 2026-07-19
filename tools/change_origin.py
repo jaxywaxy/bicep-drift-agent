@@ -37,7 +37,12 @@ class ChangeOrigin(str, Enum):
 class ChangeCategory(str, Enum):
     """Category of change."""
     COMPLIANCE_ENFORCED = "compliance_enforced"
-    UNAUTHORIZED = "unauthorized"
+    # A change made outside the IaC pipeline (manual portal/CLI edit, or an
+    # external tool like Terraform). "out_of_band" - not necessarily
+    # illegitimate; the operator may have every right to make it. It flags that
+    # the change bypassed the declared pipeline, which is what drift detection
+    # is for. Deliberately NOT "unauthorized", which reads as an accusation.
+    OUT_OF_BAND = "out_of_band"
     UNMANAGED = "unmanaged"
     AUTHORIZED = "authorized"
     UNKNOWN = "unknown"
@@ -314,7 +319,7 @@ def classify_change_origin(
     if "terraform" in caller or "terraform" in operation:
         return ChangeOriginInfo(
             origin=ChangeOrigin.TERRAFORM_CHANGE,
-            category=ChangeCategory.UNAUTHORIZED,
+            category=ChangeCategory.OUT_OF_BAND,
             severity=ChangeSeverity.HIGH,
             expected=False,
             timestamp=latest.get('timestamp'),
@@ -323,16 +328,20 @@ def classify_change_origin(
             reason="Resource modified by Terraform (external IaC tool, not bicep)",
         )
 
-    # Manual change
+    # Manual change - made outside the IaC pipeline ("out-of-band"), not
+    # necessarily illegitimate. Only name the method when we actually know it;
+    # a null/Unknown method rendered "via None"/"via Unknown", which is noise.
+    method = latest.get('method') or 'Unknown'
+    via = f" via {method}" if method not in ('Unknown', 'None') else ''
     return ChangeOriginInfo(
         origin=ChangeOrigin.MANUAL_CHANGE,
-        category=ChangeCategory.UNAUTHORIZED,
+        category=ChangeCategory.OUT_OF_BAND,
         severity=ChangeSeverity.HIGH,
         expected=False,
         timestamp=latest.get('timestamp'),
         changed_by=caller,
-        method=latest.get('method', 'Unknown'),
-        reason=f"Manual change by {caller} via {latest.get('method', 'Unknown')} (unauthorized)",
+        method=method,
+        reason=f"Manual change by {caller}{via} (out-of-band)",
     )
 
 

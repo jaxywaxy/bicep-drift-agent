@@ -67,7 +67,28 @@ class ClassifyAuthorizedDeployerTests(unittest.TestCase):
         # Pre-existing behavior is unchanged when no deployer set is passed.
         info = classify_change_origin(_log("microsoft.storage/storageaccounts/write"))
         self.assertEqual(info.origin, ChangeOrigin.MANUAL_CHANGE)
-        self.assertEqual(info.category, ChangeCategory.UNAUTHORIZED)
+        self.assertEqual(info.category, ChangeCategory.OUT_OF_BAND)
+
+    def test_manual_reason_is_out_of_band_not_unauthorized(self):
+        # "unauthorized" reads as an accusation - out-of-band is the neutral,
+        # accurate term (the change bypassed the pipeline; the actor may well
+        # have had every right to make it).
+        info = classify_change_origin(_log("microsoft.storage/storageaccounts/write"))
+        self.assertIn("out-of-band", info.reason)
+        self.assertNotIn("unauthorized", info.reason)
+
+    def test_manual_reason_omits_via_clause_when_method_unknown(self):
+        # method is null/Unknown on most manual edits; the reason must not
+        # render "via None" / "via Unknown".
+        info = classify_change_origin(_log("microsoft.storage/storageaccounts/write"))
+        for noise in ("via None", "via Unknown", " via "):
+            self.assertNotIn(noise, info.reason)
+
+    def test_manual_reason_includes_method_when_known(self):
+        log = _log("microsoft.storage/storageaccounts/write")
+        log[0]["method"] = "Portal"
+        info = classify_change_origin(log)
+        self.assertIn("via Portal", info.reason)
 
     def test_non_deployer_caller_still_manual(self):
         info = classify_change_origin(

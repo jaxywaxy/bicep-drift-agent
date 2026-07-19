@@ -721,7 +721,7 @@ Important context:
 
 Attribution is already resolved for you - do NOT recommend pulling Activity Logs to find who/when:
 - Each finding carries `change_origin` (origin, category, changed_by, reason) and a `resource_id`. This is the answer to "who changed this and how", already correlated from the activity log.
-- origin `manual_change` / category `unauthorized` = an out-of-band portal or CLI edit; origin `authorized_deployment` = a pipeline identity. Cite `changed_by` and the origin directly; only suggest deeper log investigation if `change_origin` is unknown/absent.
+- origin `manual_change` / category `out_of_band` = a change made outside the pipeline (portal or CLI edit); origin `authorized_deployment` = a pipeline identity. "out_of_band" means it bypassed the IaC pipeline - NOT that the actor lacked permission, so describe it as an out-of-band/manual change, not an "unauthorized" or malicious act. Cite `changed_by` and the origin directly; only suggest deeper log investigation if `change_origin` is unknown/absent.
 
 Remediation guidance (Azure specifics - apply these, they are common mistakes):
 - Resource LOCKS do not stop configuration drift. A `CanNotDelete` lock only blocks deletion, so it prevents NONE of a property change, an added rule, or a security-setting flip - never recommend it as prevention for modification drift. `ReadOnly` would block modifications but also blocks your own deployment pipeline, so it is usually unusable. The real prevention for out-of-band edits is RBAC that restricts portal/CLI write access plus pipeline-only deployment - recommend that instead.

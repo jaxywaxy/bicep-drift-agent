@@ -195,7 +195,7 @@ class TestSplitPreservesAttribution(unittest.TestCase):
         report = {"drifts": [
             {"type": "Microsoft.Network/firewallPolicies", "name": "a",
              "drift_type": "property_drift",
-             "change_origin": {"expected": False, "changed_by": "jacqui.anker@gmail.com"}},
+             "change_origin": {"expected": False, "changed_by": "someone@example.com"}},
             {"type": "Microsoft.Network/firewallPolicies", "name": "b",
              "drift_type": "property_drift",
              "change_origin": {"expected": True, "changed_by": "policy"}},
@@ -203,7 +203,7 @@ class TestSplitPreservesAttribution(unittest.TestCase):
         actionable = ad._split_policy_and_tag_owners(report)
         self.assertEqual([d["name"] for d in actionable], ["a"])
         self.assertEqual(report["policy_enforced_drifts"][0]["name"], "b")
-        self.assertEqual(actionable[0]["change_origin"]["changed_by"], "jacqui.anker@gmail.com")
+        self.assertEqual(actionable[0]["change_origin"]["changed_by"], "someone@example.com")
         self.assertEqual(
             report["policy_enforced_drifts"][0]["change_origin"]["changed_by"], "policy")
 

@@ -43,7 +43,7 @@ def _report(**overrides):
                         "actual": [{"name": "allow-rdp-anywhere"}],
                         "severity": "critical"}}},
                 "owner": "platform",
-                "change_origin": {"origin": "manual_change", "category": "unauthorized",
+                "change_origin": {"origin": "manual_change", "category": "out_of_band",
                                   "severity": "high", "expected": False,
                                   "changed_by": "someone@example.com",
                                   "reason": "Manual change"},

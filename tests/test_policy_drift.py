@@ -235,7 +235,7 @@ class GovernanceWriteAttributionTests(unittest.TestCase):
         from tools.change_origin import classify_change_origin
         info = classify_change_origin([{
             "operation": "microsoft.authorization/policyassignments/write",
-            "caller": "jacqui.anker@gmail.com",
+            "caller": "someone@example.com",
             "timestamp": "2026-07-06T21:53:15Z",
             "properties": {},
         }])
