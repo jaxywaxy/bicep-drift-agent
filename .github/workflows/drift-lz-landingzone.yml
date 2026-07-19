@@ -28,4 +28,12 @@ jobs:
       landing_zone: landingzone
       override_subscription: ${{ github.event.inputs.subscription_id }}
       override_resource_group: ${{ github.event.inputs.resource_group }}
-    secrets: inherit
+    secrets:
+      BICEP_REPO_TOKEN: ${{ secrets.BICEP_REPO_TOKEN }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      PLATFORM_SLACK_WEBHOOK: ${{ secrets.PLATFORM_SLACK_WEBHOOK }}
+      WORKLOAD_SLACK_WEBHOOK: ${{ secrets.WORKLOAD_SLACK_WEBHOOK }}
