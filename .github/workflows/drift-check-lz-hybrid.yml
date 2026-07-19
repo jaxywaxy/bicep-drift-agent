@@ -17,6 +17,23 @@ on:
         required: false
         default: ''
         description: 'Override resource group name from config'
+    secrets:
+      BICEP_REPO_TOKEN:
+        required: false
+      AZURE_CLIENT_ID:
+        required: true
+      AZURE_TENANT_ID:
+        required: true
+      ANTHROPIC_API_KEY:
+        required: true
+      SLACK_WEBHOOK_URL:
+        required: false
+      TEAMS_WEBHOOK_URL:
+        required: false
+      PLATFORM_SLACK_WEBHOOK:
+        required: false
+      WORKLOAD_SLACK_WEBHOOK:
+        required: false
 
 jobs:
   load-config:
