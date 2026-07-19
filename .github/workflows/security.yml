@@ -1,40 +1,37 @@
 name: Security
 
 on:
-pull_request:
-push:
-branches:
-- main
+  pull_request:
+  push:
+    branches:
+      - main
 
 jobs:
-bandit:
-runs-on: ubuntu-latest
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyCQA/bandit-action@v1
 
-steps:
-- uses: actions/checkout@v4
+  trufflehog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run trufflehog (action)
+        uses: trufflesecurity/trufflehog@main
 
-- uses: PyCQA/bandit-action@v1
-
-trufflehog:
-runs-on: ubuntu-latest
-
-steps:
-- uses: actions/checkout@v4
-with:
-fetch-depth: 0
-
-- uses: trufflesecurity/trufflehog@main
-
-pip-audit:
-runs-on: ubuntu-latest
-
-steps:
-- uses: actions/checkout@v4
-
-- uses: actions/setup-python@v5
-with:
-python-version: "3.11"
-
-- run: |
-pip install pip-audit
-pip-audit
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pip-audit
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+      - name: Run pip-audit
+        run: pip-audit
