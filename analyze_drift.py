@@ -713,17 +713,20 @@ def _recover_deployed_name(resource_type: str, event_resource_id: str) -> str:
     return "/".join(names_in_id)
 
 
-def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
-    """Phase 3/4: attribute each drift via the Activity Log, split out
-    policy/system-enforced changes, and tag actionable drift with its owner.
+def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
+    """Phase 3: attribute each drift via the Activity Log, attaching `lifecycle`
+    and `change_origin` to every entry in report_data['drifts'] in place.
 
-    Returns the actionable drift list (report_data['drifts'] is also updated;
-    policy-enforced changes move to report_data['policy_enforced_drifts']).
+    MUST run BEFORE the Claude analysis: the agent cites change_origin (who/how)
+    and reasons by lifecycle.resource_id. Running it after left both null in the
+    prompt, so the agent fell back to "investigate the Activity Log" despite the
+    data being available. The policy split + owner tagging run separately, after
+    the analysis, via _split_policy_and_tag_owners.
     """
     drifts_to_analyze = report_data.get("drifts", [])
-    logger.info(f"Found {len(drifts_to_analyze)} drift(s) to generate recommendations for")
+    logger.info(f"Found {len(drifts_to_analyze)} drift(s) to attribute")
     if len(drifts_to_analyze) == 0:
-        return drifts_to_analyze
+        return
 
     logger.info("Phase 3: Building resource lifecycle from Activity Log...")
     subscription_id = os.environ.get("AZURE_SUBSCRIPTION_ID")
@@ -822,7 +825,14 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
 
     logger.info("Resource lifecycle detection completed")
 
-    # Split policy/system-enforced changes out of the actionable drift set.
+
+def _split_policy_and_tag_owners(report_data: dict) -> list:
+    """Phase 3/4 tail: split policy/system-enforced changes out of the actionable
+    drift set and tag each actionable drift with its owner. Runs AFTER the Claude
+    analysis, which sees the full attributed (pre-split) set. Returns the
+    actionable list; report_data['drifts'] is replaced with it and policy-enforced
+    changes move to report_data['policy_enforced_drifts'].
+    """
     # change_origin.expected is True for POLICY_DINE / POLICY_MODIFY /
     # POLICY_REMEDIATION / SYSTEM_MANAGED - detected and shown in a dedicated
     # governance section, but NOT actionable drift.
@@ -854,6 +864,15 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
         logger.info(f"Actionable drift by owner: {owner_counts}")
 
     return actionable
+
+
+def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
+    """Back-compat wrapper: attribute lifecycle then split + tag owners in one
+    call. main() calls the two phases separately so attribution lands before the
+    Claude analysis; retained for callers/tests that want the combined step.
+    """
+    _attribute_lifecycle(report_data, resource_group)
+    return _split_policy_and_tag_owners(report_data)
 
 
 def _generate_html_report(report_label: str, resource_group: str, bicep_file: str) -> None:
@@ -946,11 +965,18 @@ def main():
         ignore_list = _apply_ignore_patterns(report_data, bicep_file)
         _detect_and_merge_property_drift(report_data, ignore_list)
 
-        # Claude analysis of the pre-split drift set (only when a key is available).
+        # Phase 3: attribute each drift (lifecycle + change_origin) BEFORE the
+        # Claude analysis, so the agent cites who/how and reasons by resource_id
+        # instead of falling back to "investigate the Activity Log". (The prior
+        # ordering ran attribution after the analysis, leaving both null in the
+        # prompt.)
+        _attribute_lifecycle(report_data, resource_group)
+
+        # Claude analysis of the attributed drift set (only when a key is available).
         agent_analysis = _run_claude_analysis(agent, report_data)
 
-        # Phase 3/4: lifecycle attribution, policy split, and owner tagging.
-        drifts_to_analyze = _build_lifecycle_and_split(report_data, resource_group)
+        # Phase 3/4 tail: split policy/system-enforced changes out and tag owners.
+        drifts_to_analyze = _split_policy_and_tag_owners(report_data)
 
         # Emit the grep-able summary from the FINAL actionable set (post Phase 3 split),
         # so the CI summary matches the report and excludes policy-enforced changes.
