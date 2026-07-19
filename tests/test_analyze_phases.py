@@ -170,6 +170,44 @@ class TestFinalizeDriftCount(unittest.TestCase):
         self.assertEqual(ad._finalize_drift_count(report), 0)
 
 
+class TestAttributionRunsBeforeAnalysis(unittest.TestCase):
+    """Attribution (_attribute_lifecycle) attaches change_origin + resource_id and
+    MUST run before the Claude analysis so they land in the prompt; the policy
+    split runs after. Regression: the two were reversed, so the agent saw null
+    attribution and told users to 'investigate the Activity Log' even though the
+    persisted report carried change_origin.changed_by."""
+
+    def test_main_orders_attribute_analyze_split(self):
+        import inspect
+        src = inspect.getsource(ad.main)
+        i_attr = src.index("_attribute_lifecycle(")
+        i_analyze = src.index("_run_claude_analysis(")
+        i_split = src.index("_split_policy_and_tag_owners(")
+        self.assertLess(i_attr, i_analyze, "attribution must precede the analysis")
+        self.assertLess(i_analyze, i_split, "the policy split must follow the analysis")
+
+
+class TestSplitPreservesAttribution(unittest.TestCase):
+    """The policy split moves change_origin.expected==True entries out; attribution
+    must stay intact on both the actionable and policy-enforced sides."""
+
+    def test_change_origin_survives_split(self):
+        report = {"drifts": [
+            {"type": "Microsoft.Network/firewallPolicies", "name": "a",
+             "drift_type": "property_drift",
+             "change_origin": {"expected": False, "changed_by": "jacqui.anker@gmail.com"}},
+            {"type": "Microsoft.Network/firewallPolicies", "name": "b",
+             "drift_type": "property_drift",
+             "change_origin": {"expected": True, "changed_by": "policy"}},
+        ]}
+        actionable = ad._split_policy_and_tag_owners(report)
+        self.assertEqual([d["name"] for d in actionable], ["a"])
+        self.assertEqual(report["policy_enforced_drifts"][0]["name"], "b")
+        self.assertEqual(actionable[0]["change_origin"]["changed_by"], "jacqui.anker@gmail.com")
+        self.assertEqual(
+            report["policy_enforced_drifts"][0]["change_origin"]["changed_by"], "policy")
+
+
 class TestClaudeAnalysisNoAgent(unittest.TestCase):
     def test_analysis_without_agent_returns_none(self):
         report = {"bicep_file": "m.bicep", "resource_group": "rg", "drifts": []}
