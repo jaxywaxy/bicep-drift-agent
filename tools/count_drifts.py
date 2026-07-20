@@ -27,6 +27,24 @@ a healthy run:
   - policy/system-enforced changes are already split into their own report key
     (policy_enforced_drifts) and so are naturally excluded.
 
+drift_count counts CHANGED RESOURCES (one record each). That is the headline
+number on purpose: it is stable, it matches how drift is remediated (redeploy
+the module), and it matches total_issues.
+
+Two derived counts add what the resource count cannot express, without moving
+total_issues (so existing CI thresholds are unaffected):
+
+  - critical_count: THE important one. A record count cannot carry severity -
+    2 cosmetic tag edits and 2 resources with their security posture stripped
+    both print as "2".
+
+  - changed_property_count: diff PATHS, supporting detail only. Deliberately
+    NOT promoted to a headline: one human action can emit several paths
+    (loosening a single firewall rule emits action.type + sourceAddresses +
+    destinationPorts = 3), so this number tracks how granular the comparator
+    is, not how much drift there is. It would inflate every time a differ is
+    made more precise.
+
 Usage:
     python3 tools/count_drifts.py <reports_dir>
 """
@@ -53,6 +71,8 @@ def count_drifts(reports_dir: str) -> Dict[str, int]:
     rather than a silent "0 issues".
     """
     counts = {k: 0 for k in _COUNTED_TYPES.values()}
+    counts["changed_property_count"] = 0
+    counts["critical_count"] = 0
     counts["reports"] = 0
 
     d = pathlib.Path(reports_dir)
@@ -70,8 +90,19 @@ def count_drifts(reports_dir: str) -> Dict[str, int]:
         counts["reports"] += 1
         for drift in report.get("drifts") or []:
             key = _COUNTED_TYPES.get(drift.get("drift_type"))
-            if key:
-                counts[key] += 1
+            if not key:
+                continue
+            counts[key] += 1
+            # Per-property detail, so a record carrying five changes does not
+            # read as one finding. extra/missing records have no
+            # changed_properties and count as a single change each - the
+            # resource's presence IS the change.
+            changed = ((drift.get("details") or {}).get("changed_properties") or {})
+            counts["changed_property_count"] += len(changed) or 1
+            counts["critical_count"] += sum(
+                1 for c in changed.values()
+                if isinstance(c, dict) and str(c.get("severity", "")).lower() == "critical"
+            )
 
     counts["total_issues"] = sum(counts[k] for k in _COUNTED_TYPES.values())
     return counts
@@ -97,11 +128,14 @@ def main(argv) -> int:
     if github_output:
         with open(github_output, "a") as f:
             f.write("\n".join(lines) + "\n")
+    critical = f" ({counts['critical_count']} CRITICAL)" if counts["critical_count"] else ""
     print(
-        f"Results ({counts['reports']} report(s)): {counts['drift_count']} drift(s), "
-        f"{counts['extra_count']} extra, {counts['missing_count']} missing "
-        f"-> {counts['total_issues']} total"
+        f"Results ({counts['reports']} report(s)): {counts['drift_count']} changed "
+        f"resource(s){critical}, {counts['extra_count']} extra, "
+        f"{counts['missing_count']} missing -> {counts['total_issues']} total"
     )
+    if counts["changed_property_count"]:
+        print(f"  ({counts['changed_property_count']} property path(s) changed)")
     for line in lines:
         print(f"  {line}")
     return 0

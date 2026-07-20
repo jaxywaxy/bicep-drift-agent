@@ -57,6 +57,58 @@ class CountDriftsTests(unittest.TestCase):
             c = count_drifts(d)
         self.assertEqual(c["total_issues"], 1)
 
+    def test_property_changes_counted_separately_from_records(self):
+        """The live compute round: 5 changes across 2 resources read as "2".
+
+        drift_count counts RECORDS, which is correct but understates a record
+        carrying several changes - and the CI table labelled it "Configuration
+        Changes". Both numbers are now reported; total_issues is unchanged so
+        existing gates do not move.
+        """
+        disk = _drift("property_drift", "disk-drift-data")
+        disk["details"] = {"changed_properties": {
+            "zones": {"desired": ["1"], "actual": ["2"], "severity": "critical"},
+            "properties.networkAccessPolicy": {
+                "desired": "DenyAll", "actual": "AllowAll", "severity": "critical"},
+        }}
+        vmss = _drift("property_drift", "vmss-drift-test")
+        vmss["details"] = {"changed_properties": {
+            "properties.upgradePolicy.mode": {"severity": "critical"},
+            "properties.automaticRepairsPolicy.enabled": {"severity": "critical"},
+            "properties.virtualMachineProfile.securityProfile.encryptionAtHost": {
+                "severity": "critical"},
+        }}
+
+        with tempfile.TemporaryDirectory() as d:
+            _write(d, drifts=[disk, vmss])
+            c = count_drifts(d)
+
+        self.assertEqual(c["drift_count"], 2)
+        self.assertEqual(c["changed_property_count"], 5)
+        self.assertEqual(c["critical_count"], 5)
+        self.assertEqual(c["total_issues"], 2)  # gating semantics unchanged
+
+    def test_severity_mix_is_not_flattened(self):
+        """2 cosmetic edits and 2 security regressions must not read alike."""
+        noisy = _drift("property_drift", "a")
+        noisy["details"] = {"changed_properties": {"tags.owner": {"severity": "warning"}}}
+
+        with tempfile.TemporaryDirectory() as d:
+            _write(d, drifts=[noisy])
+            c = count_drifts(d)
+
+        self.assertEqual(c["changed_property_count"], 1)
+        self.assertEqual(c["critical_count"], 0)
+
+    def test_extra_and_missing_count_as_one_change_each(self):
+        """Presence/absence IS the change - those records carry no properties."""
+        with tempfile.TemporaryDirectory() as d:
+            _write(d, drifts=[_drift("extra_in_azure", "x"), _drift("missing_in_azure", "y")])
+            c = count_drifts(d)
+
+        self.assertEqual(c["changed_property_count"], 2)
+        self.assertEqual(c["critical_count"], 0)
+
     def test_clean_report_is_zero_not_error(self):
         with tempfile.TemporaryDirectory() as d:
             _write(d, drifts=[])
