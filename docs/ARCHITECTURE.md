@@ -138,6 +138,9 @@ GitHub issues an OIDC token to the workflow. Azure Entra ID validates the token 
 - Reader-only access by default.
 - Authentication is auditable through Azure Entra ID.
 - New subscriptions under the management group can be covered without per-subscription credential configuration.
+- External landing zone config is treated as untrusted input; workflow steps bind it to environment variables rather than interpolating it into shell.
+- Reusable workflows receive an explicit least-privilege secret set rather than inheriting all repository secrets.
+- GitHub Actions are pinned to commit SHAs and kept current by Dependabot.
 
 ---
 
