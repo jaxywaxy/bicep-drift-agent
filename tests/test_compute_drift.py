@@ -27,6 +27,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.diff_states import filter_unmanaged_live_resources
+from tools.ignore_patterns import IgnorePatternList
+from tools.normalizer import _normalize_resource, normalize_live_resources
 from tools.property_drift import PropertyComparator
 
 DISK_TYPE = "Microsoft.Compute/disks"
@@ -164,6 +166,99 @@ class ZonePlacementTests(unittest.TestCase):
 
     def test_zones_rate_critical(self):
         self.assertEqual(PropertyComparator._get_severity("zones"), "critical")
+
+
+class ShippedIgnoreProfileTests(unittest.TestCase):
+    """The shipped .drift-ignore must not swallow DECLARED compute resources.
+
+    Regression: a declared scale set whose deployment FAILED with
+    InvalidParameter was reported as "no drift detected", because the blanket
+    Microsoft.Compute/virtualMachineScaleSets rule (written for AKS node-pool
+    scale sets appearing as extras) also suppressed its missing_in_azure. A
+    deploy failure leaving a declared resource absent is exactly the drift this
+    tool exists to report.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        cls.patterns = IgnorePatternList.from_file(os.path.join(repo_root, ".drift-ignore"))
+
+    def _filter(self, resource_type, drift_type):
+        drift = {"type": resource_type, "name": "res", "drift_type": drift_type}
+        filtered, ignored = self.patterns.filter_drifts([drift])
+        return bool(filtered), bool(ignored)
+
+    def test_missing_declared_compute_resources_survive(self):
+        for rtype in (
+            "Microsoft.Compute/virtualMachineScaleSets",
+            "Microsoft.Compute/disks",
+            "Microsoft.Compute/virtualMachines/extensions",
+        ):
+            with self.subTest(rtype=rtype):
+                kept, _ = self._filter(rtype, "missing_in_azure")
+                self.assertTrue(kept, f"{rtype} missing_in_azure must not be ignored")
+
+    def test_property_drift_on_declared_compute_survives(self):
+        for rtype in (
+            "Microsoft.Compute/virtualMachineScaleSets",
+            "Microsoft.Compute/disks",
+        ):
+            with self.subTest(rtype=rtype):
+                kept, _ = self._filter(rtype, "property_drift")
+                self.assertTrue(kept, f"{rtype} property_drift must not be ignored")
+
+    def test_auto_created_extras_still_ignored(self):
+        """The rules' original purpose - AKS/VM-created extras - still holds."""
+        for rtype in (
+            "Microsoft.Compute/virtualMachineScaleSets",
+            "Microsoft.Compute/disks",
+            "Microsoft.Compute/virtualMachines/extensions",
+        ):
+            with self.subTest(rtype=rtype):
+                kept, ignored = self._filter(rtype, "extra_in_azure")
+                self.assertFalse(kept)
+                self.assertTrue(ignored)
+
+
+class ZonesReachTheComparatorTests(unittest.TestCase):
+    """Zones must survive NORMALIZATION, not just compare correctly.
+
+    The exact-set zone comparison was unreachable in the real pipeline: `zones`
+    is a top-level ARM key and both normalizers built a fixed dict that omitted
+    it, so the comparator never saw a zone on either side. Comparator-level
+    tests passed because they hand-built dicts.
+    """
+
+    def test_bicep_side_keeps_zones(self):
+        arm = {
+            "type": DISK_TYPE,
+            "name": "disk-drift-data",
+            "location": "[parameters('location')]",
+            "zones": ["1"],
+            "properties": {"diskSizeGB": 4},
+        }
+
+        self.assertEqual(_normalize_resource(arm, {"location": "australiaeast"}, {})["zones"], ["1"])
+
+    def test_live_side_keeps_zones(self):
+        live = [{"type": DISK_TYPE, "name": "disk-drift-data", "zones": ["2"]}]
+
+        self.assertEqual(normalize_live_resources(live)[0]["zones"], ["2"])
+
+    def test_normalized_zone_repin_is_detected_end_to_end(self):
+        """The live-round injection: delete the disk, recreate it in zone 2."""
+        arm = _normalize_resource(
+            {"type": DISK_TYPE, "name": "d", "zones": ["1"], "properties": {"diskSizeGB": 4}},
+            {}, {},
+        )
+        live = normalize_live_resources(
+            [{"type": DISK_TYPE, "name": "d", "zones": ["2"], "properties": {"diskSizeGB": 4}}]
+        )[0]
+
+        diffs = PropertyComparator.compare_properties(arm, live)
+
+        self.assertIn("zones", {d.property_path for d in diffs})
 
 
 class ResiliencySeverityTests(unittest.TestCase):

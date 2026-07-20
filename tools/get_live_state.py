@@ -210,6 +210,10 @@ def get_live_state(
                 "tags": item.get("tags", {}),
                 "sku": item.get("sku"),
                 "kind": item.get("kind"),
+                # Availability zones are their own top-level column, not part of
+                # properties. Without this the comparator sees no live zones at
+                # all and zone placement can never be compared.
+                "zones": item.get("zones"),
                 "properties": item.get("properties", {}),
                 "id": item.get("id"),
                 "resource_group": item.get("resourceGroup"),

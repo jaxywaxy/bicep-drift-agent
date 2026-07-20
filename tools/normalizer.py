@@ -731,6 +731,11 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
         "tags": _resolve_value(resource.get("tags") or {}, parameters, variables),
         "sku": _resolve_value(resource.get("sku"), parameters, variables),
         "kind": resource.get("kind"),
+        # Availability zones are a TOP-LEVEL ARM key, not a property. Without
+        # carrying them here they never reach the comparator at all, so zone
+        # placement drift (a resource silently no longer zone-redundant) is
+        # invisible no matter how the comparison treats it.
+        "zones": _resolve_value(resource.get("zones"), parameters, variables),
         "properties": _resolve_value(resource.get("properties"), parameters, variables),
     }
 
@@ -800,6 +805,7 @@ def normalize_live_resources(live_resources: list[dict]) -> list[dict]:
             "tags": resource.get("tags") or {},
             "sku": resource.get("sku"),
             "kind": resource.get("kind"),
+            "zones": resource.get("zones"),  # top-level key; see normalize side
             "apiVersion": "",  # Not available in live state
             "properties": resource.get("properties"),
             "_raw": resource,
