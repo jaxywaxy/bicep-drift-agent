@@ -11,6 +11,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from azure.identity import DefaultAzureCredential
 
+try:
+    from .http_util import urlopen_checked
+except ImportError:
+    from http_util import urlopen_checked
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,7 +41,7 @@ def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[st
             f"/providers/Microsoft.Authorization/policyAssignments?api-version=2022-06-01"
         )
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_checked(req, timeout=30) as resp:
             data = _json.load(resp)
         mapping = {}
         for a in data.get("value", []):
