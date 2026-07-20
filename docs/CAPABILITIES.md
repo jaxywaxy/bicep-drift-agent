@@ -235,7 +235,11 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Locks
 - RBAC
 - Azure Policy
-
+- Virtual Machines
+- Firewall Policies
+- Azure Firewall
+- NSG Rules
+  
 ## Recently Added
 
 - Load Balancers
