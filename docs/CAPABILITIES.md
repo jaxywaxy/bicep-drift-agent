@@ -118,7 +118,7 @@ Use this document to understand what the agent can detect, how findings are clas
 
 Changes made by the pipeline identity that deploys the estate are attributed
 as **authorized deployments** (🚀 Pipeline badge, low severity) instead of
-"manual change (unauthorized)". The drift itself remains actionable — a
+"manual change (out-of-band)". The drift itself remains actionable — a
 pipeline-created orphan is still drift; only the attribution changes.
 
 Deployer identities are never hardcoded:

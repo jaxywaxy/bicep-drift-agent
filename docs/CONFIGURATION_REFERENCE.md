@@ -464,7 +464,7 @@ The following environment variables are recognised.
 
 Changes made by a known IaC deployer identity are attributed as
 **authorized deployments** in reports (🚀 Pipeline badge, low severity)
-rather than "manual change (unauthorized)". The drift itself stays in the
+rather than "manual change (out-of-band)". The drift itself stays in the
 actionable set — only the attribution changes.
 
 The identity the drift agent **runs as is always recognised automatically**
@@ -504,7 +504,7 @@ Notes:
   even if listed here.
 - Listing an identity does not suppress its drift; it only stops the
   change-origin column labelling the pipeline's own deploys as
-  unauthorized manual changes.
+  out-of-band manual changes.
 
 ---
 

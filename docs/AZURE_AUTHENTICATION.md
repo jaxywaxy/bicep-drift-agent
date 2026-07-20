@@ -249,7 +249,7 @@ scan time). If your estates are **deployed by a different app registration**
 than the one the drift agent authenticates with — e.g. one OIDC app per repo,
 or separate deploy/scan identities for least privilege — add the deployer
 identities to the `DRIFT_AUTHORIZED_DEPLOYERS` **repository variable** so
-their deploys are not reported as unauthorized manual changes:
+their deploys are not reported as out-of-band manual changes:
 
 ```bash
 gh variable set DRIFT_AUTHORIZED_DEPLOYERS --body "<deployer-sp-object-id>"
