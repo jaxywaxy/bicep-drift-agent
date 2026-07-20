@@ -190,6 +190,24 @@ should be expandable by the platform. This prevents accidental exposure of unrel
 
 ---
 
+# Workflow and Supply-Chain Hardening
+
+The GitHub Actions workflows that run the service are hardened against injection and supply-chain risks.
+
+## Untrusted Landing Zone Input
+
+A landing zone's Bicep and its `drift-lz-config.yml` come from an external repository and are treated as **untrusted input**. Config-derived values (check names, paths, resource-group selectors, notification blocks) are bound to environment variables before use in shell steps, never interpolated directly into a `run:` script, so a crafted config value cannot inject commands into the runner.
+
+## Least-Privilege Secrets
+
+Reusable workflows are invoked with an explicit `secrets:` map rather than `secrets: inherit`, so each receives only the secrets it needs. This also bounds the secret set exposed to the notification step, which serialises the passed secrets to expand `${DRIFT_WEBHOOK_*}` placeholders (only that prefix is expandable — see Notification Webhooks).
+
+## Pinned Actions
+
+All GitHub Actions — first- and third-party — are pinned to full commit SHAs, so a repointed tag or branch cannot silently introduce malicious code. Dependabot keeps the pins current.
+
+---
+
 # Data Access Model
 
 ## Azure Data Collected
@@ -309,6 +327,9 @@ without relying on shared credentials.
 | Subscription Sprawl | Management-group scoped visibility |
 | Unauthorised Resource Changes | Service operates read-only |
 | Secret Leakage in Config | Restricted webhook placeholder expansion |
+| Command Injection via LZ Config | Untrusted config values bound to env vars, not shell-interpolated |
+| Over-Broad Secret Exposure | Explicit least-privilege secrets map (no `secrets: inherit`) |
+| Compromised GitHub Action | Actions pinned to commit SHAs; Dependabot keeps pins current |
 | Limited Audit Evidence | Azure Entra ID authentication logging |
 | Notification Exposure | Team-level routing and repository-based report publication |
 

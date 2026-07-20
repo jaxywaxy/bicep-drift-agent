@@ -439,6 +439,16 @@ Refer to `AZURE_AUTHENTICATION.md` for setup and troubleshooting details.
 - Confirm webhook secret exists.
 - Confirm the secret name matches the placeholder used in config.
 - Confirm the placeholder uses the expected `DRIFT_WEBHOOK_` prefix.
+- Confirm the webhook secret lives on the **drift-agent repository** (where the
+  workflow runs), not the landing-zone repository. Secrets resolve from the
+  workflow's own repo; the LZ repo is only read for its config text.
+- Confirm the platform/workload channels are set: `DRIFT_WEBHOOK_PLATFORM` and
+  `DRIFT_WEBHOOK_WORKLOAD` (or the bridged `PLATFORM_SLACK_WEBHOOK` /
+  `WORKLOAD_SLACK_WEBHOOK`). An unresolved webhook secret fails that team's send
+  and logs a warning rather than silently dropping.
+- Confirm owner routing uses the multi-team config shape. A flat single-channel
+  `notifications` block sends every owner to one channel; per-owner routing
+  needs a team per owner with an `owners` filter.
 - Confirm the Teams or Slack channel still exists.
 - Confirm notification filters are not excluding all findings.
 - Confirm the workflow notification step was not skipped or failed.
