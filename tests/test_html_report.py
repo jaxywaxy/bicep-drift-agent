@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.html_report import generate_html_report, _REPORT_CSS
+from tools.count_drifts import tally_report
 
 
 def _report(**overrides):
@@ -219,6 +220,54 @@ class HtmlReportRenderTests(unittest.TestCase):
                              "drift_type": "extra_in_azure", "details": {}}])
         self.assertNotIn("<script>alert(1)</script>", h)
         self.assertIn("&lt;script&gt;", h)
+
+
+class ReportHeadlineMetricTests(unittest.TestCase):
+    """The report's headline must say the same thing as the CI summary.
+
+    The CI summary was reworked to lead with CHANGED RESOURCES + criticals, with
+    property paths demoted to detail. The report still led with "Total Issues"
+    and had no critical count at all, so the two surfaces described the same run
+    differently. Both now count via count_drifts.tally_report.
+    """
+
+    def test_metrics_match_the_ci_summary_counts(self):
+        h = _render()
+        counts = tally_report(_report())
+        # 1 property_drift + 1 missing + 1 extra; matched_unresolvable excluded.
+        self.assertEqual(counts["drift_count"], 1)
+        self.assertEqual(counts["critical_count"], 1)
+        for label, number in (
+            ("Changed Resources", counts["drift_count"]),
+            ("Critical", counts["critical_count"]),
+            ("Missing", counts["missing_count"]),
+            ("Extra", counts["extra_count"]),
+            ("Total Issues", counts["total_issues"]),
+        ):
+            card = re.search(
+                rf'metric-label">{label}</div>\s*<div class="metric-number">(\d+)<',
+                h,
+            )
+            self.assertIsNotNone(card, f"no metric card for {label}")
+            self.assertEqual(int(card.group(1)), number, f"{label} card disagrees with CI")
+
+    def test_property_paths_are_detail_not_a_headline(self):
+        # Path counts track comparator granularity, so they appear as a sub-line
+        # under Changed Resources - never as a metric card of their own.
+        h = _render()
+        self.assertIn("property path(s)", h)
+        self.assertNotIn('metric-label">Property', h)
+
+    def test_critical_card_reflects_severity_not_record_count(self):
+        # Two cosmetic edits and two stripped security settings both print as
+        # "2" resources; only the critical card separates them.
+        clean = _report()
+        for drift in clean["drifts"]:
+            for change in (drift.get("details") or {}).get("changed_properties", {}).values():
+                change["severity"] = "info"
+        h = _render(drifts=clean["drifts"])
+        card = re.search(r'metric-label">Critical</div>\s*<div class="metric-number">(\d+)<', h)
+        self.assertEqual(card.group(1), "0")
 
 
 class ReportCssTests(unittest.TestCase):

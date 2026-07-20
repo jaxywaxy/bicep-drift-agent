@@ -63,6 +63,37 @@ _COUNTED_TYPES = {
 }
 
 
+def tally_report(report: dict) -> Dict[str, int]:
+    """Count one loaded drift report.
+
+    Split out of count_drifts so the HTML report can show the same numbers as
+    the CI summary from the same code - when the two disagreed, the operator
+    had to guess which one was lying.
+    """
+    counts = {k: 0 for k in _COUNTED_TYPES.values()}
+    counts["changed_property_count"] = 0
+    counts["critical_count"] = 0
+
+    for drift in report.get("drifts") or []:
+        key = _COUNTED_TYPES.get(drift.get("drift_type"))
+        if not key:
+            continue
+        counts[key] += 1
+        # Per-property detail, so a record carrying five changes does not
+        # read as one finding. extra/missing records have no
+        # changed_properties and count as a single change each - the
+        # resource's presence IS the change.
+        changed = ((drift.get("details") or {}).get("changed_properties") or {})
+        counts["changed_property_count"] += len(changed) or 1
+        counts["critical_count"] += sum(
+            1 for c in changed.values()
+            if isinstance(c, dict) and str(c.get("severity", "")).lower() == "critical"
+        )
+
+    counts["total_issues"] = sum(counts[k] for k in _COUNTED_TYPES.values())
+    return counts
+
+
 def count_drifts(reports_dir: str) -> Dict[str, int]:
     """Sum actionable drift across every *-drift.json in reports_dir.
 
@@ -88,21 +119,9 @@ def count_drifts(reports_dir: str) -> Dict[str, int]:
         with open(report_file) as f:
             report = json.load(f)  # a corrupt report must raise, not count as 0
         counts["reports"] += 1
-        for drift in report.get("drifts") or []:
-            key = _COUNTED_TYPES.get(drift.get("drift_type"))
-            if not key:
-                continue
-            counts[key] += 1
-            # Per-property detail, so a record carrying five changes does not
-            # read as one finding. extra/missing records have no
-            # changed_properties and count as a single change each - the
-            # resource's presence IS the change.
-            changed = ((drift.get("details") or {}).get("changed_properties") or {})
-            counts["changed_property_count"] += len(changed) or 1
-            counts["critical_count"] += sum(
-                1 for c in changed.values()
-                if isinstance(c, dict) and str(c.get("severity", "")).lower() == "critical"
-            )
+        for key, value in tally_report(report).items():
+            if key != "total_issues":
+                counts[key] += value
 
     counts["total_issues"] = sum(counts[k] for k in _COUNTED_TYPES.values())
     return counts
