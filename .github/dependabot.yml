@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned to SHAs current. Actions are pinned to full
+  # commit SHAs (supply-chain hardening); without Dependabot those pins rot and
+  # miss security patches. Dependabot bumps the SHA and updates the trailing
+  # "# vX" version comment.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Python deps for the drift agent.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      python:
+        patterns: ["*"]

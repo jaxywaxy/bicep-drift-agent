@@ -22,4 +22,15 @@ jobs:
     uses: ./.github/workflows/drift-check-lz-hybrid.yml
     with:
       landing_zone: myteam  # Change to your landing zone name from lz-index.yml
-    secrets: inherit
+    # Explicit secrets (least privilege) instead of `secrets: inherit`, which
+    # would hand the reusable workflow every repo secret. Mirrors the map the
+    # hybrid workflow declares; also shrinks its toJSON(secrets) blob to just these.
+    secrets:
+      BICEP_REPO_TOKEN: ${{ secrets.BICEP_REPO_TOKEN }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      PLATFORM_SLACK_WEBHOOK: ${{ secrets.PLATFORM_SLACK_WEBHOOK }}
+      WORKLOAD_SLACK_WEBHOOK: ${{ secrets.WORKLOAD_SLACK_WEBHOOK }}

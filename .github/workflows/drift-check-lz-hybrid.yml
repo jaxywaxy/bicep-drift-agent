@@ -50,17 +50,19 @@ jobs:
       lz-subscription-id: ${{ steps.validate.outputs.subscription_id }}
     steps:
       - name: Checkout drift-agent (for index)
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           path: drift-agent
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14'
 
       - name: Parse LZ Index and Load Config
         id: load
+        env:
+          LANDING_ZONE: ${{ inputs.landing_zone }}
         run: |
           cd drift-agent
 
@@ -73,7 +75,7 @@ jobs:
           import os
 
           try:
-            LZ = '${{ inputs.landing_zone }}'
+            LZ = os.environ['LANDING_ZONE']
 
             # Load index
             with open('.github/lz-index.yml') as f:
@@ -113,7 +115,7 @@ jobs:
           PYTHON_SCRIPT
 
       - name: Checkout external Bicep repo
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ steps.load.outputs.repo }}
           path: lz-repo
@@ -122,12 +124,15 @@ jobs:
 
       - name: Load LZ Config from External Repo
         id: config
+        env:
+          CONFIG_PATH_IN: ${{ steps.load.outputs.config_path }}
+          LZ_REPO: ${{ steps.load.outputs.repo }}
         run: |
-          CONFIG_PATH="${{ steps.load.outputs.config_path }}"
+          CONFIG_PATH="$CONFIG_PATH_IN"
           CONFIG_FILE="lz-repo/$CONFIG_PATH"
 
           if [ ! -f "$CONFIG_FILE" ]; then
-            echo "❌ Config file not found: $CONFIG_PATH in ${{ steps.load.outputs.repo }}"
+            echo "❌ Config file not found: $CONFIG_PATH in $LZ_REPO"
             exit 1
           fi
 
@@ -139,6 +144,10 @@ jobs:
 
       - name: Parse and Validate Config
         id: validate
+        env:
+          CONFIG_B64: ${{ steps.config.outputs.config }}
+          OVERRIDE_SUB: ${{ inputs.override_subscription }}
+          OVERRIDE_RG: ${{ inputs.override_resource_group }}
         run: |
           python3 << 'PYTHON_SCRIPT'
           import yaml
@@ -147,7 +156,7 @@ jobs:
           import json
           import os
 
-          config_b64 = "${{ steps.config.outputs.config }}"
+          config_b64 = os.environ["CONFIG_B64"]
           config_text = base64.b64decode(config_b64).decode('utf-8')
 
           try:
@@ -158,8 +167,8 @@ jobs:
             resource_group = config.get('resource_group', '')
 
             # Apply overrides from workflow_dispatch inputs
-            override_sub = "${{ inputs.override_subscription }}"
-            override_rg = "${{ inputs.override_resource_group }}"
+            override_sub = os.environ.get("OVERRIDE_SUB", "")
+            override_rg = os.environ.get("OVERRIDE_RG", "")
 
             if override_sub:
               subscription_id = override_sub
@@ -218,18 +227,18 @@ jobs:
       NODE_OPTIONS: --no-warnings=DEP0005
     steps:
       - name: Azure Login (OIDC)
-        uses: azure/login@v3
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
       - name: Checkout drift detection tools
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           path: drift-tools
 
       - name: Checkout Bicep repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ matrix.check.repo }}
           ref: ${{ matrix.check.branch || 'main' }}
@@ -238,7 +247,7 @@ jobs:
           token: ${{ secrets.BICEP_REPO_TOKEN || github.token }}
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14'
 
@@ -249,15 +258,25 @@ jobs:
 
       - name: Run drift checks - ${{ matrix.check.name }}
         id: drift
+        env:
+          # matrix.check.* comes from the EXTERNAL, untrusted LZ config; never
+          # interpolate it straight into run: shell. Bind to env vars and use
+          # "$VAR" so a crafted config value can't inject shell commands.
+          CHECK_NAME: ${{ matrix.check.name }}
+          CHECK_REPO: ${{ matrix.check.repo }}
+          CHECK_BRANCH: ${{ matrix.check.branch || 'main' }}
+          CHECK_PATH: ${{ matrix.check.path }}
+          CHECK_SUBSCRIPTION_SCOPED: ${{ matrix.check.subscription_scoped }}
+          CHECK_RESOURCE_GROUPS: ${{ toJson(matrix.check.resource_groups) }}
         run: |
-          BICEP_PATH="bicep-${{ matrix.check.name }}/${{ matrix.check.path }}"
-          DRIFT_FILE="drift_${{ matrix.check.name }}.txt"
+          BICEP_PATH="bicep-$CHECK_NAME/$CHECK_PATH"
+          DRIFT_FILE="drift_$CHECK_NAME.txt"
 
           echo "========================================" > "$DRIFT_FILE"
-          echo "Layer: ${{ matrix.check.name }}" >> "$DRIFT_FILE"
-          echo "Repository: ${{ matrix.check.repo }}" >> "$DRIFT_FILE"
-          echo "Branch: ${{ matrix.check.branch || 'main' }}" >> "$DRIFT_FILE"
-          echo "Bicep File: ${{ matrix.check.path }}" >> "$DRIFT_FILE"
+          echo "Layer: $CHECK_NAME" >> "$DRIFT_FILE"
+          echo "Repository: $CHECK_REPO" >> "$DRIFT_FILE"
+          echo "Branch: $CHECK_BRANCH" >> "$DRIFT_FILE"
+          echo "Bicep File: $CHECK_PATH" >> "$DRIFT_FILE"
           echo "========================================" >> "$DRIFT_FILE"
           echo "" >> "$DRIFT_FILE"
 
@@ -270,8 +289,8 @@ jobs:
           #   - otherwise (RG-scoped template): a '*'/glob is expanded against the
           #     live RG list so each resolved RG runs its own single-RG pipeline
           #     (Phase 4 #4).
-          readarray -t SELECTORS < <(echo '${{ toJson(matrix.check.resource_groups) }}' | jq -r '.[]')
-          if [ "${{ matrix.check.subscription_scoped }}" = "true" ]; then
+          readarray -t SELECTORS < <(echo "$CHECK_RESOURCE_GROUPS" | jq -r '.[]')
+          if [ "$CHECK_SUBSCRIPTION_SCOPED" = "true" ]; then
             echo "Subscription-scoped landing zone; scanning selector(s) in a single pass: ${SELECTORS[*]}"
             RESOURCE_GROUPS=("${SELECTORS[@]}")
           elif echo "${SELECTORS[@]}" | grep -qE '[*?[]'; then
@@ -321,7 +340,7 @@ jobs:
 
       - name: Upload drift reports and analysis
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: drift-reports-${{ needs.load-config.outputs.lz-name }}
           path: reports/
@@ -336,15 +355,15 @@ jobs:
       NODE_OPTIONS: --no-warnings=DEP0005
     steps:
       - name: Checkout drift detection tools
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Download all drift reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: drift-reports-${{ needs.load-config.outputs.lz-name }}
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.14'
 
@@ -375,7 +394,7 @@ jobs:
           python3 tools/count_drifts.py .
 
       - name: Checkout external repo for notifications config
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           repository: ${{ needs.load-config.outputs.lz-repo }}
           path: lz-repo
