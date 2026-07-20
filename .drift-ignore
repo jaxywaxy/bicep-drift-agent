@@ -9,15 +9,28 @@ ignore:
   # .drift-ignore. They are referenced-as-existing in a workload LZ (ignore) but
   # MANAGED in a platform LZ (surface) - so they must be per-LZ, not global.
 
-  # Auto-managed by VMs and Compute
+  # Auto-managed by VMs and Compute. All THREE are scoped to extra_in_azure
+  # only, same reasoning as the loadBalancers/publicIPAddresses rules below:
+  # the concern is auto-created resources appearing as unmanaged extras, but a
+  # bare type match also swallows missing_in_azure and property_drift on a
+  # resource the template genuinely DECLARES.
+  #
+  # This was not hypothetical: a declared scale set that FAILED to deploy
+  # (InvalidParameter) was reported as "no drift detected", because its
+  # missing_in_azure was suppressed by the blanket VMSS rule below. A deploy
+  # failure that leaves a declared resource absent is precisely the drift this
+  # tool exists to report.
   - resource_type: "Microsoft.Compute/disks"
-    reason: "OS/data disks are auto-created and managed by VMs, not separately defined in IaC"
+    drift_type: "extra_in_azure"
+    reason: "OS/data disks auto-created by VMs surface as extras; a DECLARED disk still compares"
 
   - resource_type: "Microsoft.Compute/virtualMachines/extensions"
-    reason: "VM extensions auto-managed by VMs, not separately defined in Bicep"
+    drift_type: "extra_in_azure"
+    reason: "Policy/VM-pushed extensions surface as extras; a DECLARED extension still compares"
 
   - resource_type: "Microsoft.Compute/virtualMachineScaleSets"
-    reason: "VMSS auto-created by AKS node pools, managed separately"
+    drift_type: "extra_in_azure"
+    reason: "AKS node-pool VMSS surface as extras; a DECLARED scale set still compares"
 
   # AKS auto-managed resources. Scoped to extra_in_azure ONLY: pools declared
   # inline in the cluster's agentPoolProfiles (system pools) surface as extra
