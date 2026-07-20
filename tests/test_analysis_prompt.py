@@ -160,11 +160,49 @@ class RemediationGuidanceTests(unittest.TestCase):
         sp = DriftAgent._get_system_prompt()
         self.assertIn("encryptionAtHost", sp)
         self.assertIn("MORE secure", sp)
-        self.assertIn("deployIfNotExists", sp)
         self.assertIn("management-group scope", sp)
         self.assertIn("az policy assignment list", sp)
         # And must offer the "make the template declare the enforced value" branch.
         self.assertIn("declare the enforced value", sp)
+
+    def test_prompt_splits_deny_from_modify(self):
+        # The first version named only Modify/DINE, so the analysis promised
+        # silent re-drift. Most BUILT-IN hardening policies are Deny, where the
+        # redeploy fails outright - opposite operator expectation.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("`Deny`", sp)
+        self.assertIn("FAILS outright", sp)
+        self.assertIn("`Modify` / `deployIfNotExists`", sp)
+        self.assertIn("back on the next run", sp)
+
+    def test_prompt_rejects_the_bogus_subscription_encryption_default(self):
+        # EncryptionAtHost is a subscription FEATURE REGISTRATION (permits the
+        # setting, never applies it); the default disk encryption set governs a
+        # different property. Sending the reader to either explains nothing.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("FEATURE REGISTRATION", sp)
+        self.assertIn("Microsoft.Compute/EncryptionAtHost", sp)
+        self.assertIn("properties.encryption.type", sp)
+
+    def test_prompt_carries_the_deallocation_constraint(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("cannot be changed while instances are allocated", sp)
+        self.assertIn("sku.capacity", sp)
+
+
+class EvidenceDisciplineTests(unittest.TestCase):
+    """A live round invented a disk-to-VMSS attachment and reported an opened
+    networkAccessPolicy without saying publicNetworkAccess was still Disabled."""
+
+    def test_prompt_forbids_inventing_relationships(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("Never assert a RELATIONSHIP that is not in the data", sp)
+        self.assertIn("unverified", sp)
+
+    def test_prompt_requires_mitigating_fields(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("MITIGATING fields", sp)
+        self.assertIn("publicNetworkAccess", sp)
 
     def test_prompt_denies_treating_missing_policy_attribution_as_proof(self):
         sp = DriftAgent._get_system_prompt()

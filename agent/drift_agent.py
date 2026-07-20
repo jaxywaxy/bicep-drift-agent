@@ -441,7 +441,19 @@ Respond with:
         drift_type: str,
         details: Dict[str, Any],
     ) -> DriftCategory:
-        if self._matches_any(resource_type, self.SYSTEM_MANAGED_RESOURCE_TYPES):
+        # SYSTEM_MANAGED is a statement about PROVENANCE - Azure created this
+        # resource as a dependent (a VM's NIC, a private endpoint's DNS zone
+        # group) - and it exists to stop that churn being reported as drift.
+        # It must not swallow a PROPERTY drift: a property drift means the
+        # comparator matched a resource DECLARED in the Bicep against its live
+        # counterpart, so the resource is template-managed by definition and
+        # its properties are the operator's to control. A live round proved the
+        # cost: disk-drift-data is declared in Bicep, was manually flipped
+        # networkAccessPolicy DenyAll -> AllowAll, and the type-based shortcut
+        # classified that security regression "ignore_system_managed".
+        if self._matches_any(resource_type, self.SYSTEM_MANAGED_RESOURCE_TYPES) and not (
+            "modified" in drift_type or "property" in drift_type
+        ):
             return DriftCategory.SYSTEM_MANAGED
 
         if "extra" in drift_type:
@@ -728,8 +740,17 @@ Remediation guidance (Azure specifics - apply these, they are common mistakes):
 - Scope the redeploy to the NARROWEST unit that fixes the drift - the specific module or resource - not the whole `main.bicep`. A full-estate `what-if`/deploy to revert one resource has a large, unnecessary blast radius.
 - Bicep resource collections are replaced as a whole on redeploy (a PUT overwrites the array), so a redeploy removes rogue elements ADDED inside a managed collection. It does NOT delete a rogue TOP-LEVEL child added out-of-band (e.g. a standalone rule-collection group, a firewall rule) - that needs an explicit `az ... delete`. Say which case applies before promising a redeploy will clean it up.
 - Redeploy fixes declarative resources (firewall policy, RCGs, NSGs, Key Vault config). Do not claim "atomic, no sequencing" - some children require serialized writes the template already encodes via dependsOn; that ordering is the template's concern, not a manual step.
-- When live is MORE secure/hardened than the template (encryptionAtHost or infrastructure encryption on, a customer-managed key or disk-encryption-set applied, TLS floor raised, public access closed, secure boot/vTPM on), do NOT simply say "redeploy will revert it". That setting is frequently applied by the PLATFORM, not by the person named in `change_origin`: an Azure Policy `Modify`/`deployIfNotExists` assignment at subscription or management-group scope, a subscription default disk encryption set, or a subscription-level encryption default. Where the platform is enforcing it, a redeploy reverts the property for minutes at most - the assignment reapplies it and the SAME drift returns on the next run, which reads as a broken remediation. So: state that the enforcement scope must be checked FIRST (`az policy assignment list --scope /subscriptions/<sub> --disable-scope-strict-match`, plus subscription-level encryption defaults for the resource type), and give both branches - if it is platform-enforced, the fix is to update the Bicep to declare the enforced value so template and reality agree; only if nothing enforces it is reverting-by-redeploy a real choice, and even then it is a deliberate security downgrade that needs an owner's sign-off.
+- When live is MORE secure/hardened than the template (encryptionAtHost or infrastructure encryption on, a customer-managed key applied, TLS floor raised, public access closed, secure boot/vTPM on), do NOT simply say "redeploy will revert it". Such settings are commonly enforced by an Azure Policy assignment at subscription or management-group scope, so the enforcement scope must be checked FIRST: `az policy assignment list --scope /subscriptions/<sub> --disable-scope-strict-match` (that flag is what surfaces assignments inherited from ancestor management groups). The EFFECT decides what happens, and the two differ completely - name which one you mean:
+  - `Deny` (the effect of most built-in hardening policies, e.g. "Virtual machines and virtual machine scale sets should have encryption at host enabled"): the redeploy FAILS outright with a policy violation. Tell the operator to expect a deployment error, not silent re-drift.
+  - `Modify` / `deployIfNotExists` (usually custom): the write is rewritten or re-applied, so the redeploy "succeeds" and the SAME drift is back on the next run - which reads as a broken remediation.
+  Then give both branches: if anything enforces it, the fix is to update the Bicep to declare the enforced value so template and reality agree; only if nothing enforces it is reverting-by-redeploy a real choice, and even then it is a deliberate security downgrade needing an owner's sign-off.
+- Do NOT invent a subscription-level "encryption default" that flips a per-resource security flag. `Microsoft.Compute/EncryptionAtHost` is a subscription FEATURE REGISTRATION - it only permits the setting, it never applies it, so its state explains nothing about an encryptionAtHost drift. A default disk encryption set IS subscription+region scoped, but it governs CMK-vs-platform-key on DISKS (`properties.encryption.type`) - a different property. Do not send someone to check one for drift in the other.
+- `encryptionAtHost` cannot be changed while instances are allocated - Azure rejects the write on a VM/VMSS that is running. If you recommend changing it, say the resource must be deallocated first (a VMSS at `sku.capacity: 0` already satisfies this - check the capacity before adding the caveat or omitting it).
 - The report's own `policy_enforced_drifts` split only catches enforcement it could correlate from the activity log. A finding attributed to a named user is NOT proof no policy is involved - the user may have tripped a policy, or the policy remediation may predate the log window. Do not present absence of policy attribution as "confirmed manual".
+
+Evidence discipline (a live round produced both of these errors - they read as authoritative and are simply untrue):
+- Never assert a RELATIONSHIP that is not in the data. Attachment, dependency, and "used by X" claims must come from a field you were given (a resource ID reference, a parent/child name). Do not infer that a disk is attached to a scale set, that a subnet is used by an app, or that a rule protects a workload because the names look related. If the wiring matters to your recommendation and is absent, say it is unverified and name the check - do not assume it.
+- State the MITIGATING fields, not just the alarming one. A finding is a set of properties: if `networkAccessPolicy` opened to AllowAll but `publicNetworkAccess` is still Disabled, or a port opened but the NSG still denies it, the exposure is bounded and you must say so in the same breath. Reporting the worst property alone, when a sibling in the same payload constrains it, overstates severity and burns the reader's trust.
 
 Output style:
 - Use markdown.
