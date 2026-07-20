@@ -660,6 +660,13 @@ def _run_claude_analysis(agent, report_data: dict):
         total_missing=missing,
         total_extra=extra,
         total_modified=modified,
+        # The agent attaches a short allowlist of sibling properties from these
+        # (DriftAgent.LIVE_CONTEXT_PROPERTIES) to each finding. They are NOT
+        # sent wholesale - a live payload runs to thousands of tokens. Without
+        # them a finding carries only its changed paths, so the analysis hedged
+        # "publicNetworkAccess not in the payload" and "I don't have
+        # sku.capacity" about values sitting in this very report.
+        live_resources=report_data.get("live_resources"),
     )
 
     if not agent:
