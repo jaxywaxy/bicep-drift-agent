@@ -48,6 +48,7 @@ from tools.activity_log import (
     detect_scanning_identity,
 )
 from tools.config import AUTHORIZED_DEPLOYERS
+from tools.count_drifts import COUNTED_TYPES
 from tools.ownership import classify_owner
 from tools.change_origin import (
     classify_change_origin,
@@ -569,19 +570,41 @@ def _clean_estate_summary(report_data: dict, reconciled: int) -> str:
 
 
 def _finalize_drift_count(report_data: dict) -> int:
-    """Recompute drift_count from the FINAL drifts array and store it.
+    """Recompute drift_count as ACTIONABLE drift and store it.
 
     Phase 1 (run_drift_check) stamps drift_count = len(raw drifts). Phase 2/3
     then reconcile - relabelling unresolvable-named extras to
     matched_unresolvable and moving entries into ignored_drifts /
-    policy_enforced_drifts - which shortens the drifts array. Without this the
-    persisted drift_count stays at the stale Phase-1 value (e.g. 40 while the
-    array holds 36), contradicting the reconciled counts. CI's count_drifts.py
-    recomputes independently, so only the report/HTML field was affected.
+    policy_enforced_drifts - which shortens the drifts array, so the count must
+    be recomputed or it keeps a stale Phase-1 value.
+
+    It also has to EXCLUDE matched_unresolvable. Those records are runtime-named
+    resources reconciled to their deployed counterparts - informational, not
+    drift - and every other surface already treats them that way: the CI summary
+    and the HTML report count via count_drifts.tally_report, and the analysis
+    filters them before prompting. Counting them here left the JSON artifact
+    saying `drift_count: 35` for a run the summary and report both called 2
+    changed resources, so whichever number a reader saw first was the one they
+    believed. Counting the same drift_types as tally_report makes this field
+    equal to that function's total_issues by construction.
     """
-    count = len(report_data.get("drifts") or [])
-    report_data["drift_count"] = count
-    return count
+    counted = 0
+    unknown = set()
+    for drift in report_data.get("drifts") or []:
+        drift_type = drift.get("drift_type")
+        if drift_type in COUNTED_TYPES:
+            counted += 1
+        elif drift_type != "matched_unresolvable":
+            unknown.add(drift_type)
+    if unknown:
+        # A drift_type neither counted nor reconciled would vanish from every
+        # surface silently. Surface it instead of quietly under-reporting.
+        logger.warning(
+            f"drift_count excludes unrecognised drift_type(s): {sorted(unknown)} - "
+            "add them to count_drifts.COUNTED_TYPES if they are actionable"
+        )
+    report_data["drift_count"] = counted
+    return counted
 
 
 def _drift_type_counts(drifts):

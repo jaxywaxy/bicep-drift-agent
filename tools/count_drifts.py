@@ -56,7 +56,7 @@ from typing import Dict
 
 # drift_type -> GITHUB_OUTPUT key. Mirrors _print_drift_summary's [DRIFT] /
 # [EXTRA] / [MISSING] lines, which these counts replace.
-_COUNTED_TYPES = {
+COUNTED_TYPES = {
     "property_drift": "drift_count",
     "extra_in_azure": "extra_count",
     "missing_in_azure": "missing_count",
@@ -70,12 +70,12 @@ def tally_report(report: dict) -> Dict[str, int]:
     the CI summary from the same code - when the two disagreed, the operator
     had to guess which one was lying.
     """
-    counts = {k: 0 for k in _COUNTED_TYPES.values()}
+    counts = {k: 0 for k in COUNTED_TYPES.values()}
     counts["changed_property_count"] = 0
     counts["critical_count"] = 0
 
     for drift in report.get("drifts") or []:
-        key = _COUNTED_TYPES.get(drift.get("drift_type"))
+        key = COUNTED_TYPES.get(drift.get("drift_type"))
         if not key:
             continue
         counts[key] += 1
@@ -90,7 +90,7 @@ def tally_report(report: dict) -> Dict[str, int]:
             if isinstance(c, dict) and str(c.get("severity", "")).lower() == "critical"
         )
 
-    counts["total_issues"] = sum(counts[k] for k in _COUNTED_TYPES.values())
+    counts["total_issues"] = sum(counts[k] for k in COUNTED_TYPES.values())
     return counts
 
 
@@ -101,7 +101,7 @@ def count_drifts(reports_dir: str) -> Dict[str, int]:
     means the drift check produced nothing, which must surface as a failure
     rather than a silent "0 issues".
     """
-    counts = {k: 0 for k in _COUNTED_TYPES.values()}
+    counts = {k: 0 for k in COUNTED_TYPES.values()}
     counts["changed_property_count"] = 0
     counts["critical_count"] = 0
     counts["reports"] = 0
@@ -123,7 +123,7 @@ def count_drifts(reports_dir: str) -> Dict[str, int]:
             if key != "total_issues":
                 counts[key] += value
 
-    counts["total_issues"] = sum(counts[k] for k in _COUNTED_TYPES.values())
+    counts["total_issues"] = sum(counts[k] for k in COUNTED_TYPES.values())
     return counts
 
 

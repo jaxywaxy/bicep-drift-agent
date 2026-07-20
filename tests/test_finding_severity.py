@@ -87,12 +87,29 @@ class FindingSeverityTests(unittest.TestCase):
         self.assertEqual(finding.category, DriftCategory.GOVERNANCE_DRIFT)
         self.assertEqual(finding.severity, DriftSeverity.CRITICAL)
 
-    def test_system_managed_stays_informational(self):
-        finding = _classify(
-            "microsoft.network/networkinterfaces",
-            changed={"properties.x": {"severity": "critical"}},
-        )
+    def test_system_managed_still_suppresses_azure_created_extras(self):
+        # The category's real job: a NIC Azure created for a VM/private endpoint
+        # showing up as an extra resource is not drift.
+        finding = _classify("microsoft.network/networkinterfaces", drift_type="extra_in_azure")
+        self.assertEqual(finding.category, DriftCategory.SYSTEM_MANAGED)
         self.assertEqual(finding.severity, DriftSeverity.INFORMATIONAL)
+        self.assertEqual(finding.recommended_action, RemediationAction.IGNORE_SYSTEM_MANAGED)
+
+    def test_system_managed_type_does_not_swallow_property_drift(self):
+        # Previously the type shortcut ran first and unconditionally, so a
+        # DECLARED disk whose networkAccessPolicy was manually flipped
+        # DenyAll -> AllowAll came back "ignore_system_managed" at severity
+        # informational. A property drift means the resource was matched from
+        # the Bicep, so it is template-managed and the finding is actionable.
+        finding = _classify(
+            "microsoft.compute/disks",
+            changed={"properties.networkAccessPolicy": {"desired": "DenyAll",
+                                                        "actual": "AllowAll",
+                                                        "severity": "critical"}},
+        )
+        self.assertEqual(finding.category, DriftCategory.CONFIGURATION_DRIFT)
+        self.assertEqual(finding.severity, DriftSeverity.CRITICAL)
+        self.assertEqual(finding.recommended_action, RemediationAction.REDEPLOY_BICEP)
 
     def test_missing_in_azure_unaffected(self):
         finding = _classify("microsoft.web/sites", drift_type="missing_in_azure")

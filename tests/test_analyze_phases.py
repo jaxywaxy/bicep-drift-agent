@@ -6,6 +6,7 @@ import unittest
 
 import analyze_drift as ad
 from tools.ignore_patterns import IgnorePatternList
+from tools.count_drifts import tally_report
 
 
 def _report_with_unique_named_storage(bicep_sku, live_sku):
@@ -157,8 +158,37 @@ class TestFinalizeDriftCount(unittest.TestCase):
     def test_recomputes_from_final_array(self):
         report = {"drift_count": 40, "drifts": [{"drift_type": "property_drift"}]
                   + [{"drift_type": "matched_unresolvable"} for _ in range(33)]}
-        self.assertEqual(ad._finalize_drift_count(report), 34)
-        self.assertEqual(report["drift_count"], 34)
+        self.assertEqual(ad._finalize_drift_count(report), 1)
+        self.assertEqual(report["drift_count"], 1)
+
+    def test_excludes_reconciled_records(self):
+        # The live artifact said drift_count: 35 for a run the CI summary and
+        # the HTML report both called 2 changed resources, because this field
+        # counted matched_unresolvable and they did not.
+        report = {"drifts": [
+            {"drift_type": "property_drift"},
+            {"drift_type": "property_drift"},
+        ] + [{"drift_type": "matched_unresolvable"} for _ in range(33)]}
+        self.assertEqual(ad._finalize_drift_count(report), 2)
+
+    def test_equals_tally_report_total_issues(self):
+        # Both count via COUNTED_TYPES, so the JSON field and the CI headline
+        # are the same number by construction, not by coincidence.
+        report = {"drifts": [
+            {"drift_type": "property_drift"},
+            {"drift_type": "extra_in_azure"},
+            {"drift_type": "missing_in_azure"},
+            {"drift_type": "matched_unresolvable"},
+        ]}
+        self.assertEqual(ad._finalize_drift_count(report), tally_report(report)["total_issues"])
+
+    def test_unrecognised_type_is_excluded_but_warned(self):
+        # A new drift_type must not vanish from every surface in silence.
+        report = {"drifts": [{"drift_type": "property_drift"},
+                             {"drift_type": "brand_new_type"}]}
+        with self.assertLogs(ad.logger, level="WARNING") as captured:
+            self.assertEqual(ad._finalize_drift_count(report), 1)
+        self.assertIn("brand_new_type", "\n".join(captured.output))
 
     def test_empty_array_is_zero(self):
         report = {"drift_count": 12, "drifts": []}
