@@ -584,6 +584,38 @@ class PropertyComparator:
         "properties.apiserveraccessprofile",
         "properties.disablelocalaccounts",
         "properties.networkprofile.networkpolicy",
+        # Resiliency: the zone list a resource is pinned to, and the fault/update
+        # domain counts of an availability set. Shrinking any of these is a
+        # silent availability downgrade that nothing else surfaces - the resource
+        # still reads healthy while it has stopped being redundant. `zones` is a
+        # top-level ARM key (not under properties), hence the bare entry.
+        "zones",
+        "properties.platformfaultdomaincount",
+        "properties.platformupdatedomaincount",
+        "properties.zonebalance",
+        # Self-healing: automatic instance repair off means unhealthy VMSS
+        # instances are never replaced.
+        "properties.automaticrepairspolicy",
+        # Managed disk exposure and data-at-rest protection. networkAccessPolicy
+        # /publicNetworkAccess opened lets a disk be exported over the internet
+        # via SAS; the encryption block is the CMK-vs-platform-key choice and
+        # encryptionSettingsCollection is host/ADE encryption.
+        "properties.networkaccesspolicy",
+        "properties.encryption.type",
+        "properties.encryptionsettingscollection",
+        # Host-level encryption + Trusted Launch (secure boot / vTPM) on VMs and
+        # scale sets. Both declaration shapes: inline on a VM
+        # ("properties.securityProfile") and under a scale set's
+        # ("properties.virtualMachineProfile.securityProfile").
+        "securityprofile.encryptionathost",
+        "securityprofile.uefisettings",
+        "securityprofile.securitytype",
+        # VMSS patching: upgradePolicy Manual means published model changes
+        # (including security patches) never reach running instances.
+        "properties.upgradepolicy.mode",
+        # A scale set instance given its own public IP is directly internet-
+        # reachable, bypassing the load balancer and its NSG posture.
+        "publicipaddressconfiguration",
     }
 
     # Types whose networkAcls default to open when never configured: Azure
@@ -680,6 +712,19 @@ class PropertyComparator:
             "properties.publicnetworkaccess": "Enabled",
             "properties.disablelocalauth": False,
         },
+        "microsoft.compute/disks": {
+            # Absent = the disk can be exported anywhere a SAS URL reaches.
+            # `az disk update --network-access-policy AllowAll` on a disk the
+            # template never configured is exactly the invisible-key case.
+            "properties.networkaccesspolicy": "AllowAll",
+            "properties.publicnetworkaccess": "Enabled",
+        },
+        # NOTE: no VMSS/VM securityProfile sentinel. Unlike the AKS and storage
+        # defaults, encryptionAtHost/Trusted Launch absent-defaults vary by
+        # image, VM size and creation API version (a Gen2 image can materialize
+        # securityType 'TrustedLaunch' with no template involvement), which is
+        # the same trap documented above for TLS floors. Declared values are
+        # still generic-compared, as critical.
     }
 
     WRITE_ONLY_PROPERTIES = {
@@ -1034,6 +1079,14 @@ class PropertyComparator:
         if (kl.endswith(".threatintelwhitelist.ipaddresses")
                 or kl.endswith(".threatintelwhitelist.fqdns")
                 or kl.endswith(".dnssettings.servers")):
+            return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
+        # Availability zones: a bare list of zone numbers, so the generic subset
+        # compare is one-directional - ["1","2","3"] shrunk to ["1"] IS caught
+        # (bicep elements go missing), but a live-side zone list that gained an
+        # entry the template never asked for is invisible, and a template
+        # declaring [] excuses anything. Zone membership is a placement fact
+        # that must match exactly in both directions.
+        if kl == "zones":
             return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
         return None
 

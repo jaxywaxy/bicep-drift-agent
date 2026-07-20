@@ -134,16 +134,52 @@ def filter_unmanaged_live_resources(normalized_live: list[dict], filtered_arm: l
     property-drift pass, so a resource filtered here doesn't reappear as an
     extra in the report's property_drifts section.
 
-    - auto-managed types (VM disks/extensions)
+    - auto-managed types (VM disks/extensions) the bicep doesn't declare
     - SQL system databases (`master`)
     - App Service `config/*` kinds the bicep doesn't declare (config/web exists
       on every site with runtime defaults; declared kinds still property-compare)
     """
+    # Disks and VM extensions are usually implicit (a VM's OS disk, the AMA
+    # extension pushed by policy), so undeclared ones are noise rather than
+    # extras. But a data disk declared as its OWN resource is a first-class
+    # managed resource - dropping its live row made every declared disk
+    # false-flag missing_in_azure and hid out-of-band changes to it (resizing,
+    # networkAccessPolicy opened, encryption swapped). Scope the drop to types
+    # the template never mentions, same as the config/* handling below.
     auto_managed_types = {
-        "Microsoft.Compute/disks",  # Created by VMs
-        "Microsoft.Compute/virtualMachines/extensions",  # Created by VMs
+        "microsoft.compute/disks",  # Created by VMs
+        "microsoft.compute/virtualmachines/extensions",  # Created by VMs
     }
-    result = [r for r in normalized_live if r.get("type") not in auto_managed_types]
+    declared_auto_managed = {
+        (r.get("type") or "").lower()
+        for r in filtered_arm
+        if (r.get("type") or "").lower() in auto_managed_types
+    }
+    dropped_types = auto_managed_types - declared_auto_managed
+    # When disks ARE declared, the type-level drop is too blunt: a VM's implicit
+    # OS disk would become a false extra_in_azure. Drop only live disks that
+    # correspond to no declared disk - matched by the literal prefix before any
+    # uniqueString placeholder, the same plausibility test the single-candidate
+    # matcher uses. Note attachment is NOT the discriminator: a data disk
+    # declared as its own resource is normally attached to a VM too.
+    declared_disk_prefixes = [
+        p for p in (
+            (r.get("name") or "").split("[")[0].lower().strip()
+            for r in filtered_arm
+            if (r.get("type") or "").lower() == "microsoft.compute/disks"
+        ) if len(p) >= 3
+    ]
+
+    def _is_auto_managed(r: dict) -> bool:
+        rtype = (r.get("type") or "").lower()
+        if rtype in dropped_types:
+            return True
+        if rtype != "microsoft.compute/disks":
+            return False
+        name = (r.get("name") or "").lower()
+        return not any(name.startswith(p) or p in name for p in declared_disk_prefixes)
+
+    result = [r for r in normalized_live if not _is_auto_managed(r)]
     result = [
         r for r in result
         if not (
