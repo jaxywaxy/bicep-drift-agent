@@ -116,6 +116,19 @@ notifications:
 `owners` combines with `filter` (AND): a team with `owners: [platform]` and
 `filter: drift` receives only property-drift on platform-owned resources.
 
+**Owner routing requires the multi-team shape.** A *flat* single-channel config:
+
+```yaml
+notifications:
+  slack: "${DRIFT_WEBHOOK_WORKLOAD}"
+```
+
+is wrapped as **one** team with no `owners`, so it receives **every** owner's
+drift — platform findings land in that one channel and no platform channel
+exists. To route by owner you must use the multi-team shape above (a `platform`
+team and a `workload` team, each with its own `owners` and webhook). Splitting
+the channels is opt-in; a flat config is intentionally "send everything here".
+
 > Owner tags are only present when notifying from the **JSON** report
 > (`reports/<rg>-drift.json`). Text-parsed events have no owner and route to every
 > team (owners defaults to "all").

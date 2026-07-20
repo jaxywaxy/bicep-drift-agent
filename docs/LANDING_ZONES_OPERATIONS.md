@@ -284,6 +284,9 @@ Examples:
 - Route Tables
 - Network Security Groups
 - NAT Gateways
+- Firewall Policies (and their rule collection groups)
+- Load Balancers / Application Gateways (+ WAF policies), Front Door
+- Public IP Addresses
 - Management infrastructure
 - Governance resources
 
@@ -304,8 +307,15 @@ Examples:
 |-----------|--------|
 | NSG Resource | Platform |
 | NSG Security Rules | Workload |
+| Firewall Policy | Platform |
+| Firewall Rule Collection Groups | Platform |
 | Subscription RBAC | Platform |
 | Resource RBAC | Resource Owner |
+
+> Note the asymmetry: NSG *security rules* are workload-owned (app teams manage
+> their own micro-segmentation), but a firewall policy's *rule collection groups*
+> stay platform-owned — a central firewall's egress rules are platform-managed
+> fabric, so the child follows its parent policy rather than flipping to workload.
 
 Ownership classification allows notifications to be routed directly to the team responsible for remediation.
 
