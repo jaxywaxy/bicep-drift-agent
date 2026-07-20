@@ -18,6 +18,11 @@ from functools import wraps
 from azure.identity import DefaultAzureCredential
 from azure.core.exceptions import HttpResponseError
 
+try:
+    from .http_util import urlopen_checked
+except ImportError:
+    from http_util import urlopen_checked
+
 logger = logging.getLogger(__name__)
 
 # Resource-group selectors that mean "the whole subscription" (no filter).
@@ -451,7 +456,7 @@ def fetch_cross_subscription_resources(arm_resources: List[Dict]) -> List[Dict]:
             if not token:
                 token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
             req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urlopen_checked(req, timeout=30) as resp:
                 data = json.load(resp)
             fetched.append({
                 "type": rtype, "name": name, "location": data.get("location"),
@@ -500,7 +505,7 @@ def _query_locks(resource_group: Optional[str], sub_id: str, scope: str, token: 
             )
 
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_checked(req, timeout=30) as resp:
             data = _json.load(resp)
 
         locks = []
@@ -560,7 +565,7 @@ def _query_cosmos_children(resources: List[Dict], sub_id: str, token: Optional[s
 
     def _get(url: str) -> Dict:
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_checked(req, timeout=30) as resp:
             return _json.load(resp)
 
     children: List[Dict] = []
@@ -708,7 +713,7 @@ def _query_cognitive_deployments(resources: List[Dict], token: Optional[str] = N
             f"https://management.azure.com{parent_id}/{child}?api-version={api_version}",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_checked(req, timeout=30) as resp:
             return _json.load(resp).get("value", [])
 
     children: List[Dict] = []
@@ -903,7 +908,7 @@ def _expand_data_plane_children(resources: List[Dict], token: Optional[str] = No
             f"https://management.azure.com{parent_id}/{path}?api-version={api}",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_checked(req, timeout=30) as resp:
             return _json.load(resp).get("value", [])
 
     # Some child types ARE Resource Graph rows in some cases (virtualNetworkLinks,
@@ -1005,7 +1010,7 @@ def _expand_appservice_config(resources: List[Dict], token: Optional[str] = None
             url, headers={"Authorization": f"Bearer {token}", "Content-Length": "0"},
             method=method, data=b"" if method == "POST" else None,
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_checked(req, timeout=30) as resp:
             return _json.load(resp)
 
     children: List[Dict] = []
@@ -1142,7 +1147,7 @@ def _expand_extension_resources(resources: List[Dict], token: Optional[str] = No
                     f"https://management.azure.com{pid}/{path}?api-version={api}",
                     headers={"Authorization": f"Bearer {token}"},
                 )
-                with urllib.request.urlopen(req, timeout=30) as resp:
+                with urlopen_checked(req, timeout=30) as resp:
                     items = _json.load(resp).get("value", [])
             except Exception as e:
                 logger.debug(f"Could not list {label} for {pname}: {e}")
@@ -1216,7 +1221,7 @@ def fetch_declared_defender_pricings(arm_resources: List[Dict], sub_id: str,
             f"https://management.azure.com/subscriptions/{sub_id}/providers/Microsoft.Security/pricings?api-version=2024-01-01",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urlopen_checked(req, timeout=30) as resp:
             items = _json.load(resp).get("value", [])
     except Exception as e:
         logger.warning(f"Could not fetch Defender pricings: {e}")

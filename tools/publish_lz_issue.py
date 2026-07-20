@@ -32,8 +32,10 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from .send_notifications import events_from_report
+    from .http_util import urlopen_checked
 except ImportError:
     from send_notifications import events_from_report
+    from http_util import urlopen_checked
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ def _api_request(
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+        with urlopen_checked(req, timeout=REQUEST_TIMEOUT) as resp:
             body = resp.read().decode("utf-8")
             return resp.status, (json.loads(body) if body else None)
     except urllib.error.HTTPError as e:
