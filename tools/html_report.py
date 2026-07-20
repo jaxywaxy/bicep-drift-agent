@@ -11,6 +11,8 @@ import logging
 from pathlib import Path
 from datetime import datetime
 
+from .count_drifts import tally_report
+
 logger = logging.getLogger(__name__)
 
 
@@ -134,6 +136,15 @@ _REPORT_CSS = """            * {
 
             .metric-card.modified {
                 border-top: 4px solid #ff9800;
+            }
+
+            .metric-card.critical {
+                border-top: 4px solid #d32f2f;
+            }
+
+            .metric-sub {
+                font-size: 11px;
+                color: #888;
             }
 
             .metric-number {
@@ -587,13 +598,18 @@ def generate_html_report(
     # The consolidated remediation narrative (one Claude call for the whole
     # estate) - it replaced the per-drift recommendation cards.
     agent_analysis = data.get("agent_analysis")
-    total = len(drifts)
-    missing = len([d for d in drifts if "missing" in d["drift_type"]])
-    extra = len([d for d in drifts if "extra" in d["drift_type"]])
-    # Property-level changes are recorded with drift_type "property_drift" (not the
-    # literal "modified"), so count those as modified too - otherwise a changed
-    # property (e.g. storage accessTier) shows up in Total but not in Modified.
-    modified = len([d for d in drifts if "modified" in d["drift_type"] or "property" in d["drift_type"]])
+    # Counted by the same code as the CI summary (tools/count_drifts) so the two
+    # surfaces cannot disagree. The emphasis matches it too: CHANGED RESOURCES is
+    # the headline (it is how drift is remediated - redeploy the module), critical
+    # is the one thing a resource count cannot express, and property paths are
+    # supporting detail because one human action can emit several of them.
+    counts = tally_report(data)
+    total = counts["total_issues"]
+    missing = counts["missing_count"]
+    extra = counts["extra_count"]
+    modified = counts["drift_count"]
+    critical = counts["critical_count"]
+    changed_properties = counts["changed_property_count"]
 
     # Determine status
     if total == 0:
@@ -677,9 +693,15 @@ def generate_html_report(
             </header>
 
             <div class="metrics">
-                <div class="metric-card total">
-                    <div class="metric-label">Total Issues</div>
-                    <div class="metric-number">{total}</div>
+                <div class="metric-card modified">
+                    <div class="metric-label">Changed Resources</div>
+                    <div class="metric-number">{modified}</div>
+                    <div class="metric-sub">{changed_properties} property path(s)</div>
+                </div>
+                <div class="metric-card critical">
+                    <div class="metric-label">Critical</div>
+                    <div class="metric-number">{critical}</div>
+                    <div class="metric-sub">property changes rated critical</div>
                 </div>
                 <div class="metric-card missing">
                     <div class="metric-label">Missing</div>
@@ -689,9 +711,10 @@ def generate_html_report(
                     <div class="metric-label">Extra</div>
                     <div class="metric-number">{extra}</div>
                 </div>
-                <div class="metric-card modified">
-                    <div class="metric-label">Modified</div>
-                    <div class="metric-number">{modified}</div>
+                <div class="metric-card total">
+                    <div class="metric-label">Total Issues</div>
+                    <div class="metric-number">{total}</div>
+                    <div class="metric-sub">changed + missing + extra</div>
                 </div>
             </div>
 
@@ -970,10 +993,14 @@ def _render_property_drift_section(data: dict) -> str:
 
     # Modified resources section
     if modified:
-        html += """
+        # Path count is stated per section rather than as a headline: one human
+        # action can emit several paths, so it measures comparator granularity.
+        paths = sum(len(r.get("property_diffs") or []) for r in modified)
+        html += f"""
             <div class="section">
                 <h2>⚙️ Modified Configuration</h2>
-                <p>These resources exist in both Bicep and Azure, but their configuration has changed:</p>
+                <p>These resources exist in both Bicep and Azure, but their configuration has changed
+                   — <strong>{len(modified)} resource(s)</strong>, {paths} property path(s):</p>
                 <div style="margin-top: 16px;">
         """
 

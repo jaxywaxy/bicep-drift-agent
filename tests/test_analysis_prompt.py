@@ -151,6 +151,26 @@ class RemediationGuidanceTests(unittest.TestCase):
         # Rogue top-level child needs explicit delete, not redeploy
         self.assertIn("TOP-LEVEL child", sp)
 
+    def test_prompt_warns_that_platform_enforced_hardening_survives_redeploy(self):
+        # A live round drifted encryptionAtHost false -> true and the analysis
+        # said a redeploy would turn it back off. If the subscription enforces
+        # encryption (policy Modify/DINE, default disk encryption set), the
+        # redeploy lands and the setting comes straight back - so the analysis
+        # must send the reader to check the enforcement scope first.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("encryptionAtHost", sp)
+        self.assertIn("MORE secure", sp)
+        self.assertIn("deployIfNotExists", sp)
+        self.assertIn("management-group scope", sp)
+        self.assertIn("az policy assignment list", sp)
+        # And must offer the "make the template declare the enforced value" branch.
+        self.assertIn("declare the enforced value", sp)
+
+    def test_prompt_denies_treating_missing_policy_attribution_as_proof(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("policy_enforced_drifts", sp)
+        self.assertIn("confirmed manual", sp)
+
 
 if __name__ == "__main__":
     unittest.main()
