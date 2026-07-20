@@ -27,17 +27,23 @@ a healthy run:
   - policy/system-enforced changes are already split into their own report key
     (policy_enforced_drifts) and so are naturally excluded.
 
-drift_count counts RECORDS - one per drifted resource - while a single record
-can carry many changed properties. A live round injected 5 property changes
-across 2 resources and the summary read "2 drift(s)", which is true but reads
-as though three of the five findings did not exist. Two derived counts make the
-gap explicit without moving total_issues (so existing CI thresholds are
-unaffected):
-  - changed_property_count: individual property changes across all records
-  - critical_count: how many of those rate critical
-Severity is the one thing an operator needs from a headline and the record
-count cannot express it: 2 cosmetic tag edits and 2 resources with their
-security posture stripped both printed as "2".
+drift_count counts CHANGED RESOURCES (one record each). That is the headline
+number on purpose: it is stable, it matches how drift is remediated (redeploy
+the module), and it matches total_issues.
+
+Two derived counts add what the resource count cannot express, without moving
+total_issues (so existing CI thresholds are unaffected):
+
+  - critical_count: THE important one. A record count cannot carry severity -
+    2 cosmetic tag edits and 2 resources with their security posture stripped
+    both print as "2".
+
+  - changed_property_count: diff PATHS, supporting detail only. Deliberately
+    NOT promoted to a headline: one human action can emit several paths
+    (loosening a single firewall rule emits action.type + sourceAddresses +
+    destinationPorts = 3), so this number tracks how granular the comparator
+    is, not how much drift there is. It would inflate every time a differ is
+    made more precise.
 
 Usage:
     python3 tools/count_drifts.py <reports_dir>
@@ -122,13 +128,14 @@ def main(argv) -> int:
     if github_output:
         with open(github_output, "a") as f:
             f.write("\n".join(lines) + "\n")
-    critical = f", {counts['critical_count']} CRITICAL" if counts["critical_count"] else ""
+    critical = f" ({counts['critical_count']} CRITICAL)" if counts["critical_count"] else ""
     print(
-        f"Results ({counts['reports']} report(s)): {counts['drift_count']} drifted "
-        f"resource(s) / {counts['changed_property_count']} change(s){critical}, "
-        f"{counts['extra_count']} extra, {counts['missing_count']} missing "
-        f"-> {counts['total_issues']} total"
+        f"Results ({counts['reports']} report(s)): {counts['drift_count']} changed "
+        f"resource(s){critical}, {counts['extra_count']} extra, "
+        f"{counts['missing_count']} missing -> {counts['total_issues']} total"
     )
+    if counts["changed_property_count"]:
+        print(f"  ({counts['changed_property_count']} property path(s) changed)")
     for line in lines:
         print(f"  {line}")
     return 0

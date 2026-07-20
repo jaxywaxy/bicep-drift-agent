@@ -493,8 +493,10 @@ jobs:
           DRIFT="${{ steps.consolidate.outputs.drift_count }}"
           EXTRA="${{ steps.consolidate.outputs.extra_count }}"
           MISSING="${{ steps.consolidate.outputs.missing_count }}"
-          # DRIFT counts drifted RESOURCES; one resource can carry several
-          # changed properties, so report both or a 5-change finding reads as 2.
+          # DRIFT counts CHANGED RESOURCES - the stable unit, and the one you
+          # remediate (redeploy the module). CHANGES is diff PATHS, shown as
+          # supporting detail only: one human action can emit several paths
+          # (loosening a firewall rule emits 3), so it is not a finding count.
           CHANGES="${{ steps.consolidate.outputs.changed_property_count }}"
           CRITICAL="${{ steps.consolidate.outputs.critical_count }}"
 
@@ -509,8 +511,8 @@ jobs:
             echo ""
             echo "| Metric | Count |"
             echo "|--------|-------|"
-            echo "| Drifted Resources (DRIFT) | $DRIFT |"
-            echo "| └ Individual Property Changes | $CHANGES |"
+            echo "| Changed Resources (DRIFT) | $DRIFT |"
+            echo "| └ Property paths changed | $CHANGES |"
             if [ "$CRITICAL" != "0" ]; then
               echo "| └ **🚨 Critical** | **$CRITICAL** |"
             fi
