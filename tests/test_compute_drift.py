@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tools.diff_states import filter_unmanaged_live_resources
 from tools.ignore_patterns import IgnorePatternList
 from tools.normalizer import _normalize_resource, normalize_live_resources
-from tools.property_drift import PropertyComparator
+from tools.property_drift import PropertyComparator, PropertyExtractor
 
 DISK_TYPE = "Microsoft.Compute/disks"
 VMSS_TYPE = "Microsoft.Compute/virtualMachineScaleSets"
@@ -245,6 +245,38 @@ class ZonesReachTheComparatorTests(unittest.TestCase):
         live = [{"type": DISK_TYPE, "name": "disk-drift-data", "zones": ["2"]}]
 
         self.assertEqual(normalize_live_resources(live)[0]["zones"], ["2"])
+
+    def test_extractors_keep_zones(self):
+        """The THIRD layer that dropped zones, and the one that reached live.
+
+        The first live round detected 4 of 5 injected drifts: the zone repin was
+        missing even though both sides carried zones in the report. Normalization
+        was fixed, but PropertyExtractor rebuilds the dict from its own fixed key
+        list immediately before the comparison, and that list omitted zones.
+        """
+        arm = {"type": DISK_TYPE, "name": "d", "zones": ["1"], "properties": {}}
+        live = {"type": DISK_TYPE, "name": "d", "zones": ["2"], "properties": {}}
+
+        self.assertEqual(PropertyExtractor.extract_bicep_properties(arm)["zones"], ["1"])
+        self.assertEqual(PropertyExtractor.extract_azure_properties(live)["zones"], ["2"])
+
+    def test_zone_repin_detected_through_the_extractor_path(self):
+        """End-to-end over the SAME call sequence detect_property_drift uses."""
+        arm = _normalize_resource(
+            {"type": DISK_TYPE, "name": "d", "zones": ["1"],
+             "properties": {"diskSizeGB": 4, "networkAccessPolicy": "DenyAll"}}, {}, {},
+        )
+        live = normalize_live_resources([
+            {"type": DISK_TYPE, "name": "d", "zones": ["2"],
+             "properties": {"diskSizeGB": 4, "networkAccessPolicy": "DenyAll"}}
+        ])[0]
+
+        diffs = PropertyComparator.compare_properties(
+            PropertyExtractor.extract_bicep_properties(arm),
+            PropertyExtractor.extract_azure_properties(live),
+        )
+
+        self.assertIn("zones", {d.property_path for d in diffs})
 
     def test_normalized_zone_repin_is_detected_end_to_end(self):
         """The live-round injection: delete the disk, recreate it in zone 2."""

@@ -135,6 +135,13 @@ class PropertyExtractor:
             properties["sku"] = resource["sku"]
         if "kind" in resource:
             properties["kind"] = resource["kind"]
+        # Availability zones: a top-level ARM key like location/sku, NOT part of
+        # `properties`. Every layer that rebuilds a resource dict from a fixed
+        # key list has to carry it or zone drift is silently unobservable - this
+        # extractor is the LAST of three such layers (see also normalize_resource
+        # and the Resource Graph row builder).
+        if "zones" in resource:
+            properties["zones"] = resource["zones"]
 
         # Resource-specific properties
         if "properties" in resource:
@@ -162,6 +169,8 @@ class PropertyExtractor:
             properties["sku"] = resource["sku"]
         if "kind" in resource:
             properties["kind"] = resource["kind"]
+        if "zones" in resource:  # top-level ARM key; see the bicep-side note above
+            properties["zones"] = resource["zones"]
 
         # Resource-specific properties
         if "properties" in resource:
