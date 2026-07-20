@@ -160,6 +160,13 @@ class DriftFinding:
     # Attribution from the report's change_origin (origin, changed_by, category,
     # reason). Given to the agent so it cites who/how instead of re-deriving it.
     change_origin: Optional[Dict[str, Any]] = None
+    # Sibling properties of the LIVE resource that did not drift (see
+    # LIVE_CONTEXT_PROPERTIES). details carries only the CHANGED paths, so
+    # without this the analysis cannot see the state that bounds a finding's
+    # severity or decides whether a remediation is even possible - and correctly
+    # refuses to assert it, producing "unverified" hedges about facts the report
+    # already holds.
+    live_context: Optional[Dict[str, Any]] = None
 
 
 class DriftAgent:
@@ -204,6 +211,35 @@ class DriftAgent:
         "microsoft.network/networkinterfaces",
         "microsoft.network/privateendpoints/privateDnsZoneGroups".lower(),
         "microsoft.insights/actiongroups",
+    )
+
+    # Live properties attached to every finding as `live_context`. Deliberately
+    # a short allowlist, not the whole resource: a single live payload can run
+    # to thousands of tokens (the AI account's callRateLimit alone is ~8k), and
+    # the analysis only needs the state that changes its ANSWER -
+    #   - a sibling that BOUNDS the blast radius of the drifted property
+    #     (publicNetworkAccess Disabled while networkAccessPolicy opened to
+    #     AllowAll: real drift, bounded exposure - stating one without the other
+    #     overstates it),
+    #   - or state that decides whether the remediation is even POSSIBLE
+    #     (sku.capacity 0 means encryptionAtHost can be written; diskState /
+    #     managedBy say whether a disk is attached and therefore in use).
+    # Paths are dotted and resolved leniently - a resource type that has none of
+    # them simply gets an empty context.
+    LIVE_CONTEXT_PROPERTIES = (
+        "sku.capacity",
+        "zones",
+        "properties.provisioningState",
+        "properties.publicNetworkAccess",
+        "properties.networkAccessPolicy",
+        "properties.diskState",
+        "properties.managedBy",
+        "properties.encryption.type",
+        "properties.minimumTlsVersion",
+        "properties.allowBlobPublicAccess",
+        "properties.enableRbacAuthorization",
+        "properties.enablePurgeProtection",
+        "properties.disableLocalAuth",
     )
 
     HIGH_RISK_DETAIL_KEYS = (
@@ -394,7 +430,10 @@ Respond with:
     def _build_findings(self, drift_report: DriftReport) -> List[DriftFinding]:
         drifts = drift_report.drifts or []
 
+        live_by_key = self._index_live_resources(drift_report.live_resources)
         findings = [self._classify_drift(drift) for drift in drifts]
+        for finding in findings:
+            finding.live_context = self._extract_live_context(finding, live_by_key)
 
         severity_order = {
             DriftSeverity.CRITICAL: 0,
@@ -407,6 +446,72 @@ Respond with:
 
         findings.sort(key=lambda f: severity_order.get(f.severity, 99))
         return findings
+
+    @staticmethod
+    def _index_live_resources(live_resources) -> Dict[str, Dict[str, Any]]:
+        """Index live resources by resource ID and by (type, name).
+
+        Both keys because a finding may carry only one of them: property drift
+        records reliably have a resource_id from attribution, while a
+        missing/extra record may only have type+name.
+        """
+        index: Dict[str, Dict[str, Any]] = {}
+        for resource in live_resources or []:
+            if not isinstance(resource, dict):
+                continue
+            resource_id = resource.get("id")
+            if resource_id:
+                index[str(resource_id).lower()] = resource
+            rtype, name = resource.get("type"), resource.get("name")
+            if rtype and name:
+                index[f"{str(rtype).lower()}/{str(name).lower()}"] = resource
+        return index
+
+    def _extract_live_context(
+        self,
+        finding: DriftFinding,
+        live_by_key: Dict[str, Dict[str, Any]],
+    ) -> Optional[Dict[str, Any]]:
+        """Pull the LIVE_CONTEXT_PROPERTIES present on this finding's resource.
+
+        Only properties that did NOT drift are included - a value already in
+        `details` would just be repeated at a second, contradictory-looking
+        path. Returns None when nothing matched, so a resource with no relevant
+        siblings adds nothing to the prompt.
+        """
+        if not live_by_key:
+            return None
+        live = None
+        if finding.resource_id:
+            live = live_by_key.get(finding.resource_id.lower())
+        if live is None:
+            key = f"{(finding.resource_type or '').lower()}/{(finding.resource_name or '').lower()}"
+            live = live_by_key.get(key)
+        if live is None:
+            return None
+
+        changed = (finding.details or {}).get("changed_properties") or {}
+        changed_paths = {str(p).lower() for p in changed} if isinstance(changed, dict) else set()
+
+        context: Dict[str, Any] = {}
+        for path in self.LIVE_CONTEXT_PROPERTIES:
+            if path.lower() in changed_paths:
+                continue
+            value = self._resolve_path(live, path)
+            if value is not None:
+                context[path] = value
+        return context or None
+
+    @staticmethod
+    def _resolve_path(resource: Dict[str, Any], path: str) -> Any:
+        node: Any = resource
+        for part in path.split("."):
+            if not isinstance(node, dict):
+                return None
+            node = node.get(part)
+            if node is None:
+                return None
+        return node
 
     def _classify_drift(self, drift: Drift) -> DriftFinding:
         resource_type = (getattr(drift, "resource_type", "") or "").lower()
@@ -751,6 +856,11 @@ Remediation guidance (Azure specifics - apply these, they are common mistakes):
 Evidence discipline (a live round produced both of these errors - they read as authoritative and are simply untrue):
 - Never assert a RELATIONSHIP that is not in the data. Attachment, dependency, and "used by X" claims must come from a field you were given (a resource ID reference, a parent/child name). Do not infer that a disk is attached to a scale set, that a subnet is used by an app, or that a rule protects a workload because the names look related. If the wiring matters to your recommendation and is absent, say it is unverified and name the check - do not assume it.
 - State the MITIGATING fields, not just the alarming one. A finding is a set of properties: if `networkAccessPolicy` opened to AllowAll but `publicNetworkAccess` is still Disabled, or a port opened but the NSG still denies it, the exposure is bounded and you must say so in the same breath. Reporting the worst property alone, when a sibling in the same payload constrains it, overstates severity and burns the reader's trust.
+- `live_context` on each finding carries live sibling properties that did NOT drift, precisely so the two rules above are answerable: it is where you find the mitigating value, the allocation state (`sku.capacity`), and whether a disk is attached (`properties.diskState`, `properties.managedBy`). USE IT before saying something is unverified - hedging on a value that was handed to you is as wrong as inventing one. Only what is absent from both `details` and `live_context` is genuinely unknown, and then you name the command that would settle it.
+
+Plan consistency (a live round produced a plan whose second step failed on a constraint its own third step documented):
+- A constraint you identify anywhere in the findings BINDS every later step that touches that resource. If you say a property is immutable, then a redeploy of the module DECLARING that property does not "fix another property first" - the same PUT carries the immutable value and Azure rejects it. Reconcile the template to reality (or migrate the resource) BEFORE the step that needs the deploy to succeed, and say that is why the order is what it is.
+- Before you write the remediation plan, re-read your own findings and check each step against them. Two steps that touch the same resource must be consistent about what can be deployed; if they are not, merge or reorder them.
 
 Output style:
 - Use markdown.

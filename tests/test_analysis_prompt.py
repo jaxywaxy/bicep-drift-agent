@@ -209,6 +209,103 @@ class EvidenceDisciplineTests(unittest.TestCase):
         self.assertIn("policy_enforced_drifts", sp)
         self.assertIn("confirmed manual", sp)
 
+    def test_prompt_points_at_live_context_before_hedging(self):
+        # The evidence rules are only answerable if the model knows where the
+        # evidence IS - otherwise it correctly refuses to assert, and hedges
+        # about values the report holds.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("live_context", sp)
+        self.assertIn("hedging on a value that was handed to you", sp)
+
+
+class PlanConsistencyTests(unittest.TestCase):
+    """A live plan's step 2 redeployed the disk module to revert
+    networkAccessPolicy, while its step 3 said the same module could not be
+    redeployed because zones are immutable. The plan could not execute."""
+
+    def test_prompt_binds_constraints_to_later_steps(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("BINDS every later step", sp)
+        self.assertIn("immutable", sp)
+        self.assertIn("re-read your own findings", sp)
+
+
+class LiveContextTests(unittest.TestCase):
+    """details carries only the CHANGED paths. The siblings that bound a
+    finding's severity (publicNetworkAccess) or decide whether remediation is
+    possible (sku.capacity, diskState) have to be attached separately."""
+
+    @staticmethod
+    def _report(live, **drift_kwargs):
+        drift = Drift(
+            resource_type=drift_kwargs.pop("resource_type", "Microsoft.Compute/disks"),
+            resource_name=drift_kwargs.pop("resource_name", "disk-1"),
+            drift_type="property_drift",
+            details=drift_kwargs.pop("details", {"changed_properties": {
+                "properties.networkAccessPolicy": {"desired": "DenyAll", "actual": "AllowAll"}}}),
+            **drift_kwargs,
+        )
+        return DriftReport(bicep_file="m.bicep", resource_group="rg",
+                           drifts=[drift], live_resources=live)
+
+    def _finding(self, live, **kw):
+        return DriftAgent(api_key="k")._build_findings(self._report(live, **kw))[0]
+
+    def test_mitigating_sibling_is_attached(self):
+        f = self._finding([{
+            "type": "Microsoft.Compute/disks", "name": "disk-1",
+            "properties": {"networkAccessPolicy": "AllowAll",
+                           "publicNetworkAccess": "Disabled",
+                           "diskState": "Unattached"},
+        }])
+        self.assertEqual(f.live_context["properties.publicNetworkAccess"], "Disabled")
+        self.assertEqual(f.live_context["properties.diskState"], "Unattached")
+
+    def test_changed_properties_are_not_repeated_in_context(self):
+        # The drifted path already appears in details with desired+actual;
+        # echoing it here would read as a second, contradictory value.
+        f = self._finding([{
+            "type": "Microsoft.Compute/disks", "name": "disk-1",
+            "properties": {"networkAccessPolicy": "AllowAll", "publicNetworkAccess": "Disabled"},
+        }])
+        self.assertNotIn("properties.networkAccessPolicy", f.live_context)
+
+    def test_capacity_reaches_the_finding(self):
+        # The deallocation caveat is unresolvable without this.
+        f = self._finding(
+            [{"type": "Microsoft.Compute/virtualMachineScaleSets", "name": "vmss-1",
+              "sku": {"name": "Standard_D2s_v3", "capacity": 0}}],
+            resource_type="Microsoft.Compute/virtualMachineScaleSets",
+            resource_name="vmss-1",
+        )
+        self.assertEqual(f.live_context["sku.capacity"], 0)
+
+    def test_matches_by_resource_id_when_names_differ(self):
+        rid = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Compute/disks/disk-1"
+        f = self._finding(
+            [{"id": rid, "type": "microsoft.compute/disks", "name": "runtime-named-xyz",
+              "properties": {"diskState": "Attached"}}],
+            resource_name="disk-placeholder", resource_id=rid,
+        )
+        self.assertEqual(f.live_context["properties.diskState"], "Attached")
+
+    def test_no_live_resources_yields_none(self):
+        self.assertIsNone(self._finding(None).live_context)
+
+    def test_unmatched_resource_yields_none(self):
+        self.assertIsNone(self._finding([{"type": "Microsoft.Web/sites", "name": "other"}]).live_context)
+
+    def test_context_stays_small(self):
+        # The whole live payload is thousands of tokens; only the allowlist may
+        # travel. A resource carrying a huge irrelevant block must not bloat it.
+        f = self._finding([{
+            "type": "Microsoft.Compute/disks", "name": "disk-1",
+            "properties": {"publicNetworkAccess": "Disabled",
+                           "callRateLimit": {"rules": [{"k": "v"} for _ in range(500)]}},
+        }])
+        self.assertNotIn("properties.callRateLimit", f.live_context)
+        self.assertLess(len(json.dumps(f.live_context)), 500)
+
 
 if __name__ == "__main__":
     unittest.main()
