@@ -36,6 +36,10 @@ DEFAULT_PLATFORM_TYPES = {
     "microsoft.network/ddosprotectionplans",
     "microsoft.network/ipgroups",
     "microsoft.network/firewallpolicies",
+    # A firewall policy's rule collection groups ARE the central egress rules the
+    # platform team manages - unlike NSG securityRules (delegated to app teams),
+    # firewall rules stay platform-owned, so this child follows its parent policy.
+    "microsoft.network/firewallpolicies/rulecollectiongroups",
     "microsoft.network/natgateways",
     # Load balancers and Application Gateways (+ its WAF policy) are shared
     # ingress/egress fabric a platform team typically owns.

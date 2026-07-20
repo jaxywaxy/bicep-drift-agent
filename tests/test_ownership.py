@@ -52,6 +52,17 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(classify_owner("Microsoft.Web/sites"), WORKLOAD)
         self.assertEqual(classify_owner("Microsoft.DocumentDB/databaseAccounts"), WORKLOAD)
 
+    def test_firewall_policy_and_rule_collection_groups_are_platform(self):
+        # The policy root was already platform; its ruleCollectionGroups child
+        # (the central egress rules) must follow it, not fall through to the
+        # workload default. Regression: firewall RCG drift routed to the workload
+        # channel instead of platform.
+        self.assertEqual(classify_owner("Microsoft.Network/firewallPolicies"), PLATFORM)
+        self.assertEqual(
+            classify_owner("Microsoft.Network/firewallPolicies/ruleCollectionGroups"),
+            PLATFORM,
+        )
+
     def test_load_balancer_and_app_gateway_are_platform(self):
         self.assertEqual(classify_owner("Microsoft.Network/loadBalancers"), PLATFORM)
         self.assertEqual(classify_owner("Microsoft.Network/applicationGateways"), PLATFORM)
