@@ -34,4 +34,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install pip-audit
       - name: Run pip-audit
-        run: pip-audit
+        # Audit the project's DECLARED dependencies, not the ambient runner env.
+        # Bare `pip-audit` scans whatever is installed (pip, pip-audit, and the
+        # runner's baseline setuptools) - which flagged a setuptools advisory that
+        # this project neither ships nor imports. `-r requirements.txt` audits the
+        # actual dependency tree, so the result is meaningful and self-scoped.
+        run: pip-audit -r requirements.txt
