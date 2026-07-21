@@ -95,6 +95,61 @@ class ModuleDefaultParamTests(unittest.TestCase):
         self.assertEqual(pg["properties"]["administratorLoginPassword"], "adminPassword")
 
 
+class ModuleVariableResolutionTests(unittest.TestCase):
+    """A module VARIABLE built from a parent-passed required param (no default).
+
+    `var name = 'driftAppPlan${suffix}'`, suffix passed from a parent
+    uniqueString, previously resolved against the module's own defaults only -
+    where suffix is None - and baked in the literal 'driftAppPlanNone', which
+    false-flagged as a missing/extra pair. It must instead keep the uniqueString
+    marker so smart matching pairs it to the live resource.
+    """
+
+    def _template(self, plan_var: str) -> dict:
+        return {
+            "parameters": {"location": {"type": "string", "defaultValue": "australiaeast"}},
+            "variables": {"suffix": "[uniqueString(resourceGroup().id)]"},
+            "resources": [{
+                "type": "Microsoft.Resources/deployments",
+                "apiVersion": "2025-04-01",
+                "name": "deploy-rg",
+                "properties": {
+                    "mode": "Incremental",
+                    "parameters": {
+                        "location": {"value": "[parameters('location')]"},
+                        "suffix": {"value": "[variables('suffix')]"},
+                    },
+                    "template": {
+                        "parameters": {
+                            "location": {"type": "string"},
+                            "suffix": {"type": "string"},
+                        },
+                        "variables": {"appServicePlanName": plan_var},
+                        "resources": [{
+                            "type": "Microsoft.Web/serverfarms",
+                            "apiVersion": "2022-03-01",
+                            "name": "[variables('appServicePlanName')]",
+                            "location": "[parameters('location')]",
+                        }],
+                    },
+                },
+            }],
+        }
+
+    def test_bare_format_name_keeps_the_uniquestring_marker(self):
+        resources = flatten_resources(self._template("[format('driftAppPlan{0}', parameters('suffix'))]"))
+        plan = next(r for r in resources if r["type"] == "Microsoft.Web/serverfarms")
+        self.assertNotIn("None", plan["name"])
+        self.assertIn("uniquestring", plan["name"].lower())
+
+    def test_matches_the_tolower_wrapped_sibling_behavior(self):
+        # The toLower-wrapped form was always kept unresolvable; the bare form
+        # must now behave the same rather than collapsing to a literal.
+        resources = flatten_resources(self._template("[toLower(format('driftplan{0}', parameters('suffix')))]"))
+        plan = next(r for r in resources if r["type"] == "Microsoft.Web/serverfarms")
+        self.assertIn("uniquestring", plan["name"].lower())
+
+
 class CreateModeWriteOnlyTests(unittest.TestCase):
     def test_createmode_is_write_only(self):
         self.assertTrue(PropertyComparator._is_write_only_property("properties.createMode"))
