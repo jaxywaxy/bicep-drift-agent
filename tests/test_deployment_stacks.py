@@ -231,6 +231,50 @@ class TestStackHealth(unittest.TestCase):
         p = paths(compare_deployment_stack({"name": "platform-stack"}, stack(), [], SUB, RG))
         self.assertEqual(p, {})
 
+    def test_nested_error_leaf_message_is_surfaced_not_the_generic_wrapper(self):
+        """Regression: a failed KV deploy reported only 'One or more resources
+        could not be deployed. Correlation id: ...'; the soft-delete cause sat
+        unread in error.details[].details[]. This is the exact live shape from
+        the test-stack round on 2026-07-21."""
+        soft_delete = ("A vault with the same name already exists in deleted state. "
+                       "You need to either recover or purge existing key vault.")
+        s = stack(state="failed", error={
+            "code": "DeploymentStackDeploymentFailed",
+            "message": "One or more resources could not be deployed. Correlation id: '890b570d'.",
+            "details": [{
+                "code": "DeploymentFailed",
+                "message": "At least one resource deployment operation failed.",
+                "details": [{"code": "ConflictError", "message": soft_delete, "details": None}],
+            }],
+        })
+        p = paths(compare_deployment_stack({"name": "platform-stack"}, s, [], SUB, RG))
+        self.assertEqual(p["error.message"]["actual"], soft_delete)
+        self.assertNotIn("Correlation id", p["error.message"]["actual"])
+
+    def test_failed_resource_carries_its_own_error_not_just_an_id(self):
+        soft_delete = "A vault with the same name already exists in deleted state."
+        s = stack(state="failed", failedResources=[{
+            "id": rid_of("kv1", rtype="Microsoft.KeyVault/vaults"),
+            "error": {"code": "ConflictError", "message": soft_delete, "details": None},
+        }])
+        p = paths(compare_deployment_stack({"name": "platform-stack"}, s, [], SUB, RG))
+        entry = p["failedResources"]["actual"][0]
+        self.assertEqual(entry["code"], "ConflictError")
+        self.assertEqual(entry["message"], soft_delete)
+        self.assertTrue(entry["id"].endswith("kv1"))
+
+    def test_flatten_collects_multiple_leaves(self):
+        from tools.deployment_stacks import _flatten_error_messages
+        err = {"message": "top", "details": [
+            {"message": "midA", "details": [{"message": "leafA", "details": None}]},
+            {"message": "leafB", "details": []},
+        ]}
+        self.assertEqual(_flatten_error_messages(err), ["leafA", "leafB"])
+
+    def test_flatten_falls_back_to_top_message_when_no_details(self):
+        from tools.deployment_stacks import _flatten_error_messages
+        self.assertEqual(_flatten_error_messages({"message": "only"}), ["only"])
+
 
 class TestMissingStack(unittest.TestCase):
     def test_absent_stack_is_missing_in_azure(self):

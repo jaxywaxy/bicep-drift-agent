@@ -666,7 +666,16 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
                         nested_params[pname] = pval
                     else:
                         nested_params.setdefault(pname, None)
-                nested_vars = extract_variables(nested_template)
+                # Resolve the module's variables against the params the PARENT
+                # passed, not just the module's own defaults. A module variable
+                # built from a required param with no default (e.g.
+                # 'driftAppPlan${suffix}', suffix passed from a parent
+                # uniqueString) otherwise resolves against suffix=None and bakes
+                # in the literal 'driftAppPlanNone', which then false-flags as a
+                # missing/extra pair. Names wrapped in toLower() dodged this only
+                # because the resolver can't evaluate toLower and left them
+                # unresolvable; this makes the bare-format case behave the same.
+                nested_vars = extract_variables(nested_template, nested_params)
                 nested_resources = flatten_resources(nested_template, nested_params, nested_vars)
                 # Cross-scope module (scope: resourceGroup(otherSub, rg)): stamp the
                 # target so the scan can verify these resources in THEIR subscription

@@ -168,6 +168,39 @@ def _changed(path: str, desired: Any, actual: Any, severity: str) -> Tuple[str, 
     return path, {"desired": desired, "actual": actual, "severity": severity}
 
 
+def _flatten_error_messages(error: Any) -> List[str]:
+    """Collect the LEAF messages from an ARM error tree.
+
+    Azure nests the real cause: the outer nodes carry generic wrappers
+    ("One or more resources could not be deployed", "At least one resource
+    deployment operation failed") while the leaf - the node with no further
+    `details` - carries the actionable text ("A vault with the same name
+    already exists in deleted state..."). Walking to the leaves is what turns a
+    correlation id into a diagnosis.
+
+    Deduped, order-preserving. Falls back to nothing if the tree is empty; the
+    caller then uses the top-level message.
+    """
+    out: List[str] = []
+    seen = set()
+
+    def walk(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        details = node.get("details")
+        if isinstance(details, list) and details:
+            for child in details:
+                walk(child)
+            return
+        msg = node.get("message")
+        if msg and msg not in seen:
+            seen.add(msg)
+            out.append(msg)
+
+    walk(error)
+    return out
+
+
 def _compare_deny_settings(expect: Dict, live: Dict) -> Dict[str, Dict]:
     """Compare denySettings against declared expectations.
 
@@ -258,11 +291,31 @@ def _compare_stack_health(expect: Dict, props: Dict) -> Dict[str, Dict]:
         changed[k] = v
         err = props.get("error") or {}
         if err:
-            k, v = _changed("error.message", None, err.get("message") or str(err), "critical")
+            # The top-level message is a generic wrapper ("One or more resources
+            # could not be deployed. Correlation id: ..."); the ACTIONABLE cause
+            # (soft-deleted vault, quota, policy Deny) lives in the leaves of the
+            # nested error.details tree. Surface the leaves - that is the whole
+            # point of reporting a failed stack.
+            leaves = _flatten_error_messages(err)
+            k, v = _changed("error.message", None,
+                            "; ".join(leaves) or err.get("message") or str(err), "critical")
             changed[k] = v
 
-    for live_key, severity in (("failedResources", "critical"),
-                               ("detachedResources", "warning"),
+    # failedResources carries a per-resource error object; keep it, because that
+    # is where Azure attaches the cause for each failed resource individually.
+    failed = props.get("failedResources") or []
+    if failed:
+        k, v = _changed("failedResources", [], [
+            {
+                "id": i.get("id"),
+                "code": (i.get("error") or {}).get("code"),
+                "message": "; ".join(_flatten_error_messages(i.get("error") or {})) or None,
+            }
+            for i in failed if isinstance(i, dict)
+        ], "critical")
+        changed[k] = v
+
+    for live_key, severity in (("detachedResources", "warning"),
                                ("deletedResources", "info")):
         items = props.get(live_key) or []
         if items:
