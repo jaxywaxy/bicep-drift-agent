@@ -220,6 +220,16 @@ class EvidenceDisciplineTests(unittest.TestCase):
         self.assertIn("policy_enforced_drifts", sp)
         self.assertIn("confirmed manual", sp)
 
+    def test_prompt_forbids_reading_live_context_as_drift(self):
+        # A VMSS whose zones never drifted arrived with zones in its
+        # live_context; the TL;DR then announced "both resources drifted a
+        # zones value that is immutable", contradicting its own body. Context
+        # values are, by construction, the ones that MATCH.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("BY CONSTRUCTION did not drift", sp)
+        self.assertIn("never read a live_context entry as a mismatch", sp)
+        self.assertIn("carry it into the remediation plan", sp)
+
     def test_prompt_points_at_live_context_before_hedging(self):
         # The evidence rules are only answerable if the model knows where the
         # evidence IS - otherwise it correctly refuses to assert, and hedges
@@ -319,6 +329,29 @@ class LiveContextTests(unittest.TestCase):
             resource_name="disk-placeholder", resource_id=rid,
         )
         self.assertEqual(f.live_context["properties.diskState"], "Attached")
+
+    def test_zones_is_not_context(self):
+        # zones is a drift TARGET: it bounds no blast radius and decides no
+        # remediation, but its presence in a payload reads as a mismatch.
+        self.assertNotIn("zones", DriftAgent.LIVE_CONTEXT_PROPERTIES)
+
+    def test_context_never_repeats_a_drifted_path(self):
+        # The general form of the same bug: whatever is in the allowlist, a
+        # path that drifted must appear only in details, with desired+actual.
+        for path in DriftAgent.LIVE_CONTEXT_PROPERTIES:
+            f = self._finding(
+                [{"type": "Microsoft.Compute/disks", "name": "disk-1",
+                  "sku": {"capacity": 3},
+                  "properties": {"provisioningState": "Succeeded", "publicNetworkAccess": "Enabled",
+                                 "networkAccessPolicy": "AllowAll", "diskState": "Attached",
+                                 "managedBy": "/vm/x", "encryption": {"type": "CMK"},
+                                 "minimumTlsVersion": "TLS1_2", "allowBlobPublicAccess": True,
+                                 "enableRbacAuthorization": True, "enablePurgeProtection": True,
+                                 "disableLocalAuth": True}}],
+                details={"changed_properties": {path: {"desired": "x", "actual": "y"}}},
+            )
+            self.assertNotIn(path, f.live_context or {},
+                             f"{path} drifted but was also echoed as context")
 
     def test_no_live_resources_yields_none(self):
         self.assertIsNone(self._finding(None).live_context)

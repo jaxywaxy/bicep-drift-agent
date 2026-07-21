@@ -226,9 +226,15 @@ class DriftAgent:
     #     managedBy say whether a disk is attached and therefore in use).
     # Paths are dotted and resolved leniently - a resource type that has none of
     # them simply gets an empty context.
+    # NOT in this list, deliberately: `zones`. It is a drift TARGET, not
+    # context - it bounds no blast radius and decides no remediation. Carrying
+    # it made a VMSS finding (whose zones never drifted) arrive with
+    # zones: ["1","2","3"] in its payload, and the analysis reported in its
+    # TL;DR that "both resources drifted a zones value that is immutable" -
+    # contradicting its own body two sections later. Anything whose live value
+    # could be mistaken for a mismatch belongs in details or nowhere.
     LIVE_CONTEXT_PROPERTIES = (
         "sku.capacity",
-        "zones",
         "properties.provisioningState",
         "properties.publicNetworkAccess",
         "properties.networkAccessPolicy",
@@ -859,6 +865,7 @@ Evidence discipline (a live round produced both of these errors - they read as a
 - Never assert a RELATIONSHIP that is not in the data. Attachment, dependency, and "used by X" claims must come from a field you were given (a resource ID reference, a parent/child name). Do not infer that a disk is attached to a scale set, that a subnet is used by an app, or that a rule protects a workload because the names look related. If the wiring matters to your recommendation and is absent, say it is unverified and name the check - do not assume it.
 - State the MITIGATING fields, not just the alarming one. A finding is a set of properties: if `networkAccessPolicy` opened to AllowAll but `publicNetworkAccess` is still Disabled, or a port opened but the NSG still denies it, the exposure is bounded and you must say so in the same breath. Reporting the worst property alone, when a sibling in the same payload constrains it, overstates severity and burns the reader's trust.
 - `live_context` on each finding carries live sibling properties that did NOT drift, precisely so the two rules above are answerable: it is where you find the mitigating value, the allocation state (`sku.capacity`), and whether a disk is attached (`properties.diskState`, `properties.managedBy`). USE IT before saying something is unverified - hedging on a value that was handed to you is as wrong as inventing one. Only what is absent from both `details` and `live_context` is genuinely unknown, and then you name the command that would settle it.
+- A `live_context` value is the CURRENT LIVE state and BY CONSTRUCTION did not drift - the drifted paths are all in `details.changed_properties`, with their desired AND actual values, and nowhere else. So never read a live_context entry as a mismatch, never call it drift, and never carry it into the remediation plan as something to fix. If a property is not in changed_properties for THAT finding, that resource's value for it matches the template - say so or say nothing about it.
 
 Plan consistency (a live round produced a plan whose second step failed on a constraint its own third step documented):
 - A constraint you identify anywhere in the findings BINDS every later step that touches that resource. If you say a property is immutable, then a redeploy of the module DECLARING that property does not "fix another property first" - the same PUT carries the immutable value and Azure rejects it. Reconcile the template to reality (or migrate the resource) BEFORE the step that needs the deploy to succeed, and say that is why the order is what it is.
