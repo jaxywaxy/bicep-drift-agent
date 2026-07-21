@@ -165,15 +165,26 @@ class RemediationGuidanceTests(unittest.TestCase):
         # And must offer the "make the template declare the enforced value" branch.
         self.assertIn("declare the enforced value", sp)
 
-    def test_prompt_splits_deny_from_modify(self):
-        # The first version named only Modify/DINE, so the analysis promised
-        # silent re-drift. Most BUILT-IN hardening policies are Deny, where the
-        # redeploy fails outright - opposite operator expectation.
+    def test_prompt_splits_the_three_policy_effects(self):
         sp = DriftAgent._get_system_prompt()
         self.assertIn("`Deny`", sp)
         self.assertIn("FAILS outright", sp)
         self.assertIn("`Modify` / `deployIfNotExists`", sp)
         self.assertIn("back on the next run", sp)
+
+    def test_prompt_leads_with_audit_as_default_and_silent(self):
+        # I first told the model Deny was "the effect of most built-in hardening
+        # policies"; it faithfully repeated that. Built-ins expose effect as a
+        # PARAMETER defaulting to Audit - under which the redeploy SUCCEEDS and
+        # silently downgrades the hardening. That is the case the whole warning
+        # exists for, and it was the one branch missing.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("the DEFAULT for most built-ins", sp)
+        self.assertIn("DANGEROUS one because nothing stops you", sp)
+        self.assertIn("silently downgraded", sp)
+        # And the check must read the assignment's parameter, not the name.
+        self.assertIn("parameters.effect.value", sp)
+        self.assertNotIn("the effect of most built-in hardening policies", sp)
 
     def test_prompt_rejects_the_bogus_subscription_encryption_default(self):
         # EncryptionAtHost is a subscription FEATURE REGISTRATION (permits the
@@ -228,6 +239,17 @@ class PlanConsistencyTests(unittest.TestCase):
         self.assertIn("BINDS every later step", sp)
         self.assertIn("immutable", sp)
         self.assertIn("re-read your own findings", sp)
+
+    def test_prompt_keeps_reconcile_as_a_first_class_option(self):
+        # The round that finally ordered the steps correctly also dropped
+        # "update the Bicep to zones: [2]" and offered only snapshot-recreate -
+        # the laborious option, for an Unattached 4GB test disk.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("ALWAYS offer BOTH ways out", sp)
+        self.assertIn("RECONCILE", sp)
+        self.assertIn("MIGRATE", sp)
+        self.assertIn("diskState: Unattached", sp)
+        self.assertIn("not \"giving up\"", sp)
 
     def test_prompt_demands_ordering_not_annotation(self):
         # The next round stated the dependency but left the failing deploy at
