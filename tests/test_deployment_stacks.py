@@ -185,6 +185,28 @@ class TestDenySettings(unittest.TestCase):
         self.assertEqual(p, {})
 
 
+class TestApiCasingVaries(unittest.TestCase):
+    """Azure is not consistent about casing across these endpoints: a live GET
+    returns `"mode": "none"` and `"detach"`, while the validate endpoint returns
+    `"DenyWriteAndDelete"` and `"Delete"` for the same fields. Every comparison
+    here must therefore be case-insensitive, or a correctly-configured stack
+    reports drift depending on which call produced the data."""
+
+    def test_pascal_case_live_values_compare_clean(self):
+        cfg = {"name": "platform-stack", "expect": {
+            "deny_settings": {"mode": "denyWriteAndDelete", "apply_to_child_scopes": True},
+            "action_on_unmanage": {"resources": "delete", "resource_groups": "delete"},
+        }}
+        s = stack(
+            deny={"mode": "DenyWriteAndDelete", "applyToChildScopes": True,
+                  "excludedPrincipals": [], "excludedActions": []},
+            unmanage={"resources": "Delete", "resourceGroups": "Delete",
+                      "managementGroups": "Delete", "resourcesWithoutDeleteSupport": "Fail"},
+            state="Succeeded",
+        )
+        self.assertEqual(paths(compare_deployment_stack(cfg, s, [], SUB, RG)), {})
+
+
 class TestActionOnUnmanage(unittest.TestCase):
     def test_delete_regressed_to_detach_is_warning(self):
         cfg = {"name": "platform-stack", "expect": {"action_on_unmanage": {"resources": "delete"}}}

@@ -86,6 +86,18 @@ az role assignment create \
 echo "✓ Granted Reader role on management group: $MGMT_GROUP"
 echo "  (Covers all subscriptions under this group)"
 
+# Reader covers deployment stack scanning too: Microsoft.Resources/
+# deploymentStacks/read is part of Reader's */read. No extra grant is needed to
+# READ a stack, its managed-resource list, or its deny settings.
+#
+# DEPLOYING a stack with denySettings is a different matter and is not this
+# principal's job: creating a deny assignment requires
+# Microsoft.Authorization/denyAssignments/write, which only Owner (or User
+# Access Administrator) holds. If the same principal both deploys and scans,
+# it needs Owner - and note that it is then automatically exempt from the deny
+# assignment it creates, so the deny settings do not constrain the pipeline
+# identity itself.
+
 # Add federated credential for GitHub
 echo "Step 4/4: Creating federated credential..."
 az identity federated-credential create \
