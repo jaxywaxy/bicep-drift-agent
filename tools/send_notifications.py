@@ -659,7 +659,7 @@ def events_from_report(report_path: str) -> List[DriftEvent]:
     """
     events: List[DriftEvent] = []
     try:
-        with open(report_path, "r") as f:
+        with open(report_path, encoding="utf-8") as f:
             report = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
         logger.warning(f"Could not read drift report {report_path}: {e}")
@@ -684,7 +684,7 @@ def parse_drift_output(output_file: str) -> List[DriftEvent]:
     """
     events = []
     try:
-        with open(output_file, "r") as f:
+        with open(output_file, encoding="utf-8") as f:
             content = f.read()
 
         # Extract DRIFT events

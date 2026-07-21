@@ -55,7 +55,7 @@ def run(bicep_file: str, resource_group: str):
         bicepparam_file = Path(bicep_file).parent / "parameters" / f"{environment}.bicepparam"
         if bicepparam_file.exists():
             try:
-                with open(bicepparam_file) as f:
+                with open(bicepparam_file, encoding="utf-8") as f:
                     bicepparam_content = f.read()
                 # Parse bicepparam file (simple key=value format after 'using' line)
                 for line in bicepparam_content.split('\n'):
@@ -83,7 +83,7 @@ def run(bicep_file: str, resource_group: str):
             params_json = Path(bicep_file).parent / "parameters.json"
             if params_json.exists():
                 try:
-                    with open(params_json) as f:
+                    with open(params_json, encoding="utf-8") as f:
                         raw = json.load(f).get("parameters", {})
                     param_overrides = {
                         k: v.get("value") for k, v in raw.items()
@@ -246,7 +246,7 @@ def run(bicep_file: str, resource_group: str):
         label = rg_label(resource_group)
         output_file = Path(f"reports/{label}-drift.json")
         output_file.parent.mkdir(exist_ok=True)
-        with open(output_file, "w") as f:
+        with open(output_file, "w", encoding="utf-8") as f:
             json.dump({
                 "resource_group": label,
                 "bicep_file": bicep_file,

@@ -116,7 +116,7 @@ def _compile_bicep_cached(bicep_file_path: str) -> dict:
             )
 
         try:
-            with open(output_path) as f:
+            with open(output_path, encoding="utf-8") as f:
                 arm_template = json.load(f)
         except json.JSONDecodeError as e:
             raise RuntimeError(

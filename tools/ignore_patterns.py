@@ -82,7 +82,7 @@ class IgnorePatternList:
         """Read the raw 'ignore' pattern dicts from a YAML file (empty if missing)."""
         if not file_path or not Path(file_path).exists():
             return []
-        with open(file_path) as f:
+        with open(file_path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
         patterns = data.get("ignore", [])
         return patterns if isinstance(patterns, list) else []
