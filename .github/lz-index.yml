@@ -32,6 +32,11 @@ landing_zones:
     config_path: .github/drift-lz-config.yml
     workflow: drift-lz-test.yml
 
+  test-stack-resources:
+    repo: jaxywaxy/drift-test-resources
+    config_path: .github/drift-lz-stacks-config.yml
+    workflow: drift-lz-stacks.yml
+
   database-testing:
     repo: jaxywaxy/drift-test-resources
     config_path: .github/drift-lz-database-config.yml

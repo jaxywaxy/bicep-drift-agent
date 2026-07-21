@@ -239,6 +239,46 @@ class EvidenceDisciplineTests(unittest.TestCase):
         self.assertIn("hedging on a value that was handed to you", sp)
 
 
+class InteractingDriftTests(unittest.TestCase):
+    """A live AKS round reported four independent critical findings. Two of
+    them composed: enableAzureRBAC true->false moved authorization off the
+    auditable Azure path, and adminGroupObjectIDs [] -> ["<group>"] then made a
+    cluster-admin grant down that now-invisible path. Both facts were in the
+    report; the line between them was not."""
+
+    def test_prompt_requires_joining_drifts_on_one_resource(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("Interacting drift", sp)
+        self.assertIn("COMPOSE", sp)
+        self.assertIn("group them by `resource_id`", sp)
+
+    def test_prompt_names_both_composition_shapes(self):
+        # (a) one drift hides another; (b) one relaxes a boundary another crosses.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("audit path", sp)
+        self.assertIn("SURFACED another", sp)
+        self.assertIn("relaxes a boundary while another widens what crosses it", sp)
+
+    def test_prompt_carries_the_aks_evidence(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("enableAzureRBAC", sp)
+        self.assertIn("adminGroupObjectIDs", sp)
+        self.assertIn("sees LESS than before", sp)
+
+    def test_prompt_makes_the_combination_lead(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("worse than the sum of its parts", sp)
+        self.assertIn("TL;DR", sp)
+
+    def test_prompt_guards_against_over_firing(self):
+        # The failure mode of this rule is inventing a story for drifts that
+        # merely share a resource. Co-location is not interaction.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("Do NOT over-fire", sp)
+        self.assertIn("Co-location on one resource is not interaction", sp)
+        self.assertIn("state the mechanism", sp)
+
+
 class PlanConsistencyTests(unittest.TestCase):
     """A live plan's step 2 redeployed the disk module to revert
     networkAccessPolicy, while its step 3 said the same module could not be
