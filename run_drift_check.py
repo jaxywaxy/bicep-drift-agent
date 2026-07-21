@@ -31,6 +31,14 @@ from tools.diff_states import diff_states, format_drift_report, ResourceDrift
 from tools.ignore_patterns import IgnorePatternList
 from tools.rbac import fetch_role_assignments, compare_role_assignments, rbac_enabled
 from tools.policy import fetch_policy_resources, compare_policy_resources, policy_drift_enabled
+from tools.deployment_stacks import (
+    annotate_stack_ownership,
+    compare_deployment_stack,
+    dedupe_against,
+    fetch_deployment_stack,
+    load_stack_config,
+    stack_drift_enabled,
+)
 from tools.rg_selector import rg_label
 from tools.redact import redact_secrets
 
@@ -235,6 +243,50 @@ def run(bicep_file: str, resource_group: str):
             )
         except Exception as e:
             logger.warning(f"Policy drift check failed (continuing without it): {e}")
+
+    # Step 4d: Deployment stack drift. OPT-IN - runs only when the check's LZ
+    # config declares a `deployment_stack`, because a stack's enforcement
+    # posture has no template to diff against and must be declared. Two payoffs:
+    # the stack's own denySettings/actionOnUnmanage/health, and its managed list
+    # as an AUTHORITATIVE ownership oracle replacing the RG-boundary guess.
+    if stack_drift_enabled():
+        logger.info("Step 4d: Checking deployment stack...")
+        try:
+            stack_cfg = load_stack_config()
+            stack_scope = deployment_scope if deployment_scope == "subscription" else "resource_group"
+            live_stack, token = fetch_deployment_stack(
+                stack_cfg,
+                subscription_id=os.environ.get("AZURE_SUBSCRIPTION_ID"),
+                resource_group=resource_group,
+            )
+            stack_drift_dicts = compare_deployment_stack(
+                stack_cfg,
+                live_stack,
+                live_resources,
+                subscription_id=os.environ.get("AZURE_SUBSCRIPTION_ID"),
+                resource_group=resource_group,
+                scope=stack_scope,
+                token=token,
+            )
+            # A stack-managed resource the template also declares would be
+            # reported missing twice; the template compare owns that finding.
+            stack_drift_dicts = dedupe_against(stack_drift_dicts, drifts)
+            if ignore_patterns.patterns and stack_drift_dicts:
+                stack_drift_dicts, ignored = ignore_patterns.filter_drifts(stack_drift_dicts)
+                if ignored:
+                    logger.info(f"Ignoring {len(ignored)} stack drift(s) per ignore patterns")
+            drifts.extend(
+                ResourceDrift(
+                    resource_type=d["type"],
+                    resource_name=d["name"],
+                    drift_type=d["drift_type"],
+                    details=d.get("details", {}),
+                )
+                for d in stack_drift_dicts
+            )
+            annotate_stack_ownership(drifts, live_stack, live_resources)
+        except Exception as e:
+            logger.warning(f"Deployment stack check failed (continuing without it): {e}")
 
     # Step 5: Report
     logger.info("Drift Report Summary")

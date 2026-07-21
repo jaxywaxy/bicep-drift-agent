@@ -217,6 +217,46 @@ The comparison engine identifies three drift classes:
 | Missing Resource | Defined in Bicep but not present in Azure |
 | Extra Resource | Exists in Azure but not defined in Bicep |
 
+Three domains sit outside this template comparison and run as sidecar
+comparators, because their objects are not indexed the way ordinary resources
+are and cannot be matched by resource name: RBAC role assignments
+(`tools/rbac.py`), policy assignments and exemptions (`tools/policy.py`), and
+deployment stacks (`tools/deployment_stacks.py`). Each fetches its own live
+state, matches on identity, and returns drift in the same shape the main
+comparison emits. A failure in any one of them is logged and skipped rather
+than failing the scan.
+
+#### Deployment stacks
+
+Deployment stacks are a special case worth understanding before relying on the
+result, and the constraints are architectural rather than incidental.
+
+Resource Graph does not index `Microsoft.Resources/deploymentStacks`, so the
+stack is read directly from ARM REST.
+
+The stack serves two distinct purposes here. Its `resources[]` list is an
+**authoritative ownership record** — everywhere else the engine infers ownership
+from the resource-group boundary, which is a proxy and the largest single source
+of false extras. Where a stack exists, extras are tagged as stack-managed or
+genuinely unmanaged instead of being inferred. Separately, the stack's
+`denySettings`, `actionOnUnmanage` and provisioning state describe an
+**enforcement posture**.
+
+That second purpose breaks the engine's usual assumption. Every other comparator
+diffs Azure against a compiled template; a stack carries no record of what it was
+supposed to be, so its desired state is declared in the landing-zone config and
+only declared keys are compared. Live values are deliberately never used as a
+baseline — a permanently wide-open stack would otherwise validate itself.
+
+Detection is also asymmetric by design. Stale ownership is reported only for
+top-level resources and resource groups, and only after a direct lookup confirms
+the resource is gone: live-state expansion is partial by type, so absence from
+the live set is not proof of deletion, and a fabricated deletion is the worst
+finding the engine can emit.
+
+The full limitation set, including what deny assignments do and do not prevent,
+is in [CAPABILITIES.md](CAPABILITIES.md#deployment-stack-drift).
+
 ### 5. Enrichment
 
 Detected drift is enriched with:
@@ -264,6 +304,7 @@ In addition to infrastructure drift, the service evaluates governance and securi
 - Azure Policy assignments
 - Policy exemptions
 - Privileged access grants
+- Deployment stack enforcement posture and ownership (opt-in)
 
 ### Security
 

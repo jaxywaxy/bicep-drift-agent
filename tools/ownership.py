@@ -102,6 +102,12 @@ def classify_owner(
     ):
         return PLATFORM
 
+    # 0b. The deployment stack itself is the IaC control plane - its deny
+    #     settings and unmanage behaviour are the platform team's to answer for,
+    #     whatever workload the stack happens to deploy.
+    if rtype == "microsoft.resources/deploymentstacks":
+        return PLATFORM
+
     # 0. Role assignments are owned by whoever owns what they grant access TO:
     #    subscription-level grants are governance (platform); a grant scoped to
     #    a resource follows that resource's owner (a grant on a VNet -> platform,

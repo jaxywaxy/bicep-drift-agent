@@ -154,6 +154,55 @@ Terraform/manual.
 | Definition Tracking | Correlates assignments with definitions |
 | Governance Classification | Separates governance changes from resource drift |
 
+## Deployment Stack Drift
+
+Opt-in per check. Runs only where a landing zone deploys with Azure deployment
+stacks and declares one in its config.
+
+| Capability | Description |
+|------------|-------------|
+| Deny Settings Posture | Detects a weakened `denySettings.mode`, and `applyToChildScopes` being off — which leaves the deny assignment on the resource groups while the resources inside stay writable |
+| Deny Exclusions | Exact-set comparison of `excludedPrincipals` and `excludedActions`; an added exclusion is a hole in the deny assignment |
+| Unmanage Behaviour | Detects `actionOnUnmanage` regressed from `delete` to `detach`, the orphaned-cost path |
+| Stack Health | Reports a failed or incomplete stack deployment, plus its detached, failed and deleted resource lists |
+| Stale Ownership | Resources the stack still claims to manage that no longer exist |
+| Ownership Oracle | Tags each extra resource as stack-managed or genuinely unmanaged, replacing the resource-group-boundary inference |
+
+### Limitations
+
+These are deliberate, and matter when judging what a clean stack result means.
+
+**Desired state must be declared.** A stack records no `templateLink`, tags or
+description saying what it was supposed to be, so unlike every other comparator
+there is no template to diff against. Enforcement posture is compared only
+against the `expect` block in the landing-zone config, and **nothing is asserted
+unless it is declared there**. Live values are never used as their own baseline:
+a stack sitting at `mode: none` would otherwise bless its own weakness forever.
+A check with no `expect` block still gets ownership and health, but its deny
+settings are not evaluated at all.
+
+**Prevention shrinks what there is to find.** On a stack running
+`denyWriteAndDelete` with `applyToChildScopes` on, manual portal changes are
+blocked at the source, so the rest of the engine legitimately goes quiet. What
+that does *not* cover, and what still needs detecting: the deploying identity
+(always excluded from the deny assignment), data-plane changes governed by the
+resource's own API, resources that were never in the stack, and the stack's own
+settings — an Owner can set `mode: none` and then edit freely, which ARM treats
+as an ordinary stack update.
+
+**Child resources are not checked for deletion.** Live state expands children
+only for known types, so a child's absence from the live set is not evidence it
+was deleted. Only top-level resources and resource groups are reported as stale
+ownership, and only after a direct lookup confirms the resource is really gone.
+
+**Template-side ownership is not compared.** Bicep-declared resources are not
+matched against the managed list, because template resource ids aren't
+resolvable at compile time. A resource deployed out-of-band into a stack-owned
+scope is caught as an unmanaged extra, not as a stack-membership gap.
+
+**It is inert without stacks.** Estates deployed with plain `az deployment` gain
+nothing here, and the check stays silent rather than warning.
+
 ---
 
 # Security Capabilities
