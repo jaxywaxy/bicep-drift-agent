@@ -250,6 +250,25 @@ class PlanConsistencyTests(unittest.TestCase):
         self.assertIn("immutable", sp)
         self.assertIn("re-read your own findings", sp)
 
+    def test_prompt_calls_immutable_drift_a_build_blocker(self):
+        # Proven in CI: a disk zones drift injected days earlier failed an
+        # unrelated deploy that was adding an AKS cluster. The report had rated
+        # it critical and said a redeploy would be rejected, but never said the
+        # next pipeline run would fail - which is the sentence an operator acts
+        # on, and a different priority class from a remediation footnote.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("BUILD BLOCKER", sp)
+        self.assertIn("EVERY future deployment of the module", sp)
+        self.assertIn("name the module that can no longer deploy", sp)
+
+    def test_prompt_says_idle_means_cheap_fix_not_low_priority(self):
+        # The counterintuitive half: "Unattached"/"capacity 0" is an argument
+        # about COST of the fix, not about urgency. An idle 4GB disk held the
+        # whole estate's pipeline hostage.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("outranks a cosmetic drift on a busy one", sp)
+        self.assertIn("never for LOW priority", sp)
+
     def test_prompt_keeps_reconcile_as_a_first_class_option(self):
         # The round that finally ordered the steps correctly also dropped
         # "update the Bicep to zones: [2]" and offered only snapshot-recreate -
