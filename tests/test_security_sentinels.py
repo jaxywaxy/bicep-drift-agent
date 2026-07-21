@@ -246,5 +246,109 @@ class GeneralizedSentinelTests(unittest.TestCase):
         self.assertEqual([d for d in diffs if d.change_type == "added"], [])
 
 
+class AksDeclaredPathSeverityTests(unittest.TestCase):
+    """AKS identity + governance paths, second tranche.
+
+    DECLARED-path only, deliberately: severity fires when the template declares
+    the property and live differs, so there is no absent-default to guess. The
+    sentinel table is where a wrong default manufactures drift (the EventHub vs
+    ServiceBus TLS lesson), so these stay out of it until a live baseline read
+    says what a fresh cluster actually returns.
+    """
+
+    def _drift(self, path, desired, actual):
+        """One declared AKS property drifting, via the real comparator."""
+        def nest(value):
+            node = value
+            for part in reversed(path.split(".")[1:]):  # strip leading 'properties'
+                node = {part: node}
+            return node
+        bicep = {"type": "Microsoft.ContainerService/managedClusters",
+                 "name": "aks-drift-test", "properties": nest(desired)}
+        live = {"type": "Microsoft.ContainerService/managedClusters",
+                "name": "aks-drift-test",
+                "properties": {**nest(actual), "provisioningState": "Succeeded"}}
+        diffs = PropertyComparator.compare_properties(bicep, live)
+        return [d for d in diffs if d.change_type == "modified"]
+
+    def test_azure_rbac_disabled_is_critical(self):
+        # Kubernetes authorization drops back to cluster-local RBAC.
+        diffs = self._drift("properties.aadProfile.enableAzureRBAC", True, False)
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "critical")
+
+    def test_admin_group_added_is_critical(self):
+        # A direct grant of cluster-admin.
+        diffs = self._drift("properties.aadProfile.adminGroupObjectIDs",
+                            [], ["00000000-0000-0000-0000-000000000000"])
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "critical")
+
+    def test_policy_addon_disabled_is_critical(self):
+        # Azure Policy stops reaching into the cluster; the estate still reads
+        # compliant at the ARM layer.
+        diffs = self._drift("properties.addonProfiles.azurepolicy.enabled", True, False)
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "critical")
+
+    def test_monitoring_addon_disabled_is_critical(self):
+        diffs = self._drift("properties.addonProfiles.omsagent.enabled", True, False)
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "critical")
+
+    def test_upgrade_channel_switched_off_is_critical(self):
+        # Nothing breaks today; the cluster just stops receiving patches.
+        diffs = self._drift("properties.autoUpgradeProfile.upgradeChannel",
+                            "patch", "none")
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "critical")
+
+    def test_defender_disabled_is_critical(self):
+        diffs = self._drift(
+            "properties.securityProfile.defender.securityMonitoring.enabled",
+            True, False)
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "critical")
+
+    def test_oidc_issuer_disabled_is_critical(self):
+        diffs = self._drift("properties.oidcIssuerProfile.enabled", True, False)
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "critical")
+
+    def test_kubernetes_version_is_reported_but_not_critical(self):
+        # Deliberately NOT critical: an out-of-band AKS upgrade is operationally
+        # notable but removes no security control, and AKS cannot downgrade.
+        # Crying "critical" at every version bump is how a critical count stops
+        # meaning anything.
+        diffs = self._drift("properties.kubernetesVersion", "1.29.0", "1.29.2")
+        self.assertEqual(len(diffs), 1)
+        self.assertEqual(diffs[0].severity, "warning")
+
+    def test_new_paths_are_not_sentinels(self):
+        # The whole point of the split: these must not acquire absent-defaults
+        # without a live baseline read.
+        aks = PropertyComparator.SECURITY_SENTINELS[
+            "microsoft.containerservice/managedclusters"]
+        for path in ("properties.aadprofile.enableazurerbac",
+                     "properties.addonprofiles.azurepolicy.enabled",
+                     "properties.autoupgradeprofile.upgradechannel",
+                     "properties.oidcissuerprofile.enabled"):
+            self.assertNotIn(path, aks)
+
+    def test_undeclared_path_stays_silent(self):
+        # A template that says nothing about these gets no finding - that is
+        # what makes the tranche zero-FP without a verified default.
+        bicep = {"type": "Microsoft.ContainerService/managedClusters",
+                 "name": "aks-drift-test", "properties": {"enableRBAC": True}}
+        live = {"type": "Microsoft.ContainerService/managedClusters",
+                "name": "aks-drift-test",
+                "properties": {"enableRBAC": True,
+                               "autoUpgradeProfile": {"upgradeChannel": "none"},
+                               "oidcIssuerProfile": {"enabled": False}}}
+        paths = [d.property_path for d in PropertyComparator.compare_properties(bicep, live)]
+        self.assertEqual([p for p in paths if "autoupgrade" in p.lower()], [])
+        self.assertEqual([p for p in paths if "oidc" in p.lower()], [])
+
+
 if __name__ == "__main__":
     unittest.main()

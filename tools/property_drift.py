@@ -593,6 +593,34 @@ class PropertyComparator:
         "properties.apiserveraccessprofile",
         "properties.disablelocalaccounts",
         "properties.networkprofile.networkpolicy",
+        # AKS identity + governance, the second tranche. These are DECLARED-path
+        # entries only: severity applies when the template declares the property
+        # and live differs, so there is no absent-default to guess and no FP
+        # surface (contrast the SECURITY_SENTINELS table, where an absent-default
+        # that turns out to be API-version-dependent manufactures drift - see the
+        # TLS note there).
+        #   aadProfile: enableAzureRBAC off drops Kubernetes authorization back to
+        #   cluster-local RBAC, and adminGroupObjectIDs is a direct grant of
+        #   cluster-admin - both are privilege changes, not config tweaks.
+        "properties.aadprofile",
+        #   The policy add-on is how Azure Policy reaches INTO the cluster;
+        #   omsagent is the cluster's audit/telemetry path. Switching either off
+        #   leaves the estate looking compliant and observed while it is neither.
+        "properties.addonprofiles.azurepolicy",
+        "properties.addonprofiles.omsagent",
+        #   upgradeChannel 'none' does not break anything today - it silently
+        #   stops the cluster receiving patches, which is exactly the drift that
+        #   no dashboard shows until a CVE lands.
+        "properties.autoupgradeprofile",
+        #   Defender for Containers off = runtime threat detection gone.
+        "properties.securityprofile.defender",
+        #   OIDC issuer is the dependency for workload identity; turning it off
+        #   breaks federated auth and pushes workloads back to secrets. Scoped to
+        #   `.enabled` on purpose: the sibling `issuerUrl` is an Azure-GENERATED
+        #   output, so a subtree entry made a read-only value critical (caught by
+        #   test_eventgrid_filter_subject_not_falsely_critical, which already
+        #   pinned it as warning).
+        "properties.oidcissuerprofile.enabled",
         # Resiliency: the zone list a resource is pinned to, and the fault/update
         # domain counts of an availability set. Shrinking any of these is a
         # silent availability downgrade that nothing else surfaces - the resource
@@ -1096,6 +1124,14 @@ class PropertyComparator:
         # declaring [] excuses anything. Zone membership is a placement fact
         # that must match exactly in both directions.
         if kl == "zones":
+            return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
+        # AKS cluster-admin groups: a bare list of AAD group object IDs, and the
+        # single highest-privilege grant on the cluster. Same vacuous-subset
+        # trap as the firewall lists and worse - the common declaration is an
+        # EMPTY adminGroupObjectIDs, and [] is a subset of every list, so adding
+        # a group out-of-band (instant cluster-admin for its members) compared
+        # clean. Exact set, both directions.
+        if kl.endswith("aadprofile.admingroupobjectids"):
             return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
         return None
 
