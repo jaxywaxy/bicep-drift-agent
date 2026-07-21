@@ -175,6 +175,76 @@ checks:
 | `path` | Yes | Path to the Bicep file |
 | `subscription_scoped` | No | Indicates the Bicep deploys at subscription scope |
 | `resource_groups` | Yes | List of resource groups or selectors |
+| `deployment_stack` | No | Deployment stack to evaluate. Omit unless the estate is deployed with `az stack` |
+
+---
+
+# Deployment Stacks
+
+Optional, per check. Add this only where the infrastructure is deployed as an
+Azure deployment stack. Omitting it disables the check silently.
+
+## Schema
+
+```yaml
+checks:
+  - name: Platform Connectivity
+    repo: myorg/platform-bicep
+    path: bicep/main.bicep
+    subscription_scoped: true
+    resource_groups: ["*"]
+    deployment_stack:
+      name: platform-stack
+      scope: subscription        # subscription | resource_group | management_group
+      expect:
+        deny_settings:
+          mode: denyWriteAndDelete
+          apply_to_child_scopes: true
+          excluded_principals: []
+          excluded_actions: []
+        action_on_unmanage:
+          resources: delete
+          resource_groups: delete
+```
+
+## Properties
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `name` | Yes | The stack's name in Azure |
+| `scope` | No | Where the stack lives. Default: `subscription` |
+| `resource_group` | No | Resource group holding the stack, for `resource_group` scope. Defaults to the scanned group |
+| `management_group` | Only for `management_group` scope | Management group holding the stack |
+| `expect` | No | Enforcement posture to assert. See below |
+
+## Why `expect` is required for posture checks
+
+A deployment stack records nothing about what it was *supposed* to be — no
+template link, tags or description. There is therefore no desired state to
+compare against unless you write one down here.
+
+**Only the keys you declare are compared.** Everything else is left unasserted.
+Live values are never adopted as a baseline, so a stack sitting at `mode: none`
+is not treated as correct merely because that is how it currently stands.
+
+The practical consequence: a check with no `expect` block still reports
+ownership and stack health, but **its deny settings are never evaluated**. If
+the stack exists to enforce something, declare it.
+
+| Key | Compared as |
+| --- | ----------- |
+| `deny_settings.mode` | By strength. Weaker than declared is critical; stricter is reported as info |
+| `deny_settings.apply_to_child_scopes` | Exact. When off, the deny assignment covers the resource groups but not the resources inside them |
+| `deny_settings.excluded_principals` | Exact set. An added exclusion is critical, a removed one a warning |
+| `deny_settings.excluded_actions` | Exact set, as above |
+| `action_on_unmanage.*` | Exact. `delete` regressed to `detach` is a warning — nothing is exposed, but orphaned resources keep billing |
+| `provisioning_state` | Defaults to `succeeded`; asserted with or without an `expect` block |
+
+Set `INCLUDE_DEPLOYMENT_STACKS=false` to force the check off even where
+configured.
+
+Limitations are documented in
+[CAPABILITIES.md](CAPABILITIES.md#deployment-stack-drift).
 
 ---
 

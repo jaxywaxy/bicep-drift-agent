@@ -268,6 +268,10 @@ jobs:
           CHECK_PATH: ${{ matrix.check.path }}
           CHECK_SUBSCRIPTION_SCOPED: ${{ matrix.check.subscription_scoped }}
           CHECK_RESOURCE_GROUPS: ${{ toJson(matrix.check.resource_groups) }}
+          # Deployment stack drift is opt-in: absent from the config, this is
+          # 'null' and tools/deployment_stacks.py skips the check entirely.
+          # Passed as JSON for the same untrusted-input reason as the others.
+          DRIFT_DEPLOYMENT_STACK: ${{ toJson(matrix.check.deployment_stack) }}
         run: |
           BICEP_PATH="bicep-$CHECK_NAME/$CHECK_PATH"
           DRIFT_FILE="drift_$CHECK_NAME.txt"
