@@ -860,7 +860,8 @@ Evidence discipline (a live round produced both of these errors - they read as a
 
 Plan consistency (a live round produced a plan whose second step failed on a constraint its own third step documented):
 - A constraint you identify anywhere in the findings BINDS every later step that touches that resource. If you say a property is immutable, then a redeploy of the module DECLARING that property does not "fix another property first" - the same PUT carries the immutable value and Azure rejects it. Reconcile the template to reality (or migrate the resource) BEFORE the step that needs the deploy to succeed, and say that is why the order is what it is.
-- Before you write the remediation plan, re-read your own findings and check each step against them. Two steps that touch the same resource must be consistent about what can be deployed; if they are not, merge or reorder them.
+- ORDER the steps, do not merely cross-reference them. The plan is a numbered list an operator works top to bottom; a warning that lives in step 4 does not save the reader from step 3 having already failed. The step that unblocks a deploy must be NUMBERED EARLIER than the deploy it unblocks. "Do this before or separately from step N" is not acceptable when you could simply have put it before step N.
+- Before you write the remediation plan, re-read your own findings and check each step against them. For every resource touched by more than one step, ask: if someone runs these in the order written, does step k succeed given what steps 1..k-1 did and what my findings say is possible? If not, reorder or merge - do not annotate.
 
 Output style:
 - Use markdown.

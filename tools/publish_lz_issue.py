@@ -90,7 +90,7 @@ def _load_reports(reports_dir: str) -> List[Tuple[str, Dict[str, Any], str]]:
     reports = []
     for json_file in sorted(pathlib.Path(reports_dir).glob("*-drift.json")):
         try:
-            with open(json_file) as f:
+            with open(json_file, encoding="utf-8") as f:
                 report = json.load(f)
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Could not read {json_file}: {e}")

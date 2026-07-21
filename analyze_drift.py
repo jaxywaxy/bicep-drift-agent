@@ -216,7 +216,7 @@ def _consolidate_wildcard_results(resource_groups_to_test: list) -> None:
     for rg in resource_groups_to_test:
         report_file = Path(f"reports/{rg}-drift.json")
         if report_file.exists():
-            with open(report_file) as f:
+            with open(report_file, encoding="utf-8") as f:
                 report_data = json.load(f)
             drifts = report_data.get("drifts", [])
             print(f"\n{rg}: {len(drifts)} issue(s)")
@@ -987,7 +987,7 @@ def main():
             logger.error(f"Report file not found: {report_file}")
             sys.exit(1)
 
-        with open(report_file) as f:
+        with open(report_file, encoding="utf-8") as f:
             report_data = json.load(f)
 
         # Deterministic drift processing (always runs, Claude-independent):
@@ -1029,8 +1029,10 @@ def main():
         # lifecycle, and recommendations if generated) so the HTML report - which reads
         # this JSON file - matches the filtered summary regardless of the API key.
         try:
-            with open(report_file, "w") as f:
-                json.dump(report_data, f, indent=2, default=str)
+            # ensure_ascii=False keeps Unicode readable in the artifact; that
+            # makes the explicit encoding load-bearing rather than cosmetic.
+            with open(report_file, "w", encoding="utf-8") as f:
+                json.dump(report_data, f, indent=2, default=str, ensure_ascii=False)
             logger.info(f"Saved processed drift report to JSON: {report_file}")
         except Exception as e:
             logger.warning(f"Failed to save processed report: {e}", exc_info=True)
@@ -1039,7 +1041,7 @@ def main():
         if agent_analysis:
             analysis_file = Path(f"reports/{report_label}-analysis.md")
             analysis_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(analysis_file, "w") as f:
+            with open(analysis_file, "w", encoding="utf-8") as f:
                 f.write(f"# Drift Analysis: {resource_group}\n\n")
                 f.write(f"**Bicep File:** {bicep_file}\n\n")
                 f.write(agent_analysis)

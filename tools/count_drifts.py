@@ -116,7 +116,7 @@ def count_drifts(reports_dir: str) -> Dict[str, int]:
         )
 
     for report_file in reports:
-        with open(report_file) as f:
+        with open(report_file, encoding="utf-8") as f:
             report = json.load(f)  # a corrupt report must raise, not count as 0
         counts["reports"] += 1
         for key, value in tally_report(report).items():

@@ -229,6 +229,15 @@ class PlanConsistencyTests(unittest.TestCase):
         self.assertIn("immutable", sp)
         self.assertIn("re-read your own findings", sp)
 
+    def test_prompt_demands_ordering_not_annotation(self):
+        # The next round stated the dependency but left the failing deploy at
+        # step 3 and its blocker at step 4 - an operator working top to bottom
+        # still hits the failure. Disclosure is not sequencing.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("NUMBERED EARLIER", sp)
+        self.assertIn("top to bottom", sp)
+        self.assertIn("do not annotate", sp)
+
 
 class LiveContextTests(unittest.TestCase):
     """details carries only the CHANGED paths. The siblings that bound a

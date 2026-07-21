@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sys
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -268,6 +269,51 @@ class ReportHeadlineMetricTests(unittest.TestCase):
         h = _render(drifts=clean["drifts"])
         card = re.search(r'metric-label">Critical</div>\s*<div class="metric-number">(\d+)<', h)
         self.assertEqual(card.group(1), "0")
+
+
+class ReportEncodingTests(unittest.TestCase):
+    """The report is written with an explicit utf-8 encoding, never the locale
+    default. Its status badges and section headings are emoji, so on a runner
+    with LANG unset (C/POSIX -> ascii) the default would raise
+    UnicodeEncodeError and the report would never be written at all."""
+
+    def test_report_is_written_as_utf_8_under_a_c_locale(self):
+        """Runs the real generator in a subprocess under LC_ALL=C.
+
+        Deliberately NOT a mock: open() resolves its default encoding in C, at
+        call time, from the process locale - patching locale.getencoding or
+        locale.getpreferredencoding does not change it, so a mocked version of
+        this test passes whether or not the fix is present (verified). Only a
+        genuinely ascii-default interpreter reproduces the runner.
+        """
+        repo = Path(__file__).resolve().parent.parent
+        with tempfile.TemporaryDirectory() as d:
+            src, out = Path(d) / "r-drift.json", Path(d) / "r-drift.html"
+            src.write_text(json.dumps(_report()), encoding="utf-8")
+            proc = subprocess.run(
+                [sys.executable, "-c",
+                 "import sys, pathlib;"
+                 "sys.path.insert(0, sys.argv[3]);"
+                 "from tools.html_report import generate_html_report;"
+                 "generate_html_report(pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]),"
+                 " 'rg-drift-test', 'bicep/main.bicep')",
+                 str(src), str(out), str(repo)],
+                env={**os.environ, "LC_ALL": "C", "LANG": "C",
+                     "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"},
+                capture_output=True, text=True,
+            )
+            self.assertEqual(proc.returncode, 0,
+                             f"report generation died under a C locale:\n{proc.stderr}")
+            raw = out.read_bytes()
+        self.assertIn("⚠️".encode("utf-8"), raw)
+        self.assertIn('<meta charset="UTF-8">', raw.decode("utf-8"))
+
+    def test_non_ascii_resource_names_survive_the_round_trip(self):
+        # Azure values (tags, descriptions, display names) carry any Unicode.
+        h = _render(drifts=[{"type": "microsoft.storage/storageaccounts",
+                             "name": "st-café-数据", "drift_type": "extra_in_azure",
+                             "details": {}}])
+        self.assertIn("st-café-数据", h)
 
 
 class ReportCssTests(unittest.TestCase):

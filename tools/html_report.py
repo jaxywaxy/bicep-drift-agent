@@ -577,7 +577,7 @@ def generate_html_report(
         IOError: If there are permission issues reading/writing files
     """
     try:
-        with open(drift_json_file) as f:
+        with open(drift_json_file, encoding="utf-8") as f:
             data = json.load(f)
     except FileNotFoundError:
         logger.error(f"Drift JSON file not found: {drift_json_file}")
@@ -740,7 +740,12 @@ def generate_html_report(
     """
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_file, "w") as f:
+    # encoding is explicit, never the locale default: the report is full of
+    # emoji (status badges, section headings) and Azure values can carry any
+    # Unicode. On a runner with LANG unset (C/POSIX) the default encoding is
+    # ASCII and this raises UnicodeEncodeError on the first badge - losing the
+    # report entirely, which for this tool is the worst possible failure.
+    with open(output_file, "w", encoding="utf-8") as f:
         f.write(html_content)
 
     logger.info(f"HTML report generated: {output_file}")
