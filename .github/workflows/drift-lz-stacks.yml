@@ -25,9 +25,12 @@ jobs:
   drift-check:
     uses: ./.github/workflows/drift-check-lz-hybrid.yml
     with:
-      landing_zone: landingzone
+      landing_zone: test-resources
       override_subscription: ${{ github.event.inputs.subscription_id }}
       override_resource_group: ${{ github.event.inputs.resource_group }}
+    # Explicit secrets (least privilege) instead of `secrets: inherit`, which
+    # would hand the reusable workflow every repo secret. Mirrors the map the
+    # hybrid workflow declares; also shrinks its toJSON(secrets) blob to just these.
     secrets:
       BICEP_REPO_TOKEN: ${{ secrets.BICEP_REPO_TOKEN }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
