@@ -806,6 +806,7 @@ class PropertyComparator:
             List of PropertyDiff objects
         """
         diffs = []
+        rtype = str(bicep_properties.get("type", "")).lower()
 
         # App settings VALUES are secrets. Reduce both sides to KEY SETS before
         # any flattening - flattened per-key comparison would put the values
@@ -1008,7 +1009,7 @@ class PropertyComparator:
             )
         )
 
-        return diffs
+        return PropertyComparator._elevate_monitoring_severity(rtype, diffs)
 
     @staticmethod
     def _check_security_sentinels(
@@ -1133,6 +1134,15 @@ class PropertyComparator:
         # clean. Exact set, both directions.
         if kl.endswith("aadprofile.admingroupobjectids"):
             return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
+        # Azure Monitor action-group receivers: each *Receivers array is keyed
+        # by receiver name. The generic bicep-keyed loop MISSES a receiver
+        # deleted entirely (its flattened key just vanishes from the deployed
+        # side) and a live-ADDED one, so exact-set both directions - a removed
+        # receiver is a broken notification path, an added one an out-of-band
+        # alerting change. Covers emailReceivers/smsReceivers/webhookReceivers/
+        # armRoleReceivers/... (all end in "receivers").
+        if kl.startswith("properties.") and kl.endswith("receivers"):
+            return PropertyComparator._allowlist_matches(bicep_value, deployed_value)
         return None
 
     @staticmethod
@@ -1167,6 +1177,12 @@ class PropertyComparator:
                     f"{str(el.get('name', '')).lower()}|{str(el.get('source', '')).lower()}",
                     ("name", "source"),
                 )
+            # Monitor action-group receivers (and similar name-keyed elements):
+            # identity is the receiver 'name'; the type-specific fields
+            # (emailAddress, serviceUri, ...) subset-match, so Azure-added
+            # status / useCommonAlertSchema on the live side don't false-flag.
+            if "name" in el:
+                return str(el.get("name", "")).lower(), ("name",)
             # storage resourceAccessRules have no value/id - identity is the
             # (tenantId, resourceId) pair, joined so unresolved-expression
             # markers in either part stay detectable by the caller.
@@ -1577,6 +1593,42 @@ class PropertyComparator:
             if critical in property_path.lower():
                 return "critical"
         return "warning"
+
+    # Alert/action-group resources are "silent failure" types: a disabled alert
+    # or a severed notification path looks fine until an incident. These paths
+    # are critical ONLY for these types, so they cannot go in the global
+    # substring CRITICAL_PROPERTIES - e.g. "properties.enabled" would also match
+    # Key Vault's "properties.enabledForDeployment".
+    _MONITORING_TYPES = frozenset({
+        "microsoft.insights/metricalerts",
+        "microsoft.insights/activitylogalerts",
+        "microsoft.insights/scheduledqueryrules",
+        "microsoft.insights/actiongroups",
+        "microsoft.insights/components",
+    })
+    _MONITORING_CRITICAL_SUBSTRINGS = (
+        "properties.enabled",           # alert / action group switched off
+        "receivers",                    # a notification path removed or changed
+        "properties.criteria",          # metric/query threshold loosened
+        "properties.condition",         # activity-log condition narrowed
+        "properties.retentionindays",   # data retention shortened
+        "publicnetworkaccessfor",       # App Insights ingestion/query opened
+        "properties.disableipmasking",  # client IPs un-masked
+    )
+
+    @staticmethod
+    def _elevate_monitoring_severity(
+        resource_type: str, diffs: List["PropertyDiff"]
+    ) -> List["PropertyDiff"]:
+        """Raise severity to critical for silent-failure paths on monitoring
+        types. Type-scoped so the substrings cannot over-match other resources."""
+        if resource_type not in PropertyComparator._MONITORING_TYPES:
+            return diffs
+        for d in diffs:
+            path = d.property_path.lower()
+            if any(s in path for s in PropertyComparator._MONITORING_CRITICAL_SUBSTRINGS):
+                d.severity = "critical"
+        return diffs
 
     @staticmethod
     def _is_write_only_property(property_path: str) -> bool:
