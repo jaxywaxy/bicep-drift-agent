@@ -418,3 +418,26 @@ class TestOwnerRouting(unittest.TestCase):
         team's to answer for, whatever workload it deploys."""
         from tools.ownership import classify_owner, PLATFORM
         self.assertEqual(classify_owner(STACK_TYPE), PLATFORM)
+
+
+class TestPhase1SkipsBareUniqueString(unittest.TestCase):
+    """Phase 1's unresolvable filter must agree with Phase 2's, or a bare
+    uniqueString name (no format() wrapper) false-flags missing while its live
+    twin smart-matches. Regression for the driftAppPlan round."""
+
+    def test_bare_uniquestring_name_is_not_compared(self):
+        from tools.diff_states import _should_compare_resource
+        r = {"type": "Microsoft.Web/serverfarms",
+             "name": "driftAppPlanuniqueString(resourceGroup().id)"}
+        self.assertFalse(_should_compare_resource(r))
+
+    def test_format_wrapped_name_still_skipped(self):
+        from tools.diff_states import _should_compare_resource
+        r = {"type": "Microsoft.Storage/storageAccounts",
+             "name": "toLower(format('drifttestsa{0}', parameters('suffix')))"}
+        self.assertFalse(_should_compare_resource(r))
+
+    def test_plain_literal_name_is_still_compared(self):
+        from tools.diff_states import _should_compare_resource
+        r = {"type": "Microsoft.Network/virtualNetworks", "name": "drifttest-vnet"}
+        self.assertTrue(_should_compare_resource(r))

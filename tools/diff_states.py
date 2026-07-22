@@ -245,6 +245,13 @@ def _should_compare_resource(resource: dict) -> bool:
 
     # Skip only truly unresolvable complex expressions
     # Simple parameters() are now handled by fuzzy matching
+    # These must stay in sync with smart_matching.UNRESOLVABLE_FUNCTIONS: a name
+    # Phase 1 compares but Phase 2 treats as unresolvable produces a phantom
+    # missing_in_azure that nothing reconciles. 'uniquestring(' was missing here
+    # (the 'unique-string'/'copy-index' hyphenated forms never match real ARM
+    # output, which is uniqueString/copyIndex) - so a bare
+    # 'driftAppPlan${uniqueString(...)}' name with no format() wrapper slipped
+    # through and false-flagged missing while its live twin smart-matched.
     complex_unresolvable = [
         "format(",
         "coalesce(",
@@ -252,8 +259,7 @@ def _should_compare_resource(resource: dict) -> bool:
         "guid(",
         "resourceid(",
         "copyindex(",
-        "unique-string",
-        "copy-index",
+        "uniquestring(",
         "deployment()",
     ]
 
