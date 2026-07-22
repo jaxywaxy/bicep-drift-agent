@@ -866,6 +866,18 @@ class PropertyComparator:
 
                 deployed_value = deployed_flat[key]
 
+                # Monitoring alert cross-references (scopes + action-group links):
+                # exact-set compare so a severed/re-pointed link surfaces. The
+                # generic subset compare treats the unresolved bicep ids as a
+                # match (see _value_matches), so it catches a full removal but
+                # NEVER a re-point. This owns the linkage paths outright.
+                mon = PropertyComparator._compare_monitoring_refs(
+                    rtype, key, bicep_value, deployed_value
+                )
+                if mon is not None:
+                    diffs.extend(mon)
+                    continue
+
                 # Security-list properties (KV access policies, networkAcls
                 # allowlists) get exact-set semantics: the generic subset
                 # comparison would never flag a LIVE-ADDED element (an
@@ -1614,6 +1626,8 @@ class PropertyComparator:
         "properties.retentionindays",   # data retention shortened
         "publicnetworkaccessfor",       # App Insights ingestion/query opened
         "properties.disableipmasking",  # client IPs un-masked
+        "properties.scopes",            # alert de-scoped (stops watching a target)
+        "properties.actions",           # notification link severed/re-pointed
     )
 
     @staticmethod
@@ -1629,6 +1643,130 @@ class PropertyComparator:
             if any(s in path for s in PropertyComparator._MONITORING_CRITICAL_SUBSTRINGS):
                 d.severity = "critical"
         return diffs
+
+    # Alert types whose linkage (scopes + action-group refs) is a cross-resource
+    # reference. metricAlerts/activityLogAlerts/scheduledQueryRules point at the
+    # thing they watch (scopes) and the thing they notify (actions.actionGroups);
+    # actionGroups/components have no such outward links, so they are excluded.
+    _LINKAGE_TYPES = frozenset({
+        "microsoft.insights/metricalerts",
+        "microsoft.insights/activitylogalerts",
+        "microsoft.insights/scheduledqueryrules",
+    })
+    # Flattened property paths that carry those references. actions is a plain
+    # list on metricAlerts and a dict (actions.actionGroups) on activity/query.
+    _LINKAGE_PATHS = frozenset({
+        "properties.scopes",
+        "properties.actions",
+        "properties.actions.actiongroups",
+    })
+
+    @staticmethod
+    def _ref_identity(ref: Any) -> Optional[str]:
+        """Canonical trailing-name identity for a scope / action-group reference,
+        or None when the ref is OPAQUE (an unresolved cross-module expression
+        with no literal name to extract - e.g. reference(...).outputs.x.value).
+
+        Makes the two spellings of the same target comparable:
+          live   '/subscriptions/../actionGroups/ag-drift-test' -> 'ag-drift-test'
+          bicep  "resourceId('..','ag-drift-test')"             -> 'ag-drift-test'
+        """
+        if not isinstance(ref, str):
+            return None
+        s = ref.strip()
+        low = s.lower()
+        # A live ARM resource id: identity is the last path segment.
+        if low.startswith("/subscriptions/"):
+            return s.rstrip("/").rsplit("/", 1)[-1].lower()
+        # Bicep resourceId('type','name'[, ...]): last string literal is the name.
+        if low.startswith("resourceid("):
+            import re as _re
+            lits = _re.findall(r"'([^']*)'", s)
+            return lits[-1].lower() if lits else None
+        # Any other unresolved expression (reference()/parameters()/module .id)
+        # has no literal name - opaque.
+        if PropertyComparator._has_unresolved_expressions(s):
+            return None
+        # A bare literal id or name (already resolved): trailing segment.
+        return s.rstrip("/").rsplit("/", 1)[-1].lower()
+
+    @staticmethod
+    def _linkage_refs(value: Any) -> List[Any]:
+        """Pull the raw reference strings out of a scopes / actions value.
+        Handles all three shapes: bare-string scopes, {actionGroupId: ref} dicts
+        (metric + activity), and bare-string action-group ids (query rules)."""
+        out: List[Any] = []
+        if not isinstance(value, (list, tuple)):
+            return out
+        for el in value:
+            if isinstance(el, dict):
+                agid = next(
+                    (v for k, v in el.items() if k.lower() == "actiongroupid"), None
+                )
+                if agid is not None:
+                    out.append(agid)
+            elif isinstance(el, str):
+                out.append(el)
+        return out
+
+    @staticmethod
+    def _compare_monitoring_refs(
+        resource_type: str, key: str, bicep_value: Any, deployed_value: Any
+    ) -> Optional[List["PropertyDiff"]]:
+        """Exact-set comparison for alert cross-references, so a severed or
+        re-pointed linkage surfaces even though the ids are template expressions.
+
+        Owns these paths entirely (returns [] or a diff; the caller then
+        continues, skipping the generic subset compare). Resolvable bicep links
+        must still be present live; unresolved bicep refs become OPAQUE SLOTS
+        that absorb one live link each (so a clean module build - one
+        reference() scope vs one live scope - stays zero-drift). A live link
+        beyond what those slots cover, or fewer live links than declared, is
+        drift. LIMIT: an opaque->opaque re-point (both sides unresolved, same
+        count) is invisible - there is no literal name on either side to compare.
+        """
+        if resource_type not in PropertyComparator._LINKAGE_TYPES:
+            return None
+        if key.lower() not in PropertyComparator._LINKAGE_PATHS:
+            return None
+
+        bicep_refs = PropertyComparator._linkage_refs(bicep_value)
+        deployed_refs = PropertyComparator._linkage_refs(deployed_value)
+
+        b_names: List[str] = []
+        b_opaque = 0
+        for r in bicep_refs:
+            ident = PropertyComparator._ref_identity(r)
+            if ident is None:
+                b_opaque += 1
+            else:
+                b_names.append(ident)
+        d_names = [n for n in (PropertyComparator._ref_identity(r) for r in deployed_refs)
+                   if n is not None]
+
+        drift = False
+        remaining = list(d_names)
+        for bn in b_names:
+            if bn in remaining:
+                remaining.remove(bn)          # declared link still present live
+            else:
+                drift = True                  # declared link removed or re-pointed
+        # Live links beyond what opaque bicep slots can absorb (added out-of-band).
+        if len(remaining) > b_opaque:
+            drift = True
+        # A link/scope was severed: fewer live references than the template declares.
+        if len(deployed_refs) < len(b_names) + b_opaque:
+            drift = True
+
+        if drift:
+            return [PropertyDiff(
+                property_path=key,
+                desired_value=bicep_value,
+                actual_value=deployed_value,
+                change_type="modified",
+                severity=PropertyComparator._get_severity(key),
+            )]
+        return []
 
     @staticmethod
     def _is_write_only_property(property_path: str) -> bool:
