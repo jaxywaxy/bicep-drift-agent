@@ -319,9 +319,14 @@ delete to AlwaysON and rejects any disable request
 cannot occur on a hardened vault — the detector still confirms the hardened
 posture, but there is no weakening to catch there.
 
-Backup **policy** schedule/retention drift is not yet covered: every vault ships
-built-in default policies that would need selective name-matching to avoid
-`extra_in_azure` noise. That is a later increment.
+**Backup policies** (`vaults/backupPolicies`) are also fetched via ARM REST and
+compared. Shortening retention or loosening the schedule is rated **critical** —
+it silently shrinks how far back you can restore. Every vault ships built-in
+default policies (`DefaultPolicy`, `EnhancedPolicy`, `HourlyLogBackup`) even with
+no protected items, so live policies the template does **not** declare are dropped
+(same treatment as SQL `master`, App Service `config`, and storage `default`
+containers). Trade-off: a policy added entirely out-of-band, that the template
+never declared, is not surfaced — only declared policies are compared.
 
 
 ---

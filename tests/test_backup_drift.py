@@ -19,7 +19,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.property_drift import PropertyComparator
-from tools.get_live_state import _shape_backup_config
+from tools.get_live_state import _shape_backup_config, _shape_backup_policy
+from tools.diff_states import filter_unmanaged_live_resources
 
 
 def diffs_by_path(diffs):
@@ -83,6 +84,78 @@ class BackupConfigDriftTests(unittest.TestCase):
         bicep = _bicep(softDeleteFeatureState="Enabled")
         live = _live(softDeleteFeatureState="Enabled")
         self.assertEqual(PropertyComparator.compare_properties(bicep, live), [])
+
+
+POLICY_TYPE = "Microsoft.RecoveryServices/vaults/backupPolicies"
+
+
+def _policy_live(name, count=30):
+    return {
+        "type": POLICY_TYPE,
+        "name": f"rsv-drift-test/{name}",
+        "properties": {
+            "backupManagementType": "AzureIaasVM",
+            "schedulePolicy": {"scheduleRunFrequency": "Daily"},
+            "retentionPolicy": {
+                "retentionPolicyType": "LongTermRetentionPolicy",
+                "dailySchedule": {"retentionDuration": {"count": count, "durationType": "Days"}},
+            },
+        },
+    }
+
+
+class BackupPolicySuppressionTests(unittest.TestCase):
+    """Built-in default policies (DefaultPolicy/EnhancedPolicy/HourlyLogBackup)
+    ship with every vault; only a DECLARED policy should survive to compare."""
+
+    def _defaults_plus(self, *extra_names):
+        live = [_policy_live(n) for n in ("DefaultPolicy", "EnhancedPolicy", "HourlyLogBackup")]
+        live += [_policy_live(n) for n in extra_names]
+        return live
+
+    def test_undeclared_defaults_are_dropped(self):
+        live = self._defaults_plus()
+        filtered = filter_unmanaged_live_resources(live, filtered_arm=[])  # estate declares no policy
+        self.assertEqual([r for r in filtered if r["type"] == POLICY_TYPE], [])
+
+    def test_declared_policy_survives_defaults_dropped(self):
+        live = self._defaults_plus("drift-vm-policy")
+        bicep = [{"type": POLICY_TYPE, "name": "rsv-drift-test/drift-vm-policy", "properties": {}}]
+        filtered = filter_unmanaged_live_resources(live, filtered_arm=bicep)
+        kept = [r["name"] for r in filtered if r["type"] == POLICY_TYPE]
+        self.assertEqual(kept, ["rsv-drift-test/drift-vm-policy"])
+
+
+class BackupPolicyDriftTests(unittest.TestCase):
+    def _bicep(self, count):
+        return {
+            "type": POLICY_TYPE,
+            "name": "rsv-drift-test/drift-vm-policy",
+            "properties": {
+                "retentionPolicy": {"dailySchedule": {"retentionDuration": {"count": count, "durationType": "Days"}}},
+            },
+        }
+
+    def test_retention_shortened_is_critical(self):
+        bicep = self._bicep(30)
+        live = _policy_live("drift-vm-policy", count=7)   # 30 -> 7 days out of band
+        d = diffs_by_path(PropertyComparator.compare_properties(bicep, live))
+        path = "properties.retentionPolicy.dailySchedule.retentionDuration.count"
+        self.assertIn(path, d)
+        self.assertEqual(d[path].severity, "critical")
+
+    def test_clean_policy_no_drift(self):
+        bicep = self._bicep(30)
+        live = _policy_live("drift-vm-policy", count=30)
+        self.assertEqual(PropertyComparator.compare_properties(bicep, live), [])
+
+    def test_shape_policy_names_under_vault(self):
+        payload = {"name": "drift-vm-policy", "type": POLICY_TYPE,
+                   "id": "/subscriptions/S/.../backupPolicies/drift-vm-policy",
+                   "properties": {"backupManagementType": "AzureIaasVM"}}
+        shaped = _shape_backup_policy("rsv-drift-test", "rg", payload)
+        self.assertEqual(shaped["name"], "rsv-drift-test/drift-vm-policy")
+        self.assertEqual(shaped["type"], POLICY_TYPE)
 
 
 if __name__ == "__main__":

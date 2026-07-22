@@ -1028,7 +1028,8 @@ class PropertyComparator:
             )
         )
 
-        return PropertyComparator._elevate_monitoring_severity(rtype, diffs)
+        diffs = PropertyComparator._elevate_monitoring_severity(rtype, diffs)
+        return PropertyComparator._elevate_backup_severity(rtype, diffs)
 
     @staticmethod
     def _check_security_sentinels(
@@ -1648,6 +1649,22 @@ class PropertyComparator:
         for d in diffs:
             path = d.property_path.lower()
             if any(s in path for s in PropertyComparator._MONITORING_CRITICAL_SUBSTRINGS):
+                d.severity = "critical"
+        return diffs
+
+    @staticmethod
+    def _elevate_backup_severity(
+        resource_type: str, diffs: List["PropertyDiff"]
+    ) -> List["PropertyDiff"]:
+        """Raise severity to critical for backup-policy retention/schedule paths.
+        Shortening retention or loosening the schedule silently shrinks how far
+        back you can restore. Type-scoped to vaults/backupPolicies so 'retention'
+        does not collide with diagnostic-settings retentionPolicy on other types."""
+        if resource_type != "microsoft.recoveryservices/vaults/backuppolicies":
+            return diffs
+        for d in diffs:
+            path = d.property_path.lower()
+            if "retention" in path or "schedule" in path:
                 d.severity = "critical"
         return diffs
 
