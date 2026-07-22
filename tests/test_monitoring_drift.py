@@ -179,5 +179,110 @@ class SeverityScopingTests(unittest.TestCase):
             self.assertNotEqual(v.severity, "critical")
 
 
+class MonitoringCrossRefTests(unittest.TestCase):
+    """Phase B - alert cross-references (scopes + action-group linkage).
+
+    The linkage ids are template expressions, so the generic subset compare
+    treats them as a match: it catches a FULL removal (already, as warning) but
+    never a re-point. These assert (a) re-point is now caught, (b) removal is
+    now CRITICAL, (c) clean module builds (opaque reference() ids) stay
+    zero-drift, and (d) the opaque->opaque re-point limit is honoured.
+    """
+
+    MA = "Microsoft.Insights/metricAlerts"
+    AL = "Microsoft.Insights/activityLogAlerts"
+    QR = "Microsoft.Insights/scheduledQueryRules"
+
+    RID_AG = "resourceId('Microsoft.Insights/actionGroups','ag-drift-test')"
+    LIVE_AG = "/subscriptions/S/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/ag-drift-test"
+    LIVE_AG2 = "/subscriptions/S/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/rogue-ag"
+    REF_SCOPE = "reference(resourceId('Microsoft.Resources/deployments','deploy-storage'),'2025-04-01').outputs.storageAccountId.value"
+    LIVE_SCOPE = "/subscriptions/S/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/sttest"
+    LIVE_SCOPE2 = "/subscriptions/S/resourceGroups/rg/providers/Microsoft.Storage/storageAccounts/other"
+
+    def _cmp(self, rtype, b_props, d_props):
+        # a sibling property so enrichment detection passes
+        b_props = {"enabled": True, **b_props}
+        d_props = {"enabled": True, **d_props}
+        return diffs_by_path(PropertyComparator.compare_properties(
+            {"type": rtype, "properties": b_props},
+            {"type": rtype, "properties": d_props},
+        ))
+
+    # --- action-group linkage (metricAlerts: actions[].actionGroupId) ---
+    def test_action_group_repoint_is_critical(self):
+        d = self._cmp(self.MA,
+                      {"actions": [{"actionGroupId": self.RID_AG}]},
+                      {"actions": [{"actionGroupId": self.LIVE_AG2}]})
+        self.assertIn("properties.actions", d)
+        self.assertEqual(d["properties.actions"].severity, "critical")
+
+    def test_action_group_unlink_is_critical(self):
+        d = self._cmp(self.MA,
+                      {"actions": [{"actionGroupId": self.RID_AG}]},
+                      {"actions": []})
+        self.assertIn("properties.actions", d)
+        self.assertEqual(d["properties.actions"].severity, "critical")
+
+    def test_action_group_added_out_of_band_is_drift(self):
+        d = self._cmp(self.MA,
+                      {"actions": [{"actionGroupId": self.RID_AG}]},
+                      {"actions": [{"actionGroupId": self.LIVE_AG},
+                                   {"actionGroupId": self.LIVE_AG2}]})
+        self.assertIn("properties.actions", d)
+
+    def test_action_group_clean_resolveid_vs_live_id(self):
+        d = self._cmp(self.MA,
+                      {"actions": [{"actionGroupId": self.RID_AG}]},
+                      {"actions": [{"actionGroupId": self.LIVE_AG}]})
+        self.assertNotIn("properties.actions", d)
+
+    # --- scopes (opaque reference() ids) ---
+    def test_scope_descope_is_critical(self):
+        d = self._cmp(self.MA, {"scopes": [self.REF_SCOPE]}, {"scopes": []})
+        self.assertIn("properties.scopes", d)
+        self.assertEqual(d["properties.scopes"].severity, "critical")
+
+    def test_clean_opaque_scope_no_false_drift(self):
+        d = self._cmp(self.MA, {"scopes": [self.REF_SCOPE]}, {"scopes": [self.LIVE_SCOPE]})
+        self.assertNotIn("properties.scopes", d)
+
+    def test_opaque_to_opaque_scope_repoint_is_invisible(self):
+        # Documented limit: both sides unresolvable, same count -> no literal to compare.
+        d = self._cmp(self.MA, {"scopes": [self.REF_SCOPE]}, {"scopes": [self.LIVE_SCOPE2]})
+        self.assertNotIn("properties.scopes", d)
+
+    # --- activity-log + query rule shapes (actions.actionGroups) ---
+    def test_activity_alert_actiongroup_repoint(self):
+        d = self._cmp(self.AL,
+                      {"actions": {"actionGroups": [{"actionGroupId": self.RID_AG}]}},
+                      {"actions": {"actionGroups": [{"actionGroupId": self.LIVE_AG2}]}})
+        self.assertIn("properties.actions.actionGroups", d)
+        self.assertEqual(d["properties.actions.actionGroups"].severity, "critical")
+
+    def test_query_rule_bare_actiongroup_repoint(self):
+        d = self._cmp(self.QR,
+                      {"actions": {"actionGroups": [self.RID_AG]}},
+                      {"actions": {"actionGroups": [self.LIVE_AG2]}})
+        self.assertIn("properties.actions.actionGroups", d)
+
+    def test_query_rule_bare_actiongroup_clean(self):
+        d = self._cmp(self.QR,
+                      {"actions": {"actionGroups": [self.RID_AG]}},
+                      {"actions": {"actionGroups": [self.LIVE_AG]}})
+        self.assertNotIn("properties.actions.actionGroups", d)
+
+    # --- linkage severity substrings must not leak to other resource types ---
+    def test_actions_substring_not_elevated_on_other_type(self):
+        # A property containing 'actions' on a non-alert type must stay non-critical.
+        bicep = {"type": "Microsoft.Logic/workflows",
+                 "properties": {"definitionActions": ["a"]}}
+        live = {"type": "Microsoft.Logic/workflows",
+                "properties": {"definitionActions": []}}
+        d = diffs_by_path(PropertyComparator.compare_properties(bicep, live))
+        for v in d.values():
+            self.assertNotEqual(v.severity, "critical")
+
+
 if __name__ == "__main__":
     unittest.main()
