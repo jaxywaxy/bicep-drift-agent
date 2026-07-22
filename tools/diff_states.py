@@ -224,6 +224,25 @@ def filter_unmanaged_live_resources(normalized_live: list[dict], filtered_arm: l
             and (r.get("name") or "").split("/")[-1].lower() == "default"
         )
     ]
+    # Recovery Services vault backup POLICIES: every vault ships built-in defaults
+    # (DefaultPolicy, EnhancedPolicy, HourlyLogBackup) even with no protected
+    # items - same story as storage `default` containers and SQL `master`. Drop
+    # live policies the template doesn't declare so they aren't false extras; a
+    # DECLARED policy (matched by leaf name) keeps its row and property-compares
+    # its retention/schedule. Trade-off (as with the above): an out-of-band policy
+    # the template never declared is not surfaced.
+    declared_backup_policies = {
+        (r.get("name") or "").split("/")[-1].lower()
+        for r in filtered_arm
+        if (r.get("type") or "").lower() == "microsoft.recoveryservices/vaults/backuppolicies"
+    }
+    result = [
+        r for r in result
+        if not (
+            (r.get("type") or "").lower() == "microsoft.recoveryservices/vaults/backuppolicies"
+            and (r.get("name") or "").split("/")[-1].lower() not in declared_backup_policies
+        )
+    ]
     return result
 
 
