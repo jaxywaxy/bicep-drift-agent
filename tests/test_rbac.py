@@ -293,3 +293,62 @@ class NotificationDetailTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RuntimePrincipalPreferenceTests(unittest.TestCase):
+    """A bicep role assignment whose principalId is a runtime expression
+    (reference(<identity>).outputs.principalId) can only match by role GUID.
+    When an orphaned assignment to the same role exists - a prior deploy's
+    identity, since deleted - Pass 2 must prefer the CURRENTLY-deployed
+    identity's assignment, so the declared grant matches and the orphan flags,
+    not the reverse (a false positive seen live on the Monitoring Reader grant).
+    """
+
+    MON_READER = "43d0d8ad-25c7-4714-9337-8ba259a9fe05"
+    DEPLOYED = "4968cb6f-660a-4417-815c-a18971ea52f1"
+    ORPHAN = "c0630203-1b63-4b51-ba40-3d2d42c32bdc"
+    RG = f"/subscriptions/{SUB}/resourcegroups/rg-drift-test"
+
+    def _bicep_runtime(self):
+        # principalId is an unresolved module output; role id resolves to a GUID.
+        return [bicep_assignment(
+            f"subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '{self.MON_READER}')",
+            "reference(resourceId('Microsoft.Resources/deployments', 'deploy-identity'), "
+            "'2025-04-01').outputs.principalId.value",
+        )]
+
+    def test_prefers_deployed_identity_flags_orphan(self):
+        azure = [live(self.MON_READER, self.ORPHAN, self.RG, name="orphan"),
+                 live(self.MON_READER, self.DEPLOYED, self.RG, name="declared")]
+        drifts = compare_role_assignments(
+            self._bicep_runtime(), azure, deployed_principals={self.DEPLOYED},
+        )
+        self.assertEqual(len(drifts), 1)
+        self.assertEqual(drifts[0]["drift_type"], "extra_in_azure")
+        self.assertEqual(drifts[0]["details"]["principal_id"], self.ORPHAN)
+
+    def test_declared_grant_alone_is_clean(self):
+        azure = [live(self.MON_READER, self.DEPLOYED, self.RG)]
+        drifts = compare_role_assignments(
+            self._bicep_runtime(), azure, deployed_principals={self.DEPLOYED},
+        )
+        self.assertEqual(drifts, [])
+
+    def test_without_hint_falls_back_to_role_only(self):
+        # No deployed-principal set: still matches ONE (best-effort), never both.
+        azure = [live(self.MON_READER, self.ORPHAN, self.RG, name="a"),
+                 live(self.MON_READER, self.DEPLOYED, self.RG, name="b")]
+        drifts = compare_role_assignments(self._bicep_runtime(), azure)
+        self.assertEqual(len(drifts), 1)
+
+    def test_collect_managed_identity_principals(self):
+        from tools.rbac import collect_managed_identity_principals
+        live_resources = [
+            {"type": "microsoft.managedidentity/userassignedidentities",
+             "name": "id-x", "properties": {"principalId": self.DEPLOYED.upper()}},
+            {"type": "microsoft.storage/storageaccounts", "name": "st",
+             "identity": {"principalId": "AAAA-SYS"}, "properties": {}},
+        ]
+        got = collect_managed_identity_principals(live_resources)
+        self.assertIn(self.DEPLOYED, got)          # lowercased
+        self.assertIn("aaaa-sys", got)             # system-assigned too
