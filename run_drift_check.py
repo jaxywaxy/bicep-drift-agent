@@ -29,7 +29,12 @@ from tools.get_live_state import (
 )
 from tools.diff_states import diff_states, format_drift_report, ResourceDrift
 from tools.ignore_patterns import IgnorePatternList
-from tools.rbac import fetch_role_assignments, compare_role_assignments, rbac_enabled
+from tools.rbac import (
+    fetch_role_assignments,
+    compare_role_assignments,
+    collect_managed_identity_principals,
+    rbac_enabled,
+)
 from tools.policy import fetch_policy_resources, compare_policy_resources, policy_drift_enabled
 from tools.deployment_stacks import (
     annotate_stack_ownership,
@@ -199,7 +204,10 @@ def run(bicep_file: str, resource_group: str):
                 resource_group=resource_group,
                 scope=deployment_scope if deployment_scope == "subscription" else "resource_group",
             )
-            rbac_drift_dicts = compare_role_assignments(arm_resources, live_assignments)
+            rbac_drift_dicts = compare_role_assignments(
+                arm_resources, live_assignments,
+                deployed_principals=collect_managed_identity_principals(live_resources),
+            )
             if ignore_patterns.patterns and rbac_drift_dicts:
                 rbac_drift_dicts, ignored = ignore_patterns.filter_drifts(rbac_drift_dicts)
                 if ignored:

@@ -242,21 +242,54 @@ def extract_bicep_role_assignments(arm_resources: List[Dict]) -> Tuple[List[Dict
     return extracted, skipped
 
 
+def collect_managed_identity_principals(live_resources: Optional[List[Dict]]) -> set:
+    """principalIds of managed identities this estate currently deploys.
+
+    A role assignment declared in bicep for a deployed identity carries that
+    identity's principalId as a RUNTIME expression
+    (reference(...).outputs.principalId), unknown at compile time, so it can only
+    match live by role GUID. When an orphaned assignment to the same role also
+    exists - a prior deploy cycle's identity, since deleted - role-only matching
+    is first-come-first-served and may consume the orphan while flagging the
+    real, current grant (a false positive seen live). Knowing which live
+    principals belong to CURRENTLY-deployed identities lets Pass 2 prefer the
+    real one, so the declared grant matches and only true orphans surface.
+    """
+    ids: set = set()
+    for r in (live_resources or []):
+        rtype = (r.get("type") or "").lower()
+        props = r.get("properties") or {}
+        if rtype == "microsoft.managedidentity/userassignedidentities":
+            pid = props.get("principalId")
+            if pid:
+                ids.add(str(pid).lower())
+        # System-assigned identities carry their principalId under identity.*
+        ident = r.get("identity")
+        if isinstance(ident, dict) and ident.get("principalId"):
+            ids.add(str(ident["principalId"]).lower())
+    return ids
+
+
 def compare_role_assignments(
     arm_resources: List[Dict],
     live_assignments: List[Dict],
+    deployed_principals: Optional[set] = None,
 ) -> List[Dict]:
     """Match bicep assignments to live ones by identity; emit drift dicts.
 
     Matching order (each live assignment is consumed at most once):
       1. exact (role GUID, principalId) - bicep principal resolved to a literal.
       2. role GUID only - bicep principal is a runtime expression (a deployed
-         identity's principalId); any remaining live assignment with that role
-         is accepted as the counterpart, best-effort like smart_matching.
+         identity's principalId). Among live assignments with that role, PREFER
+         one whose principal is a currently-deployed identity
+         (``deployed_principals``) over an orphaned assignment to a deleted
+         principal, so the declared grant matches and the orphan is flagged -
+         not the other way round.
 
     Unmatched live -> extra_in_azure (with who/when/role in details).
     Unmatched bicep -> missing_in_azure.
     """
+    deployed_principals = deployed_principals or set()
     bicep, skipped = extract_bicep_role_assignments(arm_resources)
     if skipped:
         logger.info(f"RBAC: skipped {skipped} bicep assignment(s) with unresolvable role ids")
@@ -282,9 +315,18 @@ def compare_role_assignments(
         else:
             deferred.append(b)
 
-    # Pass 2: role-only matches for runtime principals
+    # Pass 2: role-only matches for runtime principals. Prefer a live assignment
+    # whose principal is a currently-deployed identity before falling back to
+    # any assignment with the role (see collect_managed_identity_principals).
     for b in deferred:
-        hit = next((a for a in remaining if a["role_guid"] == b["role_guid"]), None)
+        hit = next(
+            (a for a in remaining
+             if a["role_guid"] == b["role_guid"]
+             and str(a.get("principal_id") or "").lower() in deployed_principals),
+            None,
+        )
+        if hit is None:
+            hit = next((a for a in remaining if a["role_guid"] == b["role_guid"]), None)
         if hit:
             remaining.remove(hit)
         else:
