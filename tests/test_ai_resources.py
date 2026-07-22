@@ -269,6 +269,31 @@ class FirstContactNoiseTests(unittest.TestCase):
         drifts = diff_states([], live)
         self.assertEqual([d for d in drifts if "master" in d.resource_name], [])
 
+    def test_default_storage_service_containers_are_not_extra(self):
+        # blob/file/queue/table 'default' services are auto-created for every
+        # storage account; undeclared ones must not be false extras.
+        from tools.diff_states import diff_states
+        live = [
+            {"type": "Microsoft.Storage/storageAccounts/blobServices", "name": "st1/default",
+             "location": None, "properties": {}},
+            {"type": "Microsoft.Storage/storageAccounts/fileServices", "name": "st1/default",
+             "location": None, "properties": {}},
+        ]
+        drifts = diff_states([], live)
+        self.assertEqual([d for d in drifts if d.drift_type == "extra_in_azure"], [])
+
+    def test_declared_blob_service_still_compares(self):
+        # A template that DOES declare blobServices/default keeps its row so a
+        # real change (e.g. delete-retention) still surfaces.
+        from tools.diff_states import filter_unmanaged_live_resources
+        bicep = [{"type": "Microsoft.Storage/storageAccounts/blobServices", "name": "st1/default"}]
+        live = [{"type": "Microsoft.Storage/storageAccounts/blobServices", "name": "st1/default"},
+                {"type": "Microsoft.Storage/storageAccounts/fileServices", "name": "st1/default"}]
+        kept = filter_unmanaged_live_resources(live, bicep)
+        kept_types = {(r["type"]).lower() for r in kept}
+        self.assertIn("microsoft.storage/storageaccounts/blobservices", kept_types)
+        self.assertNotIn("microsoft.storage/storageaccounts/fileservices", kept_types)
+
     def test_already_qualified_and_top_level_names_untouched(self):
         rows = [
             {"type": "Microsoft.Sql/servers/databases", "name": "sqldrift1/driftdb",

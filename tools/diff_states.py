@@ -199,6 +199,31 @@ def filter_unmanaged_live_resources(normalized_live: list[dict], filtered_arm: l
             and (r.get("name") or "").split("/")[-1].lower() not in declared_config_leaves
         )
     ]
+    # Storage service containers (blob/file/queue/table) named 'default' are
+    # auto-created for every storage account whether or not the template declares
+    # them - same story as SQL `master` and App Service config/web above. Drop
+    # the undeclared ones so they aren't false extras; a template that DOES
+    # declare one (e.g. blobServices/default for versioning/retention) keeps its
+    # row and still property-compares. Scoped to the 'default' leaf: a named
+    # container/share is a first-class declared resource, not an implicit child.
+    storage_service_types = {
+        "microsoft.storage/storageaccounts/blobservices",
+        "microsoft.storage/storageaccounts/fileservices",
+        "microsoft.storage/storageaccounts/queueservices",
+        "microsoft.storage/storageaccounts/tableservices",
+    }
+    declared_storage_services = {
+        (r.get("type") or "").lower()
+        for r in filtered_arm
+        if (r.get("type") or "").lower() in storage_service_types
+    }
+    result = [
+        r for r in result
+        if not (
+            (r.get("type") or "").lower() in (storage_service_types - declared_storage_services)
+            and (r.get("name") or "").split("/")[-1].lower() == "default"
+        )
+    ]
     return result
 
 
