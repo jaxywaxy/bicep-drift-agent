@@ -304,6 +304,25 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Redis 
 - Recovery Services Vault
 
+### Recovery Services vault backup config
+
+`vaults/backupconfig` is not indexed by Resource Graph, so it is fetched via ARM
+REST and compared as `{vault}/vaultconfig`. `softDeleteFeatureState` and
+`enhancedSecurityState` are rated **critical**: disabling soft delete lets
+backups be purged immediately, and the change is silent until a restore is
+needed.
+
+**Caveat — reachability.** This drift is really only reachable on vaults
+*without* enhanced security. When enhanced security is Enabled, Azure locks soft
+delete to AlwaysON and rejects any disable request
+(`BMSUserErrorDisablingSoftDeleteStateNotAllowed`), so the out-of-band flip
+cannot occur on a hardened vault — the detector still confirms the hardened
+posture, but there is no weakening to catch there.
+
+Backup **policy** schedule/retention drift is not yet covered: every vault ships
+built-in default policies that would need selective name-matching to avoid
+`extra_in_azure` noise. That is a later increment.
+
 
 ---
 
