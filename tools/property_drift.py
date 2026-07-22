@@ -501,6 +501,13 @@ class PropertyComparator:
         "properties.accesspolicies",
         "properties.enablerbacauthorization",
         "properties.publicnetworkaccess",
+        # Recovery Services vault backup controls (backupconfig). Disabling soft
+        # delete lets backups be deleted immediately; weakening enhanced security
+        # removes MUA/critical-operation protection. Both are silent until you
+        # need a restore. Substrings are unique to vaults/backupconfig.
+        "properties.softdeletefeaturestate",
+        "properties.softdeletestate",
+        "properties.enhancedsecuritystate",
         # Credential / anonymous-access exposure (ACR admin account, anonymous
         # pull, storage public blobs, key-based auth left enabled).
         "properties.adminuserenabled",
