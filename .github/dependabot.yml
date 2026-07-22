@@ -8,6 +8,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Wait 7 days after a release before opening a PR for it, so a freshly
+    # published (possibly compromised or broken) version has time to be caught
+    # and pulled before we adopt it.
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -17,6 +22,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     groups:
       python:
         patterns: ["*"]
