@@ -994,6 +994,18 @@ _CHILD_EXPANSION_SPECS = [
     # undetected.
     ("microsoft.network/firewallpolicies", "ruleCollectionGroups",
      "2023-09-01", "Microsoft.Network/firewallPolicies/ruleCollectionGroups", None),
+    # Virtual Hub routing. The virtualHubs row itself is a base Resource Graph
+    # row, but its routing lives in children that Resource Graph does not index.
+    # routingIntent is the security control - its routingPolicies force
+    # Internet/PrivateTraffic to the Azure Firewall next hop; remove or repoint
+    # it and spoke traffic silently bypasses inspection. hubRouteTables carry the
+    # explicit routes (nextHop/destinations). Without expansion a declared route
+    # table / routing intent false-flags missing_in_azure and an out-of-band
+    # bypass goes undetected.
+    ("microsoft.network/virtualhubs", "routingIntent",
+     "2023-09-01", "Microsoft.Network/virtualHubs/routingIntent", None),
+    ("microsoft.network/virtualhubs", "hubRouteTables",
+     "2023-09-01", "Microsoft.Network/virtualHubs/hubRouteTables", None),
 ]
 
 # Record sets list with their concrete type in the response (…/dnszones/A etc.);

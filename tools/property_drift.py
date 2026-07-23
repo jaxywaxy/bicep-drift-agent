@@ -538,8 +538,17 @@ class PropertyComparator:
         # Network security: NSG rule tampering (an out-of-band allow-any
         # inbound rule) and route changes (next hop flipped off the firewall
         # appliance = inspection bypass) are the classic unauthorized changes.
+        # properties.routes also covers Virtual Hub route tables
+        # (virtualHubs/hubRouteTables), whose routes carry the same nextHop.
         "properties.securityrules",
         "properties.routes",
+        # Virtual Hub routing intent: routingPolicies force Internet/Private
+        # traffic to the Azure Firewall (or NVA) next hop. Repointing the nextHop
+        # off the firewall, or narrowing destinations, silently drops spoke
+        # traffic out of inspection while the hub still reads healthy - the vWAN
+        # equivalent of a route-table bypass. Only virtualHubs/routingIntent
+        # carries this path.
+        "properties.routingpolicies",
         # Workload-identity federation trust boundary: repointing a federated
         # credential's subject or issuer lets a DIFFERENT external repo/branch/
         # IdP mint tokens as this managed identity - a persistence / supply-
