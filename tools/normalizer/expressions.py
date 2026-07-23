@@ -1,38 +1,19 @@
 """
-tools/normalizer.py
+tools/normalizer/expressions.py
 
-Normalizes ARM template and live Azure resources to a common shape.
-Handles ARM expression resolution and flattening nested resources.
+ARM-expression resolver. Handles [parameters('x')], [variables('x')],
+[format(...)], [concat(...)], [resourceId(...)], boolean and/or/not,
+and best-effort evaluation of a handful of ARM string functions.
+
+Unresolvable expressions are returned with a best-effort simplification so
+smart matching downstream can still recover the resource.
 """
 
+import hashlib
 import json
 import re
-from typing import Any
 
-
-def extract_parameters(arm_template: dict) -> dict:
-    """
-    Extract parameters and their default values from an ARM template.
-
-    Args:
-        arm_template: Parsed ARM template dict
-
-    Returns:
-        Dict mapping parameter name -> default value
-        e.g. {'vmName': 'my-vm', 'location': 'australiaeast'}
-    """
-    params = {}
-    template_params = arm_template.get("parameters", {})
-
-    for param_name, param_def in template_params.items():
-        # Use default value if provided
-        if "defaultValue" in param_def:
-            params[param_name] = param_def["defaultValue"]
-        # Otherwise mark as unknown (will leave expressions unresolved)
-        else:
-            params[param_name] = None
-
-    return params
+_EMBEDDED_REF_RE = re.compile(r"\b(variables|parameters)\(\s*'([^']+)'\s*\)")
 
 
 def _eval_embedded_formats(s: str, parameters: dict, variables: dict) -> str:
@@ -100,27 +81,18 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
     where arguments can be nested function calls. Properly handles escaped quotes
     in template strings (e.g., format('it\'s a name', arg)).
 
-    Args:
-        call_str: The function call string without outer brackets
-        parameters: Available parameters dict
-        variables: Available variables dict
-
     Returns:
         Tuple (template_string, [resolved_args]) or (None, []) if parse fails
     """
-    # Extract everything after 'format('
     if not call_str.startswith("format"):
         return None, []
 
-    # Find opening paren
     paren_idx = call_str.find("(")
     if paren_idx == -1 or paren_idx + 1 >= len(call_str):
         return None, []
 
-    # Extract content after 'format('
     content = call_str[paren_idx + 1:].strip()
 
-    # Parse the template string, handling escaped quotes
     if not content.startswith("'"):
         return None, []
 
@@ -129,42 +101,31 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
     while i < len(content):
         char = content[i]
         if char == "\\" and i + 1 < len(content):
-            # Escape sequence - include both backslash and next char
             template += char + content[i + 1]
             i += 2
         elif char == "'":
-            # Found closing quote of template
             break
         else:
             template += char
             i += 1
     else:
-        # Didn't find closing quote
         return None, []
 
-    # Extract arguments part (everything after closing quote)
     args_part = content[i + 1:].strip()
+    args_part = args_part.removesuffix(")")
 
-    # Remove trailing closing paren
-    if args_part.endswith(")"):
-        args_part = args_part[:-1]
-
-    # Parse arguments (separated by comma at the top level)
     args = []
     if args_part:
         args = _split_function_arguments(args_part)
 
-        # Resolve each argument
         resolved_args = []
         for arg in args:
             arg = arg.strip()
             if not arg:
                 continue
 
-            # Try to resolve if it's an expression with brackets
             if arg.startswith("[") and arg.endswith("]"):
                 arg = resolve_expression(arg, parameters, variables)
-            # Handle bare parameters() or variables() calls (no brackets)
             elif arg.startswith("parameters("):
                 param_match = re.match(r"parameters\s*\(\s*'([^']+)'\s*\)", arg)
                 if param_match:
@@ -178,7 +139,6 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
                     if var_name in variables:
                         arg = str(variables[var_name])
             elif "(" in arg and ")" in arg:
-                # It's a function call - try to resolve it
                 arg = _resolve_function_call(arg, parameters, variables)
             elif len(arg) >= 2 and arg.startswith("'") and arg.endswith("'"):
                 # Plain string literal: strip the ARM quotes. Otherwise a child
@@ -195,15 +155,7 @@ def _parse_format_call(call_str: str, parameters: dict, variables: dict) -> tupl
 
 
 def _split_function_arguments(args_str: str) -> list:
-    """
-    Split function arguments by comma, respecting nested parentheses and quotes.
-
-    Args:
-        args_str: String like ", arg1, arg2, arg3"
-
-    Returns:
-        List of argument strings
-    """
+    """Split function arguments by comma, respecting nested parentheses and quotes."""
     args = []
     current = ""
     depth = 0
@@ -234,7 +186,6 @@ def _split_function_arguments(args_str: str) -> list:
             depth -= 1
             current += char
         elif char == "," and depth == 0 and not in_quote:
-            # End of this argument
             arg = current.strip()
             if arg and arg != ",":
                 args.append(arg)
@@ -242,7 +193,6 @@ def _split_function_arguments(args_str: str) -> list:
         else:
             current += char
 
-    # Don't forget the last argument
     if current.strip():
         args.append(current.strip())
 
@@ -303,12 +253,10 @@ def _resolve_boolean(inner: str, parameters: dict, variables: dict):
 
 
 def _resolve_concat(concat_expr: str, parameters: dict, variables: dict) -> str:
-    """
-    Resolve [concat(...)] expressions from Bicep string interpolation.
+    """Resolve [concat(...)] expressions from Bicep string interpolation.
 
     Example: [concat('st', parameters('environment'), 'drift', variables('uniqueSuffix'))]
     """
-    # Extract arguments from concat(arg1, arg2, ...)
     match = re.match(r"concat\s*\((.*)\)", concat_expr)
     if not match:
         return concat_expr
@@ -319,7 +267,6 @@ def _resolve_concat(concat_expr: str, parameters: dict, variables: dict) -> str:
     result = ""
     for arg in args:
         arg = arg.strip().strip("'\"")
-        # Check if it's a parameter reference
         if arg.startswith("parameters("):
             param_match = re.match(r"parameters\s*\(\s*'([^']+)'\s*\)", arg)
             if param_match:
@@ -327,7 +274,6 @@ def _resolve_concat(concat_expr: str, parameters: dict, variables: dict) -> str:
                 if param_name in parameters:
                     result += str(parameters[param_name])
                     continue
-        # Check if it's a variable reference
         elif arg.startswith("variables("):
             var_match = re.match(r"variables\s*\(\s*'([^']+)'\s*\)", arg)
             if var_match:
@@ -335,23 +281,16 @@ def _resolve_concat(concat_expr: str, parameters: dict, variables: dict) -> str:
                 if var_name in variables:
                     result += str(variables[var_name])
                     continue
-        # Plain string literal
         result += arg
 
     return result if result else concat_expr
 
 
 def _resolve_resource_id(resource_id_expr: str, parameters: dict, variables: dict) -> str:
-    """
-    Resolve [resourceId(...)] expressions.
-
-    Examples:
-    - resourceId('Microsoft.Web/serverfarms', 'asp-test-drift')
-    - resourceId('Microsoft.Web/serverfarms', format('asp-{0}-drift', parameters('environment')))
+    """Resolve [resourceId(...)] expressions.
 
     Returns a formatted representation showing the resource type and name.
     """
-    # Extract arguments from resourceId(arg1, arg2, ...)
     match = re.match(r"resourceId\s*\((.*)\)", resource_id_expr)
     if not match:
         return "resourceId-unresolved"
@@ -362,14 +301,11 @@ def _resolve_resource_id(resource_id_expr: str, parameters: dict, variables: dic
     if len(args) < 2:
         return "resourceId-unresolved"
 
-    # First arg is resource type
     resource_type = args[0].strip().strip("'\"")
 
-    # Second arg is the name (might be an expression)
     name_expr = args[1].strip()
     name = name_expr.strip("'\"")
 
-    # If it's a function call in the name, try to resolve it
     if name.startswith("format(") or name.startswith("parameters(") or name.startswith("variables("):
         if name.startswith("format("):
             template, template_args = _parse_format_call(name, parameters, variables)
@@ -391,30 +327,19 @@ def _resolve_resource_id(resource_id_expr: str, parameters: dict, variables: dic
                 if var_name in variables:
                     name = str(variables[var_name])
 
-    # Return a readable representation
     return f"resourceId('{resource_type}', '{name}')"
 
 
 def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
-    """
-    Resolve simple function calls like uniqueString(), copyIndex(), etc.
+    """Resolve simple function calls like uniqueString(), copyIndex(), etc.
 
-    Most of these can't be resolved without runtime context, but we can
-    at least extract the essence.
-
-    Args:
-        call: Function call string like "uniqueString(something)"
-        parameters: Available parameters
-        variables: Available variables
-
-    Returns:
-        Best-effort resolved string or the call as-is
+    Most of these can't be resolved without runtime context, but we can at
+    least extract the essence.
     """
     call = call.strip()
 
     # uniqueString() — can't resolve at compile time, generate a consistent placeholder
     if call.startswith("uniqueString"):
-        import hashlib
         hash_val = hashlib.md5(call.encode()).hexdigest()[:8]
         return f"[{hash_val}]"
 
@@ -441,50 +366,17 @@ def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
         match = re.match(r"last\s*\(\s*([^)]+)\)", call)
         if match:
             arg = match.group(1).strip()
-            # If it's a split() call, extract the string being split
             if "split" in arg:
                 split_match = re.match(r"split\s*\(\s*([^,]+),", arg)
                 if split_match:
                     str_arg = split_match.group(1).strip()
                     return _resolve_function_call(str_arg, parameters, variables)
 
-    # Default: return the call as-is (can't resolve)
     return call
 
 
-def extract_variables(arm_template: dict, parameters: dict = None) -> dict:
-    """
-    Extract variables and their values from an ARM template.
-
-    Recursively resolves variable expressions that reference parameters.
-
-    Args:
-        arm_template: Parsed ARM template dict
-        parameters: Optional parameters dict for resolving variable expressions
-
-    Returns:
-        Dict mapping variable name -> value
-    """
-    if parameters is None:
-        parameters = extract_parameters(arm_template)
-
-    variables = {}
-    template_vars = arm_template.get("variables", {})
-
-    if isinstance(template_vars, dict):
-        for var_name, var_value in template_vars.items():
-            # If the variable value is an expression string, resolve it
-            if isinstance(var_value, str) and (var_value.startswith("[") and var_value.endswith("]")):
-                variables[var_name] = resolve_expression(var_value, parameters, {})
-            else:
-                variables[var_name] = var_value
-
-    return variables
-
-
 def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> str:
-    """
-    Resolve ARM expressions to actual values.
+    """Resolve ARM expressions to actual values.
 
     Currently handles:
     - [parameters('name')] -> parameter value
@@ -493,14 +385,6 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     - [deployment().location] -> 'deployment-location' (placeholder)
 
     Unresolvable expressions are returned with a best-effort simplification.
-
-    Args:
-        expr: Expression string like "[parameters('vmName')]"
-        parameters: Dict of {param_name: value}
-        variables: Dict of {var_name: value}
-
-    Returns:
-        Resolved value or expression name if unresolvable
     """
     if not expr or not isinstance(expr, str):
         return expr
@@ -513,17 +397,13 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     # Handle embedded expressions like "prefix[uniqueString(...)]"
     # This pattern appears when Bicep compiler outputs partially-resolved names
     if "[" in expr and "]" in expr and not (expr.startswith("[") and expr.endswith("]")):
-        # Extract the bracketed part and resolve it
         match = re.search(r"\[([^\[\]]+)\]", expr)
         if match:
             inner_expr = match.group(1)
             prefix = expr[:match.start()]
             suffix = expr[match.end():]
 
-            # Resolve the inner expression
             if inner_expr.startswith("uniqueString"):
-                # uniqueString can't be resolved at compile time, generate a placeholder
-                import hashlib
                 hash_val = hashlib.md5(inner_expr.encode()).hexdigest()[:8]
                 resolved = f"[{hash_val}]"
             elif inner_expr.startswith("format"):
@@ -535,7 +415,6 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
                 else:
                     resolved = f"[{inner_expr}]"
             else:
-                # Try to resolve as a general expression
                 resolved = resolve_expression(f"[{inner_expr}]", parameters, variables)
 
             return prefix + resolved + suffix
@@ -545,7 +424,6 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     if not expr.startswith("[") or not expr.endswith("]"):
         return expr
 
-    # Strip outer brackets
     inner = expr[1:-1].strip()
 
     # Handle [parameters('name')] expressions. When the WHOLE expression is a
@@ -558,7 +436,6 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
         param_name = param_match.group(1)
         if param_name in parameters and parameters[param_name] is not None:
             return parameters[param_name]
-        # Unresolved parameter — return the name as fallback
         return param_name
 
     # Handle [variables('name')] expressions (same: return value as-is)
@@ -569,13 +446,10 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
             return variables[var_name]
         return var_name
 
-    # Handle [concat(...)] expressions (from Bicep string interpolation)
     if inner.startswith("concat"):
         return _resolve_concat(inner, parameters, variables)
 
-    # Handle [format('template', arg1, arg2, ...)]
     if inner.startswith("format"):
-        # Extract template string and arguments
         template, args = _parse_format_call(inner, parameters, variables)
         if template is not None:
             result = template
@@ -583,11 +457,9 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
                 result = result.replace(f"{{{i}}}", str(arg))
             return result
 
-    # Handle [deployment().location] — we can't resolve this without runtime context
     if "deployment()" in inner and "location" in inner:
         return "deployment-location"
 
-    # Handle [subscription().tenantId] and [subscription().subscriptionId]
     if "subscription()" in inner:
         if "tenantId" in inner:
             return "subscription-tenant-id"
@@ -596,7 +468,6 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
         else:
             return "subscription-context"
 
-    # Handle [resourceId(...)] expressions
     if inner.startswith("resourceId"):
         return _resolve_resource_id(inner, parameters, variables)
 
@@ -616,7 +487,7 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     # Boolean logic in conditions: and()/or()/not(). Resolve when the arguments
     # reduce to booleans, so a compound resource gate resolves to a definitive
     # True/False instead of staying unresolvable (which conservatively keeps a
-    # gated-off resource and false-flags it as missing_in_azure). See _resolve_boolean.
+    # gated-off resource and false-flags it as missing_in_azure).
     bool_result = _resolve_boolean(inner, parameters, variables)
     if bool_result is not None:
         return bool_result
@@ -628,9 +499,6 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     # keeps its GUID literal, so policy.py can match it (otherwise the GUID stays
     # hidden behind variables(...) and the assignment is skipped -> false extra).
     return _eval_embedded_refs(inner, parameters, variables)
-
-
-_EMBEDDED_REF_RE = re.compile(r"\b(variables|parameters)\(\s*'([^']+)'\s*\)")
 
 
 def _eval_embedded_refs(s: str, parameters: dict, variables: dict) -> str:
@@ -651,253 +519,3 @@ def _eval_embedded_refs(s: str, parameters: dict, variables: dict) -> str:
         return m.group(0)  # unresolved / non-scalar — leave intact
 
     return _EMBEDDED_REF_RE.sub(_sub, s)
-
-
-def flatten_resources(arm_template: dict, parameters: dict = None, variables: dict = None) -> list[dict]:
-    """
-    Flatten ARM template resources, handling nested deployments and copy loops.
-
-    For Phase 1, we:
-    - Extract top-level resources
-    - Recursively flatten nested deployments
-    - Resolve expression-based names using parameters and variables
-
-    Args:
-        arm_template: Parsed ARM template
-        parameters: Resolved parameters dict (from extract_parameters)
-        variables: Resolved variables dict (from extract_variables)
-
-    Returns:
-        Flat list of normalized resources
-    """
-    if parameters is None:
-        parameters = extract_parameters(arm_template)
-    if variables is None:
-        variables = extract_variables(arm_template)
-
-    flattened = []
-    resources = arm_template.get("resources", [])
-
-    # Handle both array format [{}] and dict format {name: {}}
-    resource_list = []
-    if isinstance(resources, dict):
-        resource_list = list(resources.values())
-    elif isinstance(resources, list):
-        resource_list = resources
-    else:
-        resource_list = []
-
-    for resource in resource_list:
-        # Skip non-dict resources (can happen with copy loops, etc.)
-        if not isinstance(resource, dict):
-            continue
-
-        resource_type = resource.get("type", "")
-
-        # Skip infrastructure resources (not drift-checked)
-        if resource_type == "Microsoft.Resources/resourceGroups":
-            continue
-
-        # Conditional resources: a module/resource gated behind `if (...)` whose
-        # condition resolves to false is NOT deployed - comparing it would flag
-        # every gated-off module as missing_in_azure. Only a condition that
-        # resolves to a definitive false skips; an unresolvable expression keeps
-        # the resource (conservative - matches previous behavior).
-        condition = resource.get("condition")
-        if condition is not None:
-            resolved = _resolve_value(condition, parameters, variables)
-            if resolved is False or (isinstance(resolved, str) and resolved.lower() == "false"):
-                continue
-
-        # Handle nested deployments separately — extract their resources, don't add the deployment itself
-        if resource_type == "Microsoft.Resources/deployments":
-            nested_template = resource.get("properties", {}).get("template", {})
-            if nested_template:
-                # Start from the nested template's own parameter DEFAULTS, then
-                # overlay what the parent passes. A module param the parent omits
-                # (e.g. postgres adminUsername defaulting to 'pgadmin') otherwise
-                # never resolves and falls back to its NAME, flagging false
-                # property drift against the live value.
-                nested_params = extract_parameters(nested_template)
-                passed_params = _extract_nested_parameters(
-                    resource.get("properties", {}), parameters, variables
-                )
-                for pname, pval in passed_params.items():
-                    if pval is not None:
-                        nested_params[pname] = pval
-                    else:
-                        nested_params.setdefault(pname, None)
-                # Resolve the module's variables against the params the PARENT
-                # passed, not just the module's own defaults. A module variable
-                # built from a required param with no default (e.g.
-                # 'driftAppPlan${suffix}', suffix passed from a parent
-                # uniqueString) otherwise resolves against suffix=None and bakes
-                # in the literal 'driftAppPlanNone', which then false-flags as a
-                # missing/extra pair. Names wrapped in toLower() dodged this only
-                # because the resolver can't evaluate toLower and left them
-                # unresolvable; this makes the bare-format case behave the same.
-                nested_vars = extract_variables(nested_template, nested_params)
-                nested_resources = flatten_resources(nested_template, nested_params, nested_vars)
-                # Cross-scope module (scope: resourceGroup(otherSub, rg)): stamp the
-                # target so the scan can verify these resources in THEIR subscription
-                # instead of flagging them missing in the scanned one.
-                target_sub = resource.get("subscriptionId")
-                target_rg = resource.get("resourceGroup")
-                if target_sub:
-                    target_sub = _resolve_value(target_sub, parameters, variables)
-                    target_rg = _resolve_value(target_rg, parameters, variables) if target_rg else None
-                    for nr in nested_resources:
-                        nr.setdefault("_target_subscription", target_sub)
-                        if target_rg:
-                            nr.setdefault("_target_rg", target_rg)
-                flattened.extend(nested_resources)
-        else:
-            # Regular resource — normalize and add
-            normalized = _normalize_resource(resource, parameters, variables)
-            flattened.append(normalized)
-
-    return flattened
-
-
-def _resolve_value(value: Any, parameters: dict, variables: dict) -> Any:
-    """
-    Recursively resolve parameter/variable expressions in a value.
-
-    Handles strings (expressions), dicts (nested objects), and lists.
-    """
-    if isinstance(value, str):
-        return resolve_expression(value, parameters, variables)
-    elif isinstance(value, dict):
-        return {k: _resolve_value(v, parameters, variables) for k, v in value.items()}
-    elif isinstance(value, list):
-        return [_resolve_value(item, parameters, variables) for item in value]
-    else:
-        return value
-
-
-def _normalize_resource(resource: dict, parameters: dict, variables: dict = None) -> dict:
-    """
-    Normalize a single resource, resolving expression-based fields.
-
-    Args:
-        resource: ARM resource object
-        parameters: Resolved parameters dict
-        variables: Resolved variables dict
-
-    Returns:
-        Normalized resource with resolved names/locations
-    """
-    if variables is None:
-        variables = {}
-
-    normalized = {
-        "type": resource.get("type", ""),
-        "name": _eval_embedded_formats(
-            resolve_expression(resource.get("name", ""), parameters, variables),
-            parameters, variables,
-        ),
-        "location": resolve_expression(resource.get("location"), parameters, variables) or "unknown",
-        "apiVersion": resource.get("apiVersion", ""),
-        "tags": _resolve_value(resource.get("tags") or {}, parameters, variables),
-        "sku": _resolve_value(resource.get("sku"), parameters, variables),
-        "kind": resource.get("kind"),
-        # Availability zones are a TOP-LEVEL ARM key, not a property. Without
-        # carrying them here they never reach the comparator at all, so zone
-        # placement drift (a resource silently no longer zone-redundant) is
-        # invisible no matter how the comparison treats it.
-        "zones": _resolve_value(resource.get("zones"), parameters, variables),
-        "properties": _resolve_value(resource.get("properties"), parameters, variables),
-    }
-
-    # Extension resources (diagnostic settings, locks) carry the resource they
-    # attach to in 'scope' - needed to qualify their names for matching.
-    if resource.get("scope"):
-        normalized["scope"] = resolve_expression(resource.get("scope"), parameters, variables)
-
-    # Keep original resource for debugging if needed
-    normalized["_raw"] = resource
-
-    return normalized
-
-
-def _extract_nested_parameters(deployment_props: dict, parent_params: dict, parent_vars: dict = None) -> dict:
-    """
-    Extract parameters passed to a nested deployment.
-
-    Nested deployments pass parameters via properties.parameters.
-    We need to resolve those against the parent's context.
-
-    Args:
-        deployment_props: The 'properties' dict of the deployment resource
-        parent_params: Parent template's resolved parameters
-        parent_vars: Parent template's resolved variables
-
-    Returns:
-        Dict of nested parameters
-    """
-    if parent_vars is None:
-        parent_vars = {}
-
-    nested_params = {}
-    params_section = deployment_props.get("parameters", {})
-
-    for param_name, param_spec in params_section.items():
-        # param_spec can be {"value": ...} or just a value
-        if isinstance(param_spec, dict) and "value" in param_spec:
-            value = param_spec["value"]
-            # Resolve if it's an expression
-            if isinstance(value, str):
-                value = resolve_expression(value, parent_params, parent_vars)
-            nested_params[param_name] = value
-        else:
-            nested_params[param_name] = param_spec
-
-    return nested_params
-
-
-def normalize_live_resources(live_resources: list[dict]) -> list[dict]:
-    """
-    Normalize live Azure resources to match ARM template shape.
-
-    Args:
-        live_resources: Output from get_live_state()
-
-    Returns:
-        List of normalized resources
-    """
-    normalized = []
-
-    for resource in live_resources:
-        normalized_res = {
-            "type": resource.get("type", ""),
-            "name": resource.get("name", ""),
-            "location": resource.get("location", "unknown"),
-            "tags": resource.get("tags") or {},
-            "sku": resource.get("sku"),
-            "kind": resource.get("kind"),
-            "zones": resource.get("zones"),  # top-level key; see normalize side
-            "apiVersion": "",  # Not available in live state
-            "properties": resource.get("properties"),
-            "_raw": resource,
-        }
-        normalized.append(normalized_res)
-
-    return normalized
-
-
-def resource_key(resource: dict) -> tuple[str, str]:
-    """
-    Generate a stable key for resource matching.
-
-    Key is (type, name) normalized for comparison.
-
-    Args:
-        resource: Normalized resource dict
-
-    Returns:
-        Tuple (normalized_type, normalized_name)
-    """
-    res_type = resource.get("type", "").lower().strip()
-    res_name = resource.get("name", "").lower().strip()
-
-    return (res_type, res_name)
