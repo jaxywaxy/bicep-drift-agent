@@ -378,5 +378,5 @@ Landing zones can be added through configuration rather than platform code chang
 - [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) - Teams and Slack Notification configuration
 - [LANDING_ZONES_OPERATIONS.md](LANDING_ZONES_OPERATIONS.md) — Landing Zone configuration
 - [AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md) - Azure authentication configuration
-- [SECURITY_MODEL.md](SECURITY_MODEL.md) - Security 
+- [SECURITY.md](SECURITY.md) - Security 
 - [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) - Runbook for Operations team

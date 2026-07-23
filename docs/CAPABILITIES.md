@@ -4,7 +4,7 @@ This document describes the drift detection, governance, security and operationa
 
 The agent is designed for enterprise Azure environments and supports Cloud Adoption Framework (CAF) and Azure Landing Zone operating models, enabling platform and application teams to identify configuration drift, governance exceptions, unmanaged resources, and security-sensitive changes across subscriptions, resource groups, and landing zones.
 
-Use this document to understand what the agent can detect, how findings are classified, and the level of coverage available for different Azure resource types and operating scenarios. For solution design and implementation details, see `ARCHITECTURE.md`. For onboarding and operational guidance, see `LANDING_ZONE_OPERATIONS.md`. 
+Use this document to understand what the agent can detect, how findings are classified, and the level of coverage available for different Azure resource types and operating scenarios. For solution design and implementation details, see `ARCHITECTURE.md`. For onboarding and operational guidance, see `LANDING_ZONES_OPERATIONS.md`. 
 
 ---
 
@@ -297,9 +297,6 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Federated Identity Credentials
 - Private DNS Zones
 - Service Bus Topics
-  
-## Recently Added
-
 - Load Balancers
 - Application Gateways
 - WAF Policies
@@ -389,7 +386,7 @@ do, and treating them as drift candidates adds noise without adding signal.
 **Note — hub *routing* is covered, only the connectivity gateways are not.**
 Virtual WAN, Virtual Hub, and — the security-relevant part — its route tables,
 VNet connections and **routing intent** are all fully covered (see
-[Recently Added](#recently-added)): a routing-intent policy repointed off the hub
+[Fully Validated](#fully-validated)): a routing-intent policy repointed off the hub
 firewall, or a route widened to bypass inspection, is out-of-band and carries
 security consequence, so it is detected as critical. Likewise Azure Firewall and
 Firewall Policies are covered. The exclusions above are limited to the static
