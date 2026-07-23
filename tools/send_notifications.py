@@ -9,14 +9,14 @@ Supports team-based routing to Slack/Teams with:
 """
 
 import json
+import logging
 import os
 import re
 import sys
-import logging
-from typing import Dict, List, Any
-from dataclasses import dataclass
-import urllib.request
 import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from typing import Any
 
 try:
     from .config import WEBHOOK_TIMEOUT_SECONDS
@@ -147,7 +147,7 @@ class MessageTemplate:
         else:
             self.template = self.DEFAULT_SLACK
 
-    def render(self, context: Dict[str, str]) -> str:
+    def render(self, context: dict[str, str]) -> str:
         """Render template with context variables.
 
         Args:
@@ -167,7 +167,7 @@ class MessageTemplate:
 DIGEST_MAX_LINES = 20
 
 
-def build_digest(events: List[DriftEvent], context: Dict[str, str], platform: str = "slack") -> str:
+def build_digest(events: list[DriftEvent], context: dict[str, str], platform: str = "slack") -> str:
     """One channel message per run: GitHub-summary-style drift lines + report link.
 
     Mirrors the CI job summary ([DRIFT]/[EXTRA]/[MISSING] one-liners) instead of
@@ -208,9 +208,9 @@ WEBHOOK_SECRET_PREFIX = "DRIFT_WEBHOOK_"
 _PLACEHOLDER_RE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
-def _webhook_secret_store() -> Dict[str, str]:
+def _webhook_secret_store() -> dict[str, str]:
     """Secrets available for placeholder expansion, filtered to the allowed prefix."""
-    store: Dict[str, str] = {}
+    store: dict[str, str] = {}
     blob = os.environ.get("WEBHOOK_SECRETS", "")
     if blob:
         try:
@@ -245,7 +245,7 @@ def expand_webhook_secrets(url: str) -> str:
         return url
 
     store = _webhook_secret_store()
-    unresolved: List[str] = []
+    unresolved: list[str] = []
 
     def _sub(match: "re.Match[str]") -> str:
         name = match.group(1)
@@ -274,7 +274,7 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
     generic 200 page and turns a delivery failure into a false "sent" success.
     """
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(self, req, _fp, code, msg, _headers, _newurl):
         return None  # makes urlopen raise HTTPError with the 3xx code
 
 
@@ -291,7 +291,7 @@ class NotificationRouter:
         self.legacy_slack_url = os.environ.get("SLACK_WEBHOOK_URL", "").strip()
         self.legacy_teams_url = os.environ.get("TEAMS_WEBHOOK_URL", "").strip()
 
-    def _load_team_config(self) -> Dict[str, Dict[str, Any]]:
+    def _load_team_config(self) -> dict[str, dict[str, Any]]:
         """Load team configuration from environment.
 
         Expected format in DRIFT_NOTIFICATIONS:
@@ -316,7 +316,7 @@ class NotificationRouter:
             logger.warning("Invalid DRIFT_NOTIFICATIONS JSON format")
             return {}
 
-    def send_notifications(self, events: List[DriftEvent], context: Dict[str, str]) -> bool:
+    def send_notifications(self, events: list[DriftEvent], context: dict[str, str]) -> bool:
         """Send notifications to all configured teams.
 
         Args:
@@ -363,7 +363,7 @@ class NotificationRouter:
         return all_success
 
     def _send_to_team(
-        self, team_name: str, config: Dict[str, Any], events: List[DriftEvent], context: Dict[str, str]
+        self, team_name: str, config: dict[str, Any], events: list[DriftEvent], context: dict[str, str]
     ) -> bool:
         """Send notifications to a specific team."""
         success = True
@@ -450,7 +450,7 @@ class NotificationRouter:
         return success
 
     @staticmethod
-    def _event_context(context: Dict[str, str], event: DriftEvent) -> Dict[str, str]:
+    def _event_context(context: dict[str, str], event: DriftEvent) -> dict[str, str]:
         """Merge the shared template context with a single event's fields."""
         return {
             **context,
@@ -545,7 +545,7 @@ _DRIFT_TYPE_TO_EVENT = {
 }
 
 
-def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
+def _event_from_drift(drift: dict[str, Any]) -> DriftEvent:
     """Build a DriftEvent from a JSON-report drift dict (carries owner)."""
     drift_type = drift.get("drift_type", "")
     event_type = _DRIFT_TYPE_TO_EVENT.get(drift_type, "DRIFT")
@@ -610,7 +610,7 @@ def _event_from_drift(drift: Dict[str, Any]) -> DriftEvent:
     )
 
 
-def build_team_notifications(notif_config: Any, lz_name: str) -> Dict[str, Dict[str, Any]]:
+def build_team_notifications(notif_config: Any, lz_name: str) -> dict[str, dict[str, Any]]:
     """Normalize a landing zone's ``notifications`` block into the team structure
     that DRIFT_NOTIFICATIONS expects.
 
@@ -631,7 +631,7 @@ def build_team_notifications(notif_config: Any, lz_name: str) -> Dict[str, Dict[
     return {lz_name: notif_config}
 
 
-def events_from_reports_dir(reports_dir: str) -> List[DriftEvent]:
+def events_from_reports_dir(reports_dir: str) -> list[DriftEvent]:
     """Aggregate DriftEvents from every ``*-drift.json`` report in a directory.
 
     Used by CI to notify from the owner-tagged JSON reports (one per resource
@@ -639,7 +639,7 @@ def events_from_reports_dir(reports_dir: str) -> List[DriftEvent]:
     """
     import pathlib
 
-    events: List[DriftEvent] = []
+    events: list[DriftEvent] = []
     d = pathlib.Path(reports_dir)
     if not d.is_dir():
         return events
@@ -648,7 +648,7 @@ def events_from_reports_dir(reports_dir: str) -> List[DriftEvent]:
     return events
 
 
-def events_from_report(report_path: str) -> List[DriftEvent]:
+def events_from_report(report_path: str) -> list[DriftEvent]:
     """Build DriftEvents from a JSON drift report, preserving the owner tag.
 
     This is the owner-aware path (Phase 4): unlike parse_drift_output (text),
@@ -657,7 +657,7 @@ def events_from_report(report_path: str) -> List[DriftEvent]:
     changes (report['policy_enforced_drifts']) are governance, not actionable
     drift, so they are intentionally NOT turned into notification events.
     """
-    events: List[DriftEvent] = []
+    events: list[DriftEvent] = []
     try:
         with open(report_path, encoding="utf-8") as f:
             report = json.load(f)
@@ -674,7 +674,7 @@ def events_from_report(report_path: str) -> List[DriftEvent]:
     return events
 
 
-def parse_drift_output(output_file: str) -> List[DriftEvent]:
+def parse_drift_output(output_file: str) -> list[DriftEvent]:
     """Parse drift check output to extract events.
 
     Looks for patterns like:

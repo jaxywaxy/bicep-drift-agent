@@ -52,7 +52,6 @@ Usage:
 import json
 import pathlib
 import sys
-from typing import Dict
 
 # drift_type -> GITHUB_OUTPUT key. Mirrors _print_drift_summary's [DRIFT] /
 # [EXTRA] / [MISSING] lines, which these counts replace.
@@ -63,7 +62,7 @@ COUNTED_TYPES = {
 }
 
 
-def tally_report(report: dict) -> Dict[str, int]:
+def tally_report(report: dict) -> dict[str, int]:
     """Count one loaded drift report.
 
     Split out of count_drifts so the HTML report can show the same numbers as
@@ -94,7 +93,7 @@ def tally_report(report: dict) -> Dict[str, int]:
     return counts
 
 
-def count_drifts(reports_dir: str) -> Dict[str, int]:
+def count_drifts(reports_dir: str) -> dict[str, int]:
     """Sum actionable drift across every *-drift.json in reports_dir.
 
     Raises FileNotFoundError when the directory holds no report at all: that

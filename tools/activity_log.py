@@ -8,7 +8,8 @@ policy-enforced (DINE, Modify, Remediation) or manual.
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any
+from typing import Any
+
 from azure.identity import DefaultAzureCredential
 
 try:
@@ -19,7 +20,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[str] = None) -> dict:
+def fetch_policy_principal_ids(subscription_id: str, resource_group: str | None = None) -> dict:
     """
     Return a map of managed-identity principalId -> policy display name for all
     policy assignments in the subscription.
@@ -57,7 +58,7 @@ def fetch_policy_principal_ids(subscription_id: str, resource_group: Optional[st
         return {}
 
 
-def detect_scanning_identity(credential: Optional[Any] = None) -> set:
+def detect_scanning_identity(credential: Any | None = None) -> set:
     """
     Return the identity aliases (lowercased) of the principal this scan
     authenticates as, read from the access token's own claims.
@@ -101,8 +102,8 @@ def fetch_resource_group_activity(
     subscription_id: str,
     resource_group: str,
     days: int = 30,
-    credential: Optional[Any] = None,
-) -> List[Dict[str, Any]]:
+    credential: Any | None = None,
+) -> list[dict[str, Any]]:
     """
     Fetch ALL Azure Monitor Activity Log events for a resource group, once.
 
@@ -140,10 +141,10 @@ def fetch_resource_group_activity(
 
 
 def match_activity_for_resource(
-    rg_events: List[Dict[str, Any]],
+    rg_events: list[dict[str, Any]],
     resource_id: str,
-    resource_type: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    resource_type: str | None = None,
+) -> list[dict[str, Any]]:
     """
     From a pre-fetched list of RG activity events, return the ones for a resource.
 
@@ -175,7 +176,7 @@ def match_activity_for_resource(
     return []
 
 
-def _entry_from_log(log: Any) -> Dict[str, Any]:
+def _entry_from_log(log: Any) -> dict[str, Any]:
     """Normalize an Azure Monitor activity-log record into our dict shape."""
     props = log.properties if log.properties else {}
     return {
@@ -190,7 +191,7 @@ def _entry_from_log(log: Any) -> Dict[str, Any]:
     }
 
 
-def _extract_rg_from_resource_id(resource_id: str) -> Optional[str]:
+def _extract_rg_from_resource_id(resource_id: str) -> str | None:
     """Extract the resource group name from an Azure resource ID (case-insensitive)."""
     if not resource_id:
         return None

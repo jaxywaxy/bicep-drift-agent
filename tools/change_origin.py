@@ -15,9 +15,9 @@ This classification is crucial for:
 
 import logging
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional, Dict, Any, List
 from datetime import datetime
+from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -75,12 +75,12 @@ class ResourceLifecycleEvent:
     status: str
     reason: str = ""
     origin: ChangeOrigin = ChangeOrigin.UNKNOWN
-    policy_name: Optional[str] = None
-    policy_id: Optional[str] = None
-    deployment_id: Optional[str] = None
-    modified_properties: Optional[Dict[str, Dict[str, Any]]] = None
+    policy_name: str | None = None
+    policy_id: str | None = None
+    deployment_id: str | None = None
+    modified_properties: dict[str, dict[str, Any]] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'timestamp': self.timestamp.isoformat() if self.timestamp else None,
@@ -101,15 +101,15 @@ class ResourceLifecycleEvent:
 class ResourceLifecycle:
     """Complete lifecycle history of a resource."""
     resource_id: str
-    events: List[ResourceLifecycleEvent] = field(default_factory=list)
-    created_at: Optional[datetime] = None
-    created_by: Optional[str] = None
-    deleted_at: Optional[datetime] = None
-    deleted_by: Optional[str] = None
-    last_modified_at: Optional[datetime] = None
-    last_modified_by: Optional[str] = None
+    events: list[ResourceLifecycleEvent] = field(default_factory=list)
+    created_at: datetime | None = None
+    created_by: str | None = None
+    deleted_at: datetime | None = None
+    deleted_by: str | None = None
+    last_modified_at: datetime | None = None
+    last_modified_by: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'resource_id': self.resource_id,
@@ -130,15 +130,15 @@ class ChangeOriginInfo:
     category: ChangeCategory
     severity: ChangeSeverity
     expected: bool
-    timestamp: Optional[datetime] = None
-    changed_by: Optional[str] = None
-    method: Optional[str] = None
-    policy_name: Optional[str] = None
-    policy_id: Optional[str] = None
-    modified_properties: Optional[Dict[str, Dict[str, Any]]] = None
+    timestamp: datetime | None = None
+    changed_by: str | None = None
+    method: str | None = None
+    policy_name: str | None = None
+    policy_id: str | None = None
+    modified_properties: dict[str, dict[str, Any]] | None = None
     reason: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             'origin': self.origin.value,
@@ -156,9 +156,9 @@ class ChangeOriginInfo:
 
 
 def select_relevant_activity(
-    activity_logs: Optional[List[Dict[str, Any]]],
+    activity_logs: list[dict[str, Any]] | None,
     drift_type: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Narrow a resource's Activity Log entries down to the ones that explain THIS drift.
 
@@ -176,13 +176,13 @@ def select_relevant_activity(
     drift_type = (drift_type or "").lower()
     is_missing = "missing" in drift_type or "delete" in drift_type
 
-    def op_of(entry: Dict[str, Any]) -> str:
+    def op_of(entry: dict[str, Any]) -> str:
         return (entry.get("operation") or "").lower()
 
-    def is_delete(entry: Dict[str, Any]) -> bool:
+    def is_delete(entry: dict[str, Any]) -> bool:
         return op_of(entry).endswith("/delete") or op_of(entry).endswith("delete")
 
-    def is_write(entry: Dict[str, Any]) -> bool:
+    def is_write(entry: dict[str, Any]) -> bool:
         op = op_of(entry)
         # writes/updates that mutate config; exclude reads, lists, and deletes
         return (op.endswith("/write") or "modify" in op or "update" in op
@@ -223,9 +223,9 @@ def select_relevant_activity(
 
 
 def classify_change_origin(
-    activity_logs: Optional[List[Dict[str, Any]]],
-    policy_principal_ids: Optional[set] = None,
-    authorized_deployers: Optional[set] = None,
+    activity_logs: list[dict[str, Any]] | None,
+    policy_principal_ids: set | None = None,
+    authorized_deployers: set | None = None,
 ) -> ChangeOriginInfo:
     """
     Classify the origin of a drift based on Activity Log entries.
@@ -284,7 +284,7 @@ def classify_change_origin(
     op_signals_policy_effect = "policy" in operation and not is_governance_object_write
     if ("azure policy" in caller or op_signals_policy_effect or has_policy_prop
             or caller_is_policy_msi):
-        return _classify_policy_change(latest, activity_logs, policy_name_hint)
+        return _classify_policy_change(latest, policy_name_hint)
 
     # Check for Azure service changes
     if _is_system_managed(caller):
@@ -346,9 +346,8 @@ def classify_change_origin(
 
 
 def _classify_policy_change(
-    entry: Dict[str, Any],
-    all_entries: List[Dict[str, Any]],
-    policy_name_hint: Optional[str] = None,
+    entry: dict[str, Any],
+    policy_name_hint: str | None = None,
 ) -> ChangeOriginInfo:
     """Classify Azure Policy-enforced changes. policy_name_hint names the policy
     when known from the assignment's managed identity (the resource write itself
@@ -430,7 +429,7 @@ def _classify_policy_change(
     )
 
 
-def _extract_policy_name(props: Dict[str, Any]) -> str:
+def _extract_policy_name(props: dict[str, Any]) -> str:
     """Extract policy name from Activity Log properties."""
     policy_id = props.get('policyAssignmentId', '')
     if policy_id:
@@ -456,8 +455,8 @@ def _is_system_managed(caller: str) -> bool:
 
 def build_resource_lifecycle(
     resource_id: str,
-    activity_logs: Optional[List[Dict[str, Any]]],
-    authorized_deployers: Optional[set] = None,
+    activity_logs: list[dict[str, Any]] | None,
+    authorized_deployers: set | None = None,
 ) -> ResourceLifecycle:
     """
     Build complete resource lifecycle from Activity Log entries.
@@ -492,9 +491,9 @@ def build_resource_lifecycle(
 
 
 def _create_lifecycle_event(
-    entry: Dict[str, Any],
-    authorized_deployers: Optional[set] = None,
-) -> Optional[ResourceLifecycleEvent]:
+    entry: dict[str, Any],
+    authorized_deployers: set | None = None,
+) -> ResourceLifecycleEvent | None:
     """Create a lifecycle event from an Activity Log entry."""
     try:
         timestamp = entry.get('timestamp')
@@ -561,9 +560,9 @@ def _classify_operation_type(operation_name: str) -> OperationType:
 def _classify_origin_context(
     caller: str,
     operation_name: str,
-    props: Dict[str, Any],
-    authorized_deployers: Optional[set] = None,
-) -> tuple[ChangeOrigin, Dict[str, str]]:
+    props: dict[str, Any],
+    authorized_deployers: set | None = None,
+) -> tuple[ChangeOrigin, dict[str, str]]:
     """
     Classify origin and extract context.
 
@@ -615,7 +614,7 @@ def _classify_origin_context(
     return ChangeOrigin.MANUAL_CHANGE, {}
 
 
-def _extract_method(caller: str, operation_name: str, props: Dict[str, Any]) -> str:
+def _extract_method(caller: str, operation_name: str, props: dict[str, Any]) -> str:
     """Extract the method (Portal, CLI, SDK, ARM template, etc.)."""
     op_lower = operation_name.lower()
 
@@ -635,7 +634,7 @@ def _extract_method(caller: str, operation_name: str, props: Dict[str, Any]) -> 
         return props.get('method', 'Unknown')
 
 
-def _extract_deployment_id(props: Dict[str, Any]) -> Optional[str]:
+def _extract_deployment_id(props: dict[str, Any]) -> str | None:
     """Extract ARM deployment ID from properties."""
     deployment_id = props.get('deploymentId')
     if not deployment_id:
@@ -647,7 +646,7 @@ def _build_event_reason(
     op_type: OperationType,
     origin: ChangeOrigin,
     actor: str,
-    policy_info: Dict[str, str]
+    policy_info: dict[str, str]
 ) -> str:
     """Build a human-readable reason for the event."""
     if origin == ChangeOrigin.POLICY_DINE:

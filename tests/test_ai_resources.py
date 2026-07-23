@@ -235,7 +235,8 @@ class FirstContactNoiseTests(unittest.TestCase):
         # 'sqldrift[86c9cbf6]/driftdb' has no function-call marker, but IS
         # runtime-generated; without placeholder detection it double-reports.
         from tools.smart_matching import (
-            detect_unresolvable_expressions, smart_match_resources,
+            detect_unresolvable_expressions,
+            smart_match_resources,
         )
         arm = {"resources": [
             {"type": "Microsoft.Sql/servers/databases", "name": "sqldrift[86c9cbf6]/driftdb"},

@@ -16,11 +16,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.send_notifications import (
     DriftEvent,
-    OwnerFilter,
     NotificationRouter,
+    OwnerFilter,
+    build_team_notifications,
     events_from_report,
     events_from_reports_dir,
-    build_team_notifications,
     expand_webhook_secrets,
 )
 

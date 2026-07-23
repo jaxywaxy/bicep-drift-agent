@@ -4,8 +4,8 @@ Data models for drift analysis.
 These define the structures that Phase 1 generates and Phase 2's agent consumes.
 """
 
-from dataclasses import dataclass, asdict
-from typing import Optional, List, Dict, Any
+from dataclasses import asdict, dataclass
+from typing import Any
 
 
 @dataclass
@@ -14,9 +14,9 @@ class Resource:
     type: str
     name: str
     location: str = "unknown"
-    tags: Optional[Dict[str, str]] = None
-    sku: Optional[str] = None
-    properties: Optional[Dict[str, Any]] = None
+    tags: dict[str, str] | None = None
+    sku: str | None = None
+    properties: dict[str, Any] | None = None
     source: str = "unknown"  # "bicep" or "azure"
 
     def identifier(self) -> tuple:
@@ -31,13 +31,13 @@ class Drift:
     resource_name: str
     drift_type: str  # "missing", "extra", "modified"
     severity: str = "info"  # "info", "warning", "critical"
-    details: Optional[Dict[str, Any]] = None
-    suggested_action: Optional[str] = None
+    details: dict[str, Any] | None = None
+    suggested_action: str | None = None
     # ARM resource id and change attribution, when the report carries them.
     # Threaded to the analysis agent so it reasons by id and cites who changed
     # what (from lifecycle/change_origin) instead of asking for Activity Logs.
-    resource_id: Optional[str] = None
-    change_origin: Optional[Dict[str, Any]] = None
+    resource_id: str | None = None
+    change_origin: dict[str, Any] | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -49,14 +49,14 @@ class DriftReport:
     """Complete drift analysis report."""
     bicep_file: str
     resource_group: str
-    parameters: Optional[Dict[str, Any]] = None
+    parameters: dict[str, Any] | None = None
 
     # State snapshots
-    arm_resources: Optional[List[Resource]] = None
-    live_resources: Optional[List[Resource]] = None
+    arm_resources: list[Resource] | None = None
+    live_resources: list[Resource] | None = None
 
     # Analysis results
-    drifts: Optional[List[Drift]] = None
+    drifts: list[Drift] | None = None
     total_missing: int = 0
     total_extra: int = 0
     total_modified: int = 0
@@ -66,7 +66,7 @@ class DriftReport:
         """Total number of drift issues."""
         return self.total_missing + self.total_extra + self.total_modified
 
-    def critical_drifts(self) -> List[Drift]:
+    def critical_drifts(self) -> list[Drift]:
         """Return only critical-severity drifts."""
         if not self.drifts:
             return []

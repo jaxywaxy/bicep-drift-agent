@@ -13,47 +13,48 @@ This will:
 3. Generate actionable recommendations
 """
 
-import sys
 import json
 import os
+import sys
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from tools.logger import setup_logging, get_logger
 from agent.drift_agent import DriftAgent
-from tools.models import DriftReport, Drift
-from tools.ignore_patterns import IgnorePatternList
-from tools.html_report import generate_html_report
-from tools.smart_matching import (
-    detect_unresolvable_expressions,
-    smart_match_resources,
-    annotate_drifts_with_matches,
-    _has_unresolvable_expression,
-)
-from tools.property_drift import DriftDetector
-from tools.diff_states import (
-    _should_compare_resource,
-    _IDENTITY_MATCHED_TYPES,
-    filter_unmanaged_live_resources,
-)
 from run_drift_check import run as run_phase1
-from tools.compile_bicep import compile_bicep, detect_deployment_scope
-from tools.rg_selector import rg_label
 from tools.activity_log import (
+    detect_scanning_identity,
+    fetch_policy_principal_ids,
     fetch_resource_group_activity,
     match_activity_for_resource,
-    fetch_policy_principal_ids,
-    detect_scanning_identity,
 )
+from tools.change_origin import (
+    build_resource_lifecycle,
+    classify_change_origin,
+    select_relevant_activity,
+)
+from tools.compile_bicep import compile_bicep, detect_deployment_scope
 from tools.config import AUTHORIZED_DEPLOYERS
 from tools.count_drifts import COUNTED_TYPES
+from tools.diff_states import (
+    _IDENTITY_MATCHED_TYPES,
+    _should_compare_resource,
+    filter_unmanaged_live_resources,
+)
+from tools.html_report import generate_html_report
+from tools.ignore_patterns import IgnorePatternList
+from tools.logger import get_logger, setup_logging
+from tools.models import Drift, DriftReport
 from tools.ownership import classify_owner
-from tools.change_origin import (
-    classify_change_origin,
-    build_resource_lifecycle,
-    select_relevant_activity,
+from tools.property_drift import DriftDetector
+from tools.rg_selector import rg_label
+from tools.smart_matching import (
+    _has_unresolvable_expression,
+    annotate_drifts_with_matches,
+    detect_unresolvable_expressions,
+    smart_match_resources,
 )
 
 logger = get_logger(__name__)

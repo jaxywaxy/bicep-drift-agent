@@ -5,8 +5,8 @@ merge pipeline without Claude or Azure."""
 import unittest
 
 import analyze_drift as ad
-from tools.ignore_patterns import IgnorePatternList
 from tools.count_drifts import tally_report
+from tools.ignore_patterns import IgnorePatternList
 
 
 def _report_with_unique_named_storage(bicep_sku, live_sku):

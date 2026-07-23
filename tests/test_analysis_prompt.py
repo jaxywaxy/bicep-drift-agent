@@ -11,12 +11,11 @@ import os
 import sys
 import unittest
 from types import SimpleNamespace
-from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.drift_agent import DriftAgent
-from tools.models import DriftReport, Drift
+from tools.models import Drift, DriftReport
 
 
 def _report(n_reconciled, n_actionable):

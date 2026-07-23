@@ -40,7 +40,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .http_util import urlopen_checked
 
@@ -77,7 +77,7 @@ def stack_drift_enabled() -> bool:
     return load_stack_config() is not None
 
 
-def load_stack_config() -> Optional[Dict]:
+def load_stack_config() -> dict | None:
     """Parse the check's `deployment_stack` block from DRIFT_DEPLOYMENT_STACK.
 
     The workflow binds the LZ config's block to that env var as JSON (the LZ
@@ -99,7 +99,7 @@ def load_stack_config() -> Optional[Dict]:
     return cfg
 
 
-def _stack_url(cfg: Dict, subscription_id: str, resource_group: Optional[str]) -> str:
+def _stack_url(cfg: dict, subscription_id: str, resource_group: str | None) -> str:
     """Build the ARM URL for the configured stack's scope."""
     name = cfg["name"]
     scope = (cfg.get("scope") or "subscription").strip().lower()
@@ -118,7 +118,7 @@ def _stack_url(cfg: Dict, subscription_id: str, resource_group: Optional[str]) -
     return f"{base}/providers/{STACK_TYPE}/{name}?api-version={STACK_API_VERSION}"
 
 
-def _arm_get(url: str, token: str) -> Optional[Dict]:
+def _arm_get(url: str, token: str) -> dict | None:
     """GET an ARM URL. Returns None on 404; raises on anything else."""
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     try:
@@ -131,11 +131,11 @@ def _arm_get(url: str, token: str) -> Optional[Dict]:
 
 
 def fetch_deployment_stack(
-    cfg: Dict,
+    cfg: dict,
     subscription_id: str,
-    resource_group: Optional[str] = None,
-    token: Optional[str] = None,
-) -> Tuple[Optional[Dict], str]:
+    resource_group: str | None = None,
+    token: str | None = None,
+) -> tuple[dict | None, str]:
     """Fetch the configured stack from ARM REST.
 
     Returns (stack, token). A 404 yields (None, token) - the stack is genuinely
@@ -164,11 +164,11 @@ def fetch_deployment_stack(
 # Enforcement posture
 # ---------------------------------------------------------------------------
 
-def _changed(path: str, desired: Any, actual: Any, severity: str) -> Tuple[str, Dict]:
+def _changed(path: str, desired: Any, actual: Any, severity: str) -> tuple[str, dict]:
     return path, {"desired": desired, "actual": actual, "severity": severity}
 
 
-def _flatten_error_messages(error: Any) -> List[str]:
+def _flatten_error_messages(error: Any) -> list[str]:
     """Collect the LEAF messages from an ARM error tree.
 
     Azure nests the real cause: the outer nodes carry generic wrappers
@@ -181,7 +181,7 @@ def _flatten_error_messages(error: Any) -> List[str]:
     Deduped, order-preserving. Falls back to nothing if the tree is empty; the
     caller then uses the top-level message.
     """
-    out: List[str] = []
+    out: list[str] = []
     seen = set()
 
     def walk(node: Any) -> None:
@@ -201,7 +201,7 @@ def _flatten_error_messages(error: Any) -> List[str]:
     return out
 
 
-def _compare_deny_settings(expect: Dict, live: Dict) -> Dict[str, Dict]:
+def _compare_deny_settings(expect: dict, live: dict) -> dict[str, dict]:
     """Compare denySettings against declared expectations.
 
     Only declared keys are asserted. Mode is compared by STRENGTH, not equality,
@@ -209,7 +209,7 @@ def _compare_deny_settings(expect: Dict, live: Dict) -> Dict[str, Dict]:
     Excluded principals/actions are exact-set compares (an added exclusion is a
     hole punched in the deny assignment), matching the Key Vault ACL treatment.
     """
-    changed: Dict[str, Dict] = {}
+    changed: dict[str, dict] = {}
     if not expect:
         return changed
 
@@ -255,12 +255,12 @@ def _compare_deny_settings(expect: Dict, live: Dict) -> Dict[str, Dict]:
     return changed
 
 
-def _compare_action_on_unmanage(expect: Dict, live: Dict) -> Dict[str, Dict]:
+def _compare_action_on_unmanage(expect: dict, live: dict) -> dict[str, dict]:
     """Compare actionOnUnmanage. A `delete` regressed to `detach` means resources
     silently outlive the stack that stopped declaring them - the orphaned-cost
     path, so it is warning rather than critical (nothing is exposed, but the
     bill keeps running)."""
-    changed: Dict[str, Dict] = {}
+    changed: dict[str, dict] = {}
     if not expect:
         return changed
     for key, live_key in (("resources", "resources"),
@@ -276,14 +276,14 @@ def _compare_action_on_unmanage(expect: Dict, live: Dict) -> Dict[str, Dict]:
     return changed
 
 
-def _compare_stack_health(expect: Dict, props: Dict) -> Dict[str, Dict]:
+def _compare_stack_health(expect: dict, props: dict) -> dict[str, dict]:
     """Provisioning state and the stack's own resource-outcome lists.
 
     A failed stack means the last IaC run did not fully apply, so "no drift"
     from the template compare would be actively misleading - the template was
     never landed. Reported critical for exactly that reason.
     """
-    changed: Dict[str, Dict] = {}
+    changed: dict[str, dict] = {}
     want_state = str(expect.get("provisioning_state", "succeeded"))
     got_state = str(props.get("provisioningState", ""))
     if got_state.lower() != want_state.lower():
@@ -332,7 +332,7 @@ def _norm_id(rid: Any) -> str:
     return str(rid or "").rstrip("/").lower()
 
 
-def _managed_raw_ids(stack: Optional[Dict]) -> set:
+def _managed_raw_ids(stack: dict | None) -> set:
     """Owned resource ids in Azure's own casing (status: managed)."""
     if not stack:
         return set()
@@ -343,7 +343,7 @@ def _managed_raw_ids(stack: Optional[Dict]) -> set:
     }
 
 
-def managed_ids(stack: Optional[Dict]) -> set:
+def managed_ids(stack: dict | None) -> set:
     """The stack's authoritative set of owned resource ids, lowercased for
     matching. Use _managed_raw_ids() when the id will be shown to a human."""
     return {_norm_id(rid) for rid in _managed_raw_ids(stack)}
@@ -364,7 +364,7 @@ def _is_top_level(rid: str) -> bool:
     return len(tail.strip("/").split("/")) == 3
 
 
-def _in_scan_scope(rid: str, scope: str, subscription_id: str, resource_group: Optional[str]) -> bool:
+def _in_scan_scope(rid: str, scope: str, subscription_id: str, resource_group: str | None) -> bool:
     """Whether the scan's live state could have seen this id at all.
 
     A subscription-scoped stack manages resources across many RGs while an
@@ -379,13 +379,13 @@ def _in_scan_scope(rid: str, scope: str, subscription_id: str, resource_group: O
 
 
 def _missing_managed_resources(
-    stack: Dict,
-    live_resources: List[Dict],
+    stack: dict,
+    live_resources: list[dict],
     subscription_id: str,
-    resource_group: Optional[str],
+    resource_group: str | None,
     scope: str,
     token: str,
-) -> List[Dict]:
+) -> list[dict]:
     """Resources the stack still claims to manage that no longer exist.
 
     The stack's bookkeeping and reality have diverged: something was deleted
@@ -395,7 +395,7 @@ def _missing_managed_resources(
     can emit.
     """
     live_ids = {_norm_id(r.get("id")) for r in live_resources if r.get("id")}
-    drifts: List[Dict] = []
+    drifts: list[dict] = []
 
     # Match on lowercased ids, but report the type and name in Azure's own
     # casing - drift type strings are matched by ignore patterns and rendered
@@ -469,9 +469,9 @@ def _resource_exists(rid: str, subscription_id: str, token: str) -> bool:
 
 
 def annotate_stack_ownership(
-    drifts: List[Any],
-    stack: Optional[Dict],
-    live_resources: Optional[List[Dict]] = None,
+    drifts: list[Any],
+    stack: dict | None,
+    live_resources: list[dict] | None = None,
 ) -> int:
     """Tag each extra_in_azure with whether the stack actually owns it.
 
@@ -527,14 +527,14 @@ def annotate_stack_ownership(
 # ---------------------------------------------------------------------------
 
 def compare_deployment_stack(
-    cfg: Dict,
-    stack: Optional[Dict],
-    live_resources: List[Dict],
+    cfg: dict,
+    stack: dict | None,
+    live_resources: list[dict],
     subscription_id: str,
-    resource_group: Optional[str] = None,
+    resource_group: str | None = None,
     scope: str = "resource_group",
-    token: Optional[str] = None,
-) -> List[Dict]:
+    token: str | None = None,
+) -> list[dict]:
     """Compare a configured deployment stack against its declared expectations.
 
     Returns drift dicts in the same shape rbac.py and policy.py emit, so the
@@ -561,14 +561,14 @@ def compare_deployment_stack(
     props = stack.get("properties") or {}
     expect = cfg.get("expect") or {}
 
-    changed: Dict[str, Dict] = {}
+    changed: dict[str, dict] = {}
     changed.update(_compare_deny_settings(expect.get("deny_settings") or {},
                                           props.get("denySettings") or {}))
     changed.update(_compare_action_on_unmanage(expect.get("action_on_unmanage") or {},
                                                props.get("actionOnUnmanage") or {}))
     changed.update(_compare_stack_health(expect, props))
 
-    drifts: List[Dict] = []
+    drifts: list[dict] = []
     if changed:
         drifts.append({
             "type": STACK_TYPE,
@@ -596,7 +596,7 @@ def compare_deployment_stack(
     return drifts
 
 
-def dedupe_against(stack_drifts: List[Dict], existing: List[Any]) -> List[Dict]:
+def dedupe_against(stack_drifts: list[dict], existing: list[Any]) -> list[dict]:
     """Drop stack drifts the main compare already reported for the same resource.
 
     A stack-managed resource that the template also declares would otherwise be

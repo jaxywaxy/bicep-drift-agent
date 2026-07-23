@@ -379,7 +379,7 @@ class VirtualHubRoutingExpansionTests(unittest.TestCase):
 
 class VirtualHubOwnershipAndSeverityTests(unittest.TestCase):
     def test_hub_routing_is_platform(self):
-        from tools.ownership import classify_owner, PLATFORM
+        from tools.ownership import PLATFORM, classify_owner
         self.assertEqual(classify_owner("Microsoft.Network/virtualHubs"), PLATFORM)
         self.assertEqual(
             classify_owner("Microsoft.Network/virtualHubs/hubRouteTables"), PLATFORM)
@@ -418,7 +418,7 @@ class VirtualHubOwnershipAndSeverityTests(unittest.TestCase):
 
 class FrontDoorOwnershipAndSeverityTests(unittest.TestCase):
     def test_frontdoor_and_waf_are_platform(self):
-        from tools.ownership import classify_owner, PLATFORM
+        from tools.ownership import PLATFORM, classify_owner
         self.assertEqual(classify_owner("Microsoft.Cdn/profiles"), PLATFORM)
         self.assertEqual(
             classify_owner("Microsoft.Network/FrontDoorWebApplicationFirewallPolicies"), PLATFORM)

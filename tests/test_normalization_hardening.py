@@ -10,11 +10,11 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.property_drift import PropertyComparator, DriftDetector
+from tools.property_drift import DriftDetector, PropertyComparator
 from tools.smart_matching import (
     _has_unresolvable_expression,
-    smart_match_resources,
     annotate_drifts_with_matches,
+    smart_match_resources,
 )
 
 

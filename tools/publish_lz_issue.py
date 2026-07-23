@@ -27,15 +27,15 @@ import sys
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from .send_notifications import events_from_report
     from .http_util import urlopen_checked
+    from .send_notifications import events_from_report
 except ImportError:
-    from send_notifications import events_from_report
     from http_util import urlopen_checked
+    from send_notifications import events_from_report
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,8 @@ REQUEST_TIMEOUT = 15
 
 
 def _api_request(
-    method: str, url: str, token: str, payload: Optional[Dict[str, Any]] = None
-) -> Tuple[int, Any]:
+    method: str, url: str, token: str, payload: dict[str, Any] | None = None
+) -> tuple[int, Any]:
     """One GitHub REST call. Returns (status, parsed_json_or_None)."""
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
     req = urllib.request.Request(url, data=data, method=method)
@@ -67,7 +67,7 @@ def _api_request(
         return 0, None
 
 
-def find_open_report_issue(repo: str, token: str, lz_name: str) -> Optional[Dict[str, Any]]:
+def find_open_report_issue(repo: str, token: str, lz_name: str) -> dict[str, Any] | None:
     """Locate the rolling drift issue: an open issue carrying ISSUE_MARKER.
 
     Matched on the hidden body marker (not the title) so a renamed issue is
@@ -85,7 +85,7 @@ def find_open_report_issue(repo: str, token: str, lz_name: str) -> Optional[Dict
     return None
 
 
-def _load_reports(reports_dir: str) -> List[Tuple[str, Dict[str, Any], str]]:
+def _load_reports(reports_dir: str) -> list[tuple[str, dict[str, Any], str]]:
     """(resource_group, report, path) for every *-drift.json in the directory."""
     reports = []
     for json_file in sorted(pathlib.Path(reports_dir).glob("*-drift.json")):
@@ -99,12 +99,12 @@ def _load_reports(reports_dir: str) -> List[Tuple[str, Dict[str, Any], str]]:
     return reports
 
 
-def build_issue_body(reports_dir: str, lz_name: str, run_url: str) -> Tuple[str, int]:
+def build_issue_body(reports_dir: str, lz_name: str, run_url: str) -> tuple[str, int]:
     """Render the issue body. Returns (markdown, actionable_drift_count)."""
     sections = []
     total = 0
     critical = 0
-    analyses: List[Tuple[str, str]] = []
+    analyses: list[tuple[str, str]] = []
 
     for rg, report, report_path in _load_reports(reports_dir):
         # Same event shape as the channel digest, so the issue lines and the

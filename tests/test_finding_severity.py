@@ -14,7 +14,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.drift_agent import DriftAgent, DriftSeverity, DriftCategory, RemediationAction
+from agent.drift_agent import (
+    DriftAgent,
+    DriftCategory,
+    DriftSeverity,
+    RemediationAction,
+)
 from tools.models import Drift
 
 

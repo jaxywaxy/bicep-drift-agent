@@ -21,9 +21,9 @@ they exempt plus the scope they carve out.
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from .rbac import filter_assignments_to_scope, _is_unresolved
+from .rbac import _is_unresolved, filter_assignments_to_scope
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ POLICY_ASSIGNMENT_TYPE = "Microsoft.Authorization/policyAssignments"
 POLICY_EXEMPTION_TYPE = "Microsoft.Authorization/policyExemptions"
 
 
-def _definition_ref(value: Any) -> Optional[str]:
+def _definition_ref(value: Any) -> str | None:
     """The definition's identity: trailing segment of a policyDefinitionId.
 
     Works on full ARM ids ('/providers/Microsoft.Authorization/
@@ -57,10 +57,10 @@ def _definition_ref(value: Any) -> Optional[str]:
 
 def fetch_policy_resources(
     subscription_id: str,
-    resource_group: Optional[str] = None,
+    resource_group: str | None = None,
     scope: str = "resource_group",
     credential: Any = None,
-) -> Tuple[List[Dict], List[Dict]]:
+) -> tuple[list[dict], list[dict]]:
     """Fetch live policy assignments and exemptions in the scan scope.
 
     Scope filtering matches RBAC's: an RG scan owns assignments AT/under the
@@ -81,8 +81,8 @@ def fetch_policy_resources(
     credential = credential or DefaultAzureCredential()
     client = ResourceGraphClient(credential)
 
-    def _query(kql: str) -> List[Dict]:
-        rows: List[Dict] = []
+    def _query(kql: str) -> list[dict]:
+        rows: list[dict] = []
         skip_token = None
         while True:
             request = QueryRequest(
@@ -97,7 +97,7 @@ def fetch_policy_resources(
                 break
         return rows
 
-    def _fetch_raw() -> Tuple[List[Dict], List[Dict]]:
+    def _fetch_raw() -> tuple[list[dict], list[dict]]:
         return (
             _query(
                 "policyresources"
@@ -115,7 +115,7 @@ def fetch_policy_resources(
         logger.warning(f"Policy resource fetch failed ({e}); retrying once...")
         raw_assignments, raw_exemptions = _fetch_raw()
 
-    def _shape(row: Dict) -> Dict:
+    def _shape(row: dict) -> dict:
         props = row.get("properties", {}) or {}
         meta = props.get("metadata", {}) or {}
         # Assignments carry their scope in properties.scope; exemptions apply
@@ -153,7 +153,7 @@ def fetch_policy_resources(
     return assignments, exemptions
 
 
-def extract_bicep_policy_assignments(arm_resources: List[Dict]) -> Tuple[List[Dict], int]:
+def extract_bicep_policy_assignments(arm_resources: list[dict]) -> tuple[list[dict], int]:
     """Pull policy assignments out of the compiled template for identity matching.
 
     Returns (extracted, skipped). Skipped = assignments whose definition
@@ -179,10 +179,10 @@ def extract_bicep_policy_assignments(arm_resources: List[Dict]) -> Tuple[List[Di
 
 
 def compare_policy_resources(
-    arm_resources: List[Dict],
-    live_assignments: List[Dict],
-    live_exemptions: List[Dict],
-) -> List[Dict]:
+    arm_resources: list[dict],
+    live_assignments: list[dict],
+    live_exemptions: list[dict],
+) -> list[dict]:
     """Match bicep policy assignments to live ones; emit drift dicts.
 
     Matching: by name when the bicep name is a literal, else by definition
@@ -207,7 +207,7 @@ def compare_policy_resources(
         else:
             unmatched_bicep.append(b)
 
-    drifts: List[Dict] = []
+    drifts: list[dict] = []
     for a in remaining:
         details = {
             "policy_display_name": a["display_name"],

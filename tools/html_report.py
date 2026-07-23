@@ -2,14 +2,14 @@
 Generate HTML reports from drift analysis results.
 """
 
-import json
 import html
+import json
+import logging
 import re
+from datetime import datetime
+from pathlib import Path
 
 import markdown
-import logging
-from pathlib import Path
-from datetime import datetime
 
 from .count_drifts import tally_report
 
@@ -585,7 +585,7 @@ def generate_html_report(
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in drift report {drift_json_file}: {e}")
         raise
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to read drift report {drift_json_file}: {e}")
         raise
 

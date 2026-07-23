@@ -12,6 +12,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tools.ownership import PLATFORM, WORKLOAD, classify_owner
 from tools.rbac import (
     _extract_guid,
     _scope_rg,
@@ -21,7 +22,6 @@ from tools.rbac import (
     filter_assignments_to_scope,
     rbac_enabled,
 )
-from tools.ownership import classify_owner, PLATFORM, WORKLOAD
 
 SUB = "00000000-0000-0000-0000-000000000001"
 CONTRIBUTOR = "b24988ac-6180-42a0-ab88-20f7382dd24c"

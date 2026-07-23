@@ -15,8 +15,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.property_drift import PropertyComparator, DriftDetector
-import tools.policy as policy
+from tools import policy
+from tools.property_drift import DriftDetector, PropertyComparator
 
 
 def _nsg(rules):

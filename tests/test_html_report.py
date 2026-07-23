@@ -16,16 +16,16 @@ disappearing still fails.
 import json
 import os
 import re
-import sys
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.html_report import generate_html_report, _REPORT_CSS
 from tools.count_drifts import tally_report
+from tools.html_report import _REPORT_CSS, generate_html_report
 
 
 def _report(**overrides):
@@ -305,7 +305,7 @@ class ReportEncodingTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0,
                              f"report generation died under a C locale:\n{proc.stderr}")
             raw = out.read_bytes()
-        self.assertIn("⚠️".encode("utf-8"), raw)
+        self.assertIn("⚠️".encode(), raw)
         self.assertIn('<meta charset="UTF-8">', raw.decode("utf-8"))
 
     def test_non_ascii_resource_names_survive_the_round_trip(self):
