@@ -411,6 +411,13 @@ def _expand_vnet_peerings(resources: List[Dict]) -> None:
             continue
         vnet_name = r.get("name", "")
         for p in (r.get("properties") or {}).get("virtualNetworkPeerings", []) or []:
+            # Connecting a VNet to a Virtual Hub auto-creates a platform-managed
+            # peering (RemoteVnetToHubPeering_<guid> on the spoke, HubToRemoteVnet
+            # the other way). No template declares it, so it would false-flag as an
+            # extra - skip it, the hubVirtualNetworkConnection is the real resource.
+            pname = p.get("name", "") or ""
+            if pname.startswith("RemoteVnetToHubPeering") or pname.startswith("HubToRemoteVnetPeering"):
+                continue
             children.append({
                 "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
                 "name": f"{vnet_name}/{p.get('name', '')}",
@@ -936,6 +943,14 @@ def _skip_apex_ns_soa(item: Dict) -> bool:
     return (item.get("name") or "") == "@" and (rtype.endswith("/NS") or rtype.endswith("/SOA"))
 
 
+def _skip_builtin_hub_route_table(item: Dict) -> bool:
+    """defaultRouteTable and noneRouteTable ship with every Virtual Hub; no
+    template declares them, so an undeclared one is not drift. Same detect-then-
+    drop trade-off as backup DefaultPolicy / storage default containers: a route
+    added out-of-band to the built-in defaultRouteTable is not surfaced."""
+    return (item.get("name") or "") in ("defaultRouteTable", "noneRouteTable")
+
+
 _CHILD_EXPANSION_SPECS = [
     # (parent_type_lower, list_path, api_version, child_type, skip_predicate)
     # The 'default' blob/file service rows themselves (soft-delete/versioning
@@ -1005,7 +1020,13 @@ _CHILD_EXPANSION_SPECS = [
     ("microsoft.network/virtualhubs", "routingIntent",
      "2023-09-01", "Microsoft.Network/virtualHubs/routingIntent", None),
     ("microsoft.network/virtualhubs", "hubRouteTables",
-     "2023-09-01", "Microsoft.Network/virtualHubs/hubRouteTables", None),
+     "2023-09-01", "Microsoft.Network/virtualHubs/hubRouteTables", _skip_builtin_hub_route_table),
+    # Hub VNet connections: how a spoke attaches to the hub. Not a Resource Graph
+    # row; a changed routingConfiguration (associated/propagated route tables,
+    # labels) re-routes the spoke. Connecting a VNet also auto-creates a
+    # RemoteVnetToHubPeering on the spoke - filtered in _expand_vnet_peerings.
+    ("microsoft.network/virtualhubs", "hubVirtualNetworkConnections",
+     "2023-09-01", "Microsoft.Network/virtualHubs/hubVirtualNetworkConnections", None),
 ]
 
 # Record sets list with their concrete type in the response (…/dnszones/A etc.);

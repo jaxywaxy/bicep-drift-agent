@@ -288,6 +288,15 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Firewall Policies
 - Azure Firewall
 - NSG Rules
+- Function Apps
+- AKS Clusters
+- AKS Agent Pools
+- Event Grid Topics / System Topics
+- Event Grid Subscriptions
+- User-Assigned Managed Identities
+- Federated Identity Credentials
+- Private DNS Zones
+- Service Bus Topics
   
 ## Recently Added
 
@@ -303,6 +312,38 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Container Apps
 - Redis 
 - Recovery Services Vault
+- PostgreSQL Flexible Server
+- Metric Alerts
+- Activity Log Alerts
+- Scheduled Query Rules
+- Action Groups
+- Application Insights
+- Public IP Addresses
+- Virtual WAN
+- Virtual Hub
+- Virtual Hub Route Tables
+- Virtual Hub VNet Connections
+- Virtual Hub Routing Intent
+
+### Virtual Hub routing
+
+`virtualHubs/hubRouteTables`, `virtualHubs/routingIntent` and
+`virtualHubs/hubVirtualNetworkConnections` are not indexed by Resource Graph, so
+they are fetched via ARM REST child expansion. **Routing intent** is the security
+control: its `routingPolicies` force Internet/Private traffic through the hub
+firewall, so a policy removed or its `nextHop` repointed off the firewall is a
+silent inspection bypass — rated **critical** (`properties.routingPolicies`).
+Route-table routes carry the same weight via `properties.routes`.
+
+Two live behaviours the detector accounts for: the built-in `defaultRouteTable`
+and `noneRouteTable` (shipped with every hub, and programmed by routing intent)
+are dropped so they never false-flag as extras; and the `RemoteVnetToHubPeering`
+auto-created when a VNet connects to the hub is filtered from peering comparison.
+
+**Caveat — mutually exclusive modes.** Azure rejects routing intent on a hub that
+has any custom route table (`CantConfigureRoutingIntentIfCustomRouteTablesPresent`).
+A hub is therefore either custom-route-table mode or routing-intent mode; the two
+are never compared together on the same hub.
 
 ### Recovery Services vault backup config
 
@@ -328,31 +369,31 @@ no protected items, so live policies the template does **not** declare are dropp
 containers). Trade-off: a policy added entirely out-of-band, that the template
 never declared, is not surfaced — only declared policies are compared.
 
-## Out of Scope — Static Hub Connectivity
+## Out of Scope — Static Hub Connectivity Gateways
 
-The following network hub / connectivity resources are **deliberately not
-covered**. They are static, deploy-once fabric: provisioned once when the
-platform hub is stood up, changed rarely and only through the connectivity
-pipeline, and slow to provision (tens of minutes to hours). They are not the
-kind of resource that accrues out-of-band configuration drift the way workload
-and security resources do, and treating them as drift candidates adds noise
-without adding signal.
+The following network connectivity gateways are **deliberately not covered**.
+They are static, deploy-once fabric: provisioned once when the platform hub is
+stood up, changed rarely and only through the connectivity pipeline, and slow to
+provision (tens of minutes to hours). They are not the kind of resource that
+accrues out-of-band configuration drift the way workload and security resources
+do, and treating them as drift candidates adds noise without adding signal.
 
 | Resource | Why excluded |
 |----------|--------------|
-| Virtual WAN | Static top-level hub construct; created once per platform, effectively immutable in normal operation |
-| Virtual Hub | Static hub fabric; routing/association changes flow through the connectivity pipeline, not out-of-band |
 | ExpressRoute Circuit | Provisioned with the carrier; bandwidth/peering changes are deliberate, long-lead, and carrier-coordinated — not portal drift |
 | ExpressRoute Gateway | Static hub connectivity; long provisioning time, changed only during planned connectivity work |
 | VPN Gateway | Static hub connectivity; SKU/config changes are planned platform operations, not out-of-band edits |
 | Route Server | Static BGP fabric in the hub; changed only during planned connectivity work |
 | Bastion | Static management-access appliance; deployed once per hub, rarely reconfigured |
 
-**Note — this is not "no security coverage for the hub."** Azure Firewall and
-Firewall Policies *are* fully covered (see [Fully Validated](#fully-validated)),
-because their rule collections and network/ACL posture genuinely do change out
-of band and carry security consequence. The exclusions above are limited to the
-static connectivity fabric, not to everything that lives in the hub.
+**Note — hub *routing* is covered, only the connectivity gateways are not.**
+Virtual WAN, Virtual Hub, and — the security-relevant part — its route tables,
+VNet connections and **routing intent** are all fully covered (see
+[Recently Added](#recently-added)): a routing-intent policy repointed off the hub
+firewall, or a route widened to bypass inspection, is out-of-band and carries
+security consequence, so it is detected as critical. Likewise Azure Firewall and
+Firewall Policies are covered. The exclusions above are limited to the static
+connectivity gateways, not to the hub's routing or security surface.
 
 ---
 

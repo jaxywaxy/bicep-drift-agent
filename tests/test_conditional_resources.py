@@ -81,6 +81,39 @@ class ConditionalResourceTests(unittest.TestCase):
         tpl = self._template([gated])
         self.assertIn("lb-gated", {r["name"] for r in flatten_resources(tpl)})
 
+    # Compound boolean conditions - and()/or()/not(). The vHub route table gates on
+    # `deployVirtualHub && !deployHubFirewall` (route-table mode vs routing-intent
+    # mode are mutually exclusive); a Tier-2 scan must resolve that to False and
+    # NOT false-flag the excluded route table as missing.
+    def test_and_not_compound_false_is_skipped(self):
+        gated = {**STORAGE, "name": "rt-gated",
+                 "condition": "[and(parameters('deployVirtualHub'), not(parameters('deployHubFirewall')))]"}
+        tpl = self._template([STORAGE, gated],
+                             params={"deployVirtualHub": True, "deployHubFirewall": True})
+        names = {r["name"] for r in flatten_resources(tpl)}
+        self.assertNotIn("rt-gated", names)  # and(true, not(true)) == false
+        self.assertIn("st1", names)
+
+    def test_and_not_compound_true_is_kept(self):
+        gated = {**STORAGE, "name": "rt-gated",
+                 "condition": "[and(parameters('deployVirtualHub'), not(parameters('deployHubFirewall')))]"}
+        tpl = self._template([gated],
+                             params={"deployVirtualHub": True, "deployHubFirewall": False})
+        self.assertIn("rt-gated", {r["name"] for r in flatten_resources(tpl)})  # and(true, not(false))
+
+    def test_or_compound_resolves(self):
+        gated = {**STORAGE, "name": "st-gated",
+                 "condition": "[or(parameters('a'), parameters('b'))]"}
+        tpl = self._template([gated], params={"a": False, "b": False})
+        self.assertNotIn("st-gated", {r["name"] for r in flatten_resources(tpl)})
+
+    def test_unresolvable_arg_keeps_compound_conservative(self):
+        # empty() is unresolvable, so and(...) must stay unresolved and KEEP the resource
+        gated = {**STORAGE, "name": "st-gated",
+                 "condition": "[and(parameters('a'), not(empty(parameters('list'))))]"}
+        tpl = self._template([gated], params={"a": True})
+        self.assertIn("st-gated", {r["name"] for r in flatten_resources(tpl)})
+
 
 if __name__ == "__main__":
     unittest.main()
