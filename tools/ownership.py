@@ -41,6 +41,12 @@ DEFAULT_PLATFORM_TYPES = {
     # firewall rules stay platform-owned, so this child follows its parent policy.
     "microsoft.network/firewallpolicies/rulecollectiongroups",
     "microsoft.network/natgateways",
+    # Virtual WAN hub routing is platform connectivity fabric. The route tables
+    # and routing intent decide whether spoke traffic is forced through the hub
+    # firewall - a platform team's call, same as firewall rule collection groups.
+    "microsoft.network/virtualhubs",
+    "microsoft.network/virtualhubs/hubroutetables",
+    "microsoft.network/virtualhubs/routingintent",
     # Load balancers and Application Gateways (+ its WAF policy) are shared
     # ingress/egress fabric a platform team typically owns.
     "microsoft.network/loadbalancers",

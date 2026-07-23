@@ -328,6 +328,31 @@ no protected items, so live policies the template does **not** declare are dropp
 containers). Trade-off: a policy added entirely out-of-band, that the template
 never declared, is not surfaced — only declared policies are compared.
 
+## Out of Scope — Static Hub Connectivity
+
+The following network hub / connectivity resources are **deliberately not
+covered**. They are static, deploy-once fabric: provisioned once when the
+platform hub is stood up, changed rarely and only through the connectivity
+pipeline, and slow to provision (tens of minutes to hours). They are not the
+kind of resource that accrues out-of-band configuration drift the way workload
+and security resources do, and treating them as drift candidates adds noise
+without adding signal.
+
+| Resource | Why excluded |
+|----------|--------------|
+| Virtual WAN | Static top-level hub construct; created once per platform, effectively immutable in normal operation |
+| Virtual Hub | Static hub fabric; routing/association changes flow through the connectivity pipeline, not out-of-band |
+| ExpressRoute Circuit | Provisioned with the carrier; bandwidth/peering changes are deliberate, long-lead, and carrier-coordinated — not portal drift |
+| ExpressRoute Gateway | Static hub connectivity; long provisioning time, changed only during planned connectivity work |
+| VPN Gateway | Static hub connectivity; SKU/config changes are planned platform operations, not out-of-band edits |
+| Route Server | Static BGP fabric in the hub; changed only during planned connectivity work |
+| Bastion | Static management-access appliance; deployed once per hub, rarely reconfigured |
+
+**Note — this is not "no security coverage for the hub."** Azure Firewall and
+Firewall Policies *are* fully covered (see [Fully Validated](#fully-validated)),
+because their rule collections and network/ACL posture genuinely do change out
+of band and carry security consequence. The exclusions above are limited to the
+static connectivity fabric, not to everything that lives in the hub.
 
 ---
 

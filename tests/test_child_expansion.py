@@ -310,6 +310,65 @@ class EventGridSubscriptionExpansionTests(unittest.TestCase):
             "critical")
 
 
+class VirtualHubRoutingExpansionTests(unittest.TestCase):
+    """Virtual Hub routing children (routingIntent + hubRouteTables) are invisible
+    to Resource Graph; without expansion a declared route table / routing intent
+    false-flags missing_in_azure and an out-of-band firewall bypass goes
+    undetected."""
+
+    def _expand(self, resources, responses):
+        with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen(responses)):
+            return _expand_data_plane_children(resources, token="t")
+
+    def test_routing_intent_and_route_tables_expanded(self):
+        hub = _resource("microsoft.network/virtualhubs", "hub1",
+                        f"{SUB}/Microsoft.Network/virtualHubs/hub1")
+        fw = f"{SUB}/Microsoft.Network/azureFirewalls/fw1"
+        children = self._expand([hub], {
+            "/routingIntent?": [
+                {"name": "hub1-intent", "id": "ri1",
+                 "properties": {"routingPolicies": [
+                     {"name": "InternetTraffic", "destinations": ["Internet"], "nextHop": fw},
+                     {"name": "PrivateTraffic", "destinations": ["PrivateTraffic"], "nextHop": fw},
+                 ]}}],
+            "/hubRouteTables?": [
+                {"name": "defaultRouteTable", "id": "rt1",
+                 "properties": {"routes": [
+                     {"name": "to-fw", "destinationType": "CIDR",
+                      "destinations": ["0.0.0.0/0"], "nextHopType": "ResourceId", "nextHop": fw}]}}],
+        })
+        names = {(c["type"], c["name"]) for c in children}
+        self.assertIn(("Microsoft.Network/virtualHubs/routingIntent", "hub1/hub1-intent"), names)
+        self.assertIn(("Microsoft.Network/virtualHubs/hubRouteTables", "hub1/defaultRouteTable"), names)
+
+    def test_no_hub_no_calls(self):
+        # A resource that is not a parent type in any spec triggers no expansion.
+        self.assertEqual(_expand_data_plane_children(
+            [_resource("Microsoft.Web/sites", "app", f"{SUB}/Microsoft.Web/sites/app")],
+            token="t",
+        ), [])
+
+
+class VirtualHubOwnershipAndSeverityTests(unittest.TestCase):
+    def test_hub_routing_is_platform(self):
+        from tools.ownership import classify_owner, PLATFORM
+        self.assertEqual(classify_owner("Microsoft.Network/virtualHubs"), PLATFORM)
+        self.assertEqual(
+            classify_owner("Microsoft.Network/virtualHubs/hubRouteTables"), PLATFORM)
+        self.assertEqual(
+            classify_owner("Microsoft.Network/virtualHubs/routingIntent"), PLATFORM)
+
+    def test_routing_bypass_paths_are_critical(self):
+        from tools.property_drift import PropertyComparator
+        # routing intent nextHop repointed off the firewall
+        self.assertEqual(
+            PropertyComparator._get_severity(
+                "properties.routingPolicies[0].nextHop"), "critical")
+        # hub route table route nextHop change
+        self.assertEqual(
+            PropertyComparator._get_severity("properties.routes[0].nextHop"), "critical")
+
+
 class FrontDoorOwnershipAndSeverityTests(unittest.TestCase):
     def test_frontdoor_and_waf_are_platform(self):
         from tools.ownership import classify_owner, PLATFORM
