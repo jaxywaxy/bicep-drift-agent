@@ -249,6 +249,59 @@ def _split_function_arguments(args_str: str) -> list:
     return args
 
 
+def _as_bool(value):
+    """Coerce a resolved expression value to a Python bool, or None if it isn't
+    a definitive boolean (unresolved param names, dicts, etc.)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v == "true":
+            return True
+        if v == "false":
+            return False
+    return None
+
+
+def _resolve_boolean(inner: str, parameters: dict, variables: dict):
+    """Evaluate ARM boolean functions and()/or()/not() when their arguments
+    reduce to booleans. Returns True/False, or None when the expression is not
+    one of these functions or an argument can't be resolved to a bool.
+
+    Without this a compound resource condition like
+      and(parameters('deployVirtualHub'), not(parameters('deployHubFirewall')))
+    stays unresolvable, so flatten_resources conservatively KEEPS the gated-off
+    resource and it false-flags as missing_in_azure. Nested calls (the not() here)
+    resolve via the recursion back through resolve_expression. equals() is left
+    out on purpose: an unresolved arg returns its bare name, which would compare
+    equal to another bare name and manufacture a false True.
+    """
+    m = re.match(r"(and|or|not)\s*\((.*)\)\s*$", inner, re.DOTALL)
+    if not m:
+        return None
+    fn = m.group(1)
+    raw_args = _split_function_arguments(m.group(2))
+
+    bools = []
+    for arg in raw_args:
+        arg = arg.strip()
+        expr = arg if (arg.startswith("[") and arg.endswith("]")) else f"[{arg}]"
+        b = _as_bool(resolve_expression(expr, parameters, variables))
+        if b is None:
+            return None  # unresolvable arg -> leave the whole condition unresolved
+        bools.append(b)
+
+    if not bools:
+        return None
+    if fn == "not":
+        return (not bools[0]) if len(bools) == 1 else None
+    if fn == "and":
+        return all(bools)
+    if fn == "or":
+        return any(bools)
+    return None
+
+
 def _resolve_concat(concat_expr: str, parameters: dict, variables: dict) -> str:
     """
     Resolve [concat(...)] expressions from Bicep string interpolation.
@@ -559,6 +612,14 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
                 return json.loads(json_match.group(1))
             except (ValueError, TypeError):
                 pass
+
+    # Boolean logic in conditions: and()/or()/not(). Resolve when the arguments
+    # reduce to booleans, so a compound resource gate resolves to a definitive
+    # True/False instead of staying unresolvable (which conservatively keeps a
+    # gated-off resource and false-flags it as missing_in_azure). See _resolve_boolean.
+    bool_result = _resolve_boolean(inner, parameters, variables)
+    if bool_result is not None:
+        return bool_result
 
     # Other expressions — resolve any EMBEDDED variables()/parameters() so that
     # identity extractors still see literal values even when the OUTER function

@@ -320,7 +320,7 @@ class VirtualHubRoutingExpansionTests(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", side_effect=_fake_urlopen(responses)):
             return _expand_data_plane_children(resources, token="t")
 
-    def test_routing_intent_and_route_tables_expanded(self):
+    def test_routing_intent_route_tables_and_connections_expanded(self):
         hub = _resource("microsoft.network/virtualhubs", "hub1",
                         f"{SUB}/Microsoft.Network/virtualHubs/hub1")
         fw = f"{SUB}/Microsoft.Network/azureFirewalls/fw1"
@@ -332,14 +332,42 @@ class VirtualHubRoutingExpansionTests(unittest.TestCase):
                      {"name": "PrivateTraffic", "destinations": ["PrivateTraffic"], "nextHop": fw},
                  ]}}],
             "/hubRouteTables?": [
-                {"name": "defaultRouteTable", "id": "rt1",
+                # A declared custom route table IS expanded...
+                {"name": "rt-custom", "id": "rt1",
                  "properties": {"routes": [
                      {"name": "to-fw", "destinationType": "CIDR",
-                      "destinations": ["0.0.0.0/0"], "nextHopType": "ResourceId", "nextHop": fw}]}}],
+                      "destinations": ["0.0.0.0/0"], "nextHopType": "ResourceId", "nextHop": fw}]}},
+                # ...but the two built-ins every hub ships are dropped (not drift).
+                {"name": "defaultRouteTable", "id": "rt2", "properties": {}},
+                {"name": "noneRouteTable", "id": "rt3", "properties": {}},
+            ],
+            "/hubVirtualNetworkConnections?": [
+                {"name": "conn-spoke", "id": "c1",
+                 "properties": {"remoteVirtualNetwork": {"id": f"{SUB}/Microsoft.Network/virtualNetworks/spoke"}}}],
         })
         names = {(c["type"], c["name"]) for c in children}
         self.assertIn(("Microsoft.Network/virtualHubs/routingIntent", "hub1/hub1-intent"), names)
-        self.assertIn(("Microsoft.Network/virtualHubs/hubRouteTables", "hub1/defaultRouteTable"), names)
+        self.assertIn(("Microsoft.Network/virtualHubs/hubRouteTables", "hub1/rt-custom"), names)
+        self.assertIn(("Microsoft.Network/virtualHubs/hubVirtualNetworkConnections", "hub1/conn-spoke"), names)
+        # built-in route tables filtered out
+        self.assertNotIn(("Microsoft.Network/virtualHubs/hubRouteTables", "hub1/defaultRouteTable"), names)
+        self.assertNotIn(("Microsoft.Network/virtualHubs/hubRouteTables", "hub1/noneRouteTable"), names)
+
+    def test_hub_generated_peering_is_filtered(self):
+        from tools.get_live_state import _expand_vnet_peerings
+        vnet = _resource("Microsoft.Network/virtualNetworks", "spoke",
+                         f"{SUB}/Microsoft.Network/virtualNetworks/spoke")
+        vnet["properties"] = {"virtualNetworkPeerings": [
+            {"name": "RemoteVnetToHubPeering_abc-123", "id": "p1", "properties": {}},
+            {"name": "app-to-data", "id": "p2", "properties": {"allowForwardedTraffic": True}},
+        ]}
+        resources = [vnet]
+        _expand_vnet_peerings(resources)
+        peer_names = {r["name"] for r in resources
+                      if r.get("type") == "Microsoft.Network/virtualNetworks/virtualNetworkPeerings"}
+        # the auto-created hub peering is dropped; a real declared peering survives
+        self.assertNotIn("spoke/RemoteVnetToHubPeering_abc-123", peer_names)
+        self.assertIn("spoke/app-to-data", peer_names)
 
     def test_no_hub_no_calls(self):
         # A resource that is not a parent type in any spec triggers no expansion.
@@ -367,6 +395,25 @@ class VirtualHubOwnershipAndSeverityTests(unittest.TestCase):
         # hub route table route nextHop change
         self.assertEqual(
             PropertyComparator._get_severity("properties.routes[0].nextHop"), "critical")
+
+    def test_vwan_type_not_projected_no_false_drift(self):
+        from tools.property_drift import PropertyComparator
+        # Resource Graph omits a Virtual WAN's properties.type; the declared
+        # "Standard" must not surface as a desired-vs-null removed-property drift.
+        bicep = {"type": "Microsoft.Network/virtualWans",
+                 "properties": {"type": "Standard", "allowBranchToBranchTraffic": True}}
+        live = {"type": "Microsoft.Network/virtualWans",
+                "properties": {"provisioningState": "Succeeded",
+                               "allowBranchToBranchTraffic": True,
+                               "allowVnetToVnetTraffic": True}}
+        diffs = PropertyComparator.compare_properties(bicep, live)
+        paths = {d.property_path for d in diffs}
+        self.assertNotIn("properties.type", paths)
+        # type-scoping: the same path is NOT suppressed on a different resource type
+        self.assertTrue(PropertyComparator._is_unprojected_property(
+            "microsoft.network/virtualwans", "properties.type"))
+        self.assertFalse(PropertyComparator._is_unprojected_property(
+            "microsoft.network/virtualhubs", "properties.type"))
 
 
 class FrontDoorOwnershipAndSeverityTests(unittest.TestCase):

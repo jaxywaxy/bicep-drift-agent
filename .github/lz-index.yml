@@ -32,6 +32,14 @@ landing_zones:
     config_path: .github/drift-lz-config.yml
     workflow: drift-lz-test.yml
 
+  # Virtual WAN hub routing verification (bicep/vhub.bicep on feat/vhub-routing).
+  # Runs via drift-lz-test.yml, which points at this LZ on the feat/vhub-routing-
+  # drift branch. Config carries `params` (deployVirtualHub/deployHubFirewall).
+  vhub-test:
+    repo: jaxywaxy/drift-test-resources
+    config_path: .github/drift-lz-vhub-config.yml
+    workflow: drift-lz-test.yml
+
   test-stack-resources:
     repo: jaxywaxy/drift-test-resources
     config_path: .github/drift-lz-stacks-config.yml

@@ -272,6 +272,10 @@ jobs:
           # 'null' and tools/deployment_stacks.py skips the check entirely.
           # Passed as JSON for the same untrusted-input reason as the others.
           DRIFT_DEPLOYMENT_STACK: ${{ toJson(matrix.check.deployment_stack) }}
+          # Optional bicep parameter overrides for gated modules (e.g. a check
+          # scoped to one conditional module: {"deployVirtualHub": true}). Absent
+          # -> 'null' and no overrides are applied. JSON, untrusted-input pattern.
+          CHECK_PARAMS: ${{ toJson(matrix.check.params) }}
         run: |
           BICEP_PATH="bicep-$CHECK_NAME/$CHECK_PATH"
           DRIFT_FILE="drift_$CHECK_NAME.txt"
@@ -305,12 +309,22 @@ jobs:
           fi
           echo "Testing ${#RESOURCE_GROUPS[@]} target(s)..."
 
+          # Bicep parameter overrides for this check (gated modules). Empty when
+          # the config omits `params` (CHECK_PARAMS is the string 'null'); the
+          # agent's run() ignores an empty ARM_PARAMETERS. Bound from env, never
+          # interpolated into shell.
+          ARM_PARAMS_VAL=""
+          if [ "$CHECK_PARAMS" != "null" ] && [ -n "$CHECK_PARAMS" ]; then
+            ARM_PARAMS_VAL="$CHECK_PARAMS"
+            echo "Applying bicep parameter overrides for this check"
+          fi
+
           for RG in "${RESOURCE_GROUPS[@]}"; do
             echo "Testing: $RG" | tee -a "$DRIFT_FILE"
             echo "---" >> "$DRIFT_FILE"
 
             cd drift-tools
-            python3 analyze_drift.py "../$BICEP_PATH" "$RG" >> "../$DRIFT_FILE" 2>&1 || true
+            ARM_PARAMETERS="$ARM_PARAMS_VAL" python3 analyze_drift.py "../$BICEP_PATH" "$RG" >> "../$DRIFT_FILE" 2>&1 || true
             cd ..
 
             echo "" >> "$DRIFT_FILE"

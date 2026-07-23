@@ -810,6 +810,16 @@ class PropertyComparator:
         "properties.createmode",
     }
 
+    # Properties Resource Graph does not project for a SPECIFIC type, so they
+    # always diff as desired-vs-null. Type-scoped (unlike WRITE_ONLY_PROPERTIES)
+    # because the path is too generic to suppress globally: e.g. a Virtual WAN's
+    # `properties.type` (Standard/Basic) is absent from the Resource Graph
+    # projection, but a bare "properties.type" would wrongly swallow it on any
+    # other resource type. Keyed by lowercased resource type.
+    NEVER_PROJECTED_BY_TYPE = {
+        "microsoft.network/virtualwans": ("properties.type",),
+    }
+
     @staticmethod
     def compare_properties(
         bicep_properties: Dict[str, Any],
@@ -996,6 +1006,11 @@ class PropertyComparator:
             if key not in deployed_flat:
                 # Skip write-only properties (Azure doesn't return these in API responses)
                 if PropertyComparator._is_write_only_property(key):
+                    continue
+
+                # Skip properties Resource Graph never projects for this type
+                # (e.g. Virtual WAN properties.type) - always a desired-vs-null FP.
+                if PropertyComparator._is_unprojected_property(rtype, key):
                     continue
 
                 # Skip unresolved template expressions (resolve at deploy time)
@@ -1815,6 +1830,16 @@ class PropertyComparator:
             if write_only == path_lower or path_lower.startswith(write_only + "."):
                 return True
         return False
+
+    @staticmethod
+    def _is_unprojected_property(rtype: str, property_path: str) -> bool:
+        """True if Resource Graph never projects this property for this type, so
+        a desired value always diffs against null (see NEVER_PROJECTED_BY_TYPE)."""
+        props = PropertyComparator.NEVER_PROJECTED_BY_TYPE.get((rtype or "").lower())
+        if not props:
+            return False
+        p = property_path.lower()
+        return any(p == wp or p.startswith(wp + ".") for wp in props)
 
 
 class ConfigurationValidator:
