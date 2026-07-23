@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.ownership import classify_owner, PLATFORM, WORKLOAD
+from tools.ownership import PLATFORM, WORKLOAD, classify_owner
 
 
 class OwnershipTests(unittest.TestCase):

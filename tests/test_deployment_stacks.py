@@ -19,15 +19,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.deployment_stacks import (
     STACK_TYPE,
+    _in_scan_scope,
+    _is_top_level,
+    _stack_url,
     annotate_stack_ownership,
     compare_deployment_stack,
     dedupe_against,
     load_stack_config,
     managed_ids,
     stack_drift_enabled,
-    _in_scan_scope,
-    _is_top_level,
-    _stack_url,
 )
 
 SUB = "00000000-0000-0000-0000-000000000001"
@@ -416,7 +416,7 @@ class TestOwnerRouting(unittest.TestCase):
     def test_stack_drift_routes_to_the_platform_team(self):
         """The stack is the IaC control plane: its deny settings are the platform
         team's to answer for, whatever workload it deploys."""
-        from tools.ownership import classify_owner, PLATFORM
+        from tools.ownership import PLATFORM, classify_owner
         self.assertEqual(classify_owner(STACK_TYPE), PLATFORM)
 
 

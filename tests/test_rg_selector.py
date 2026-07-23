@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.rg_selector import resolve_resource_groups, needs_expansion, is_glob
+from tools.rg_selector import is_glob, needs_expansion, resolve_resource_groups
 
 AVAILABLE = ["rg-hub", "rg-conn-dns", "rg-conn-fw", "rg-app-spoke", "rg-data-spoke"]
 

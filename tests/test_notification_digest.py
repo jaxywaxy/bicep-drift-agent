@@ -17,11 +17,11 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.send_notifications import (
+    DIGEST_MAX_LINES,
     DriftEvent,
     NotificationRouter,
     build_digest,
     events_from_report,
-    DIGEST_MAX_LINES,
 )
 
 

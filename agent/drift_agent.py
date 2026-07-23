@@ -16,13 +16,13 @@ Recommended responsibilities:
 import json
 import logging
 import os
-from dataclasses import dataclass, asdict, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from anthropic import Anthropic
 
-from tools.models import DriftReport, Drift
+from tools.models import Drift, DriftReport
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class AgentUsage:
     output_tokens: int = 0
     cache_creation_input_tokens: int = 0
     cache_read_input_tokens: int = 0
-    _models: List[str] = field(default_factory=list)
+    _models: list[str] = field(default_factory=list)
 
     def record(self, model: str, usage: Any) -> None:
         """Add one response's usage block (tolerates absent cache fields)."""
@@ -70,7 +70,7 @@ class AgentUsage:
                 return prices
         return None
 
-    def cost_usd(self) -> Optional[float]:
+    def cost_usd(self) -> float | None:
         """Estimated USD cost, or None when any model used has no price row."""
         if not self._models:
             return 0.0
@@ -89,7 +89,7 @@ class AgentUsage:
         total += self.cache_creation_input_tokens * in_price * CACHE_WRITE_MULTIPLIER / 1_000_000
         return total
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         cost = self.cost_usd()
         return {
             "calls": self.calls,
@@ -149,24 +149,24 @@ class RemediationAction(str, Enum):
 class DriftFinding:
     resource_type: str
     resource_name: str
-    resource_id: Optional[str]
+    resource_id: str | None
     drift_type: str
     severity: DriftSeverity
     category: DriftCategory
     recommended_action: RemediationAction
     confidence: float
     reason: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
     # Attribution from the report's change_origin (origin, changed_by, category,
     # reason). Given to the agent so it cites who/how instead of re-deriving it.
-    change_origin: Optional[Dict[str, Any]] = None
+    change_origin: dict[str, Any] | None = None
     # Sibling properties of the LIVE resource that did not drift (see
     # LIVE_CONTEXT_PROPERTIES). details carries only the CHANGED paths, so
     # without this the analysis cannot see the state that bounds a finding's
     # severity or decides whether a remediation is even possible - and correctly
     # refuses to assert it, producing "unverified" hedges about facts the report
     # already holds.
-    live_context: Optional[Dict[str, Any]] = None
+    live_context: dict[str, Any] | None = None
 
 
 class DriftAgent:
@@ -267,8 +267,8 @@ class DriftAgent:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
+        api_key: str | None = None,
+        model: str | None = None,
         max_drift_items_for_prompt: int = 100,
     ):
         """
@@ -282,7 +282,7 @@ class DriftAgent:
         self.client = Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
         self.model = model or os.environ.get("DRIFT_AGENT_MODEL", self.DEFAULT_MODEL)
         self.max_drift_items_for_prompt = max_drift_items_for_prompt
-        self.conversation_history: List[Dict[str, str]] = []
+        self.conversation_history: list[dict[str, str]] = []
         self.usage = AgentUsage()
 
     def _create_message(self, **kwargs):
@@ -384,8 +384,8 @@ class DriftAgent:
         resource_type: str,
         resource_name: str,
         drift_type: str,
-        details: Optional[dict] = None,
-        resource_id: Optional[str] = None,
+        details: dict | None = None,
+        resource_id: str | None = None,
     ) -> str:
         """
         Get a specific remediation recommendation for a single drift item.
@@ -433,7 +433,7 @@ Respond with:
 
         return response.content[0].text.strip()
 
-    def _build_findings(self, drift_report: DriftReport) -> List[DriftFinding]:
+    def _build_findings(self, drift_report: DriftReport) -> list[DriftFinding]:
         drifts = drift_report.drifts or []
 
         live_by_key = self._index_live_resources(drift_report.live_resources)
@@ -454,14 +454,14 @@ Respond with:
         return findings
 
     @staticmethod
-    def _index_live_resources(live_resources) -> Dict[str, Dict[str, Any]]:
+    def _index_live_resources(live_resources) -> dict[str, dict[str, Any]]:
         """Index live resources by resource ID and by (type, name).
 
         Both keys because a finding may carry only one of them: property drift
         records reliably have a resource_id from attribution, while a
         missing/extra record may only have type+name.
         """
-        index: Dict[str, Dict[str, Any]] = {}
+        index: dict[str, dict[str, Any]] = {}
         for resource in live_resources or []:
             if not isinstance(resource, dict):
                 continue
@@ -476,8 +476,8 @@ Respond with:
     def _extract_live_context(
         self,
         finding: DriftFinding,
-        live_by_key: Dict[str, Dict[str, Any]],
-    ) -> Optional[Dict[str, Any]]:
+        live_by_key: dict[str, dict[str, Any]],
+    ) -> dict[str, Any] | None:
         """Pull the LIVE_CONTEXT_PROPERTIES present on this finding's resource.
 
         Only properties that did NOT drift are included - a value already in
@@ -499,7 +499,7 @@ Respond with:
         changed = (finding.details or {}).get("changed_properties") or {}
         changed_paths = {str(p).lower() for p in changed} if isinstance(changed, dict) else set()
 
-        context: Dict[str, Any] = {}
+        context: dict[str, Any] = {}
         for path in self.LIVE_CONTEXT_PROPERTIES:
             if path.lower() in changed_paths:
                 continue
@@ -509,7 +509,7 @@ Respond with:
         return context or None
 
     @staticmethod
-    def _resolve_path(resource: Dict[str, Any], path: str) -> Any:
+    def _resolve_path(resource: dict[str, Any], path: str) -> Any:
         node: Any = resource
         for part in path.split("."):
             if not isinstance(node, dict):
@@ -550,7 +550,7 @@ Respond with:
         self,
         resource_type: str,
         drift_type: str,
-        details: Dict[str, Any],
+        details: dict[str, Any],
     ) -> DriftCategory:
         # SYSTEM_MANAGED is a statement about PROVENANCE - Azure created this
         # resource as a dependent (a VM's NIC, a private endpoint's DNS zone
@@ -591,7 +591,7 @@ Respond with:
         self,
         resource_type: str,
         drift_type: str,
-        details: Dict[str, Any],
+        details: dict[str, Any],
         category: DriftCategory,
     ) -> DriftSeverity:
         if category == DriftCategory.SYSTEM_MANAGED:
@@ -646,7 +646,7 @@ Respond with:
         ("info", DriftSeverity.LOW),
     )
 
-    def _max_property_severity(self, details: Dict[str, Any]) -> Optional[DriftSeverity]:
+    def _max_property_severity(self, details: dict[str, Any]) -> DriftSeverity | None:
         """Highest detector-assigned severity across changed_properties, or None."""
         changed = (details or {}).get("changed_properties")
         if not isinstance(changed, dict):
@@ -692,10 +692,10 @@ Respond with:
 
     def _calculate_confidence(
         self,
-        resource_id: Optional[str],
+        resource_id: str | None,
         resource_type: str,
         drift_type: str,
-        details: Dict[str, Any],
+        details: dict[str, Any],
     ) -> float:
         score = 0.4
 
@@ -719,7 +719,7 @@ Respond with:
         drift_type: str,
         category: DriftCategory,
         severity: DriftSeverity,
-        details: Dict[str, Any],
+        details: dict[str, Any],
     ) -> str:
         if category == DriftCategory.SYSTEM_MANAGED:
             return "Resource type is commonly created or managed by Azure as a dependent resource."
@@ -747,11 +747,11 @@ Respond with:
     def _build_summary(
         self,
         drift_report: DriftReport,
-        findings: List[DriftFinding],
-    ) -> Dict[str, Any]:
-        severity_counts: Dict[str, int] = {}
-        category_counts: Dict[str, int] = {}
-        action_counts: Dict[str, int] = {}
+        findings: list[DriftFinding],
+    ) -> dict[str, Any]:
+        severity_counts: dict[str, int] = {}
+        category_counts: dict[str, int] = {}
+        action_counts: dict[str, int] = {}
 
         for finding in findings:
             severity_counts[finding.severity.value] = severity_counts.get(finding.severity.value, 0) + 1
@@ -774,8 +774,8 @@ Respond with:
     def _format_drift_context(
         self,
         drift_report: DriftReport,
-        findings: List[DriftFinding],
-        summary: Dict[str, Any],
+        findings: list[DriftFinding],
+        summary: dict[str, Any],
         reconciled_count: int = 0,
     ) -> str:
         limited_findings = findings[: self.max_drift_items_for_prompt]
@@ -895,7 +895,7 @@ Output style:
 - Be concise, practical, and suitable for an infrastructure team.
 """
 
-    def _extract_resource_id(self, drift: Drift, details: Dict[str, Any]) -> Optional[str]:
+    def _extract_resource_id(self, drift: Drift, details: dict[str, Any]) -> str | None:
         candidates = [
             getattr(drift, "resource_id", None),
             details.get("resource_id"),
@@ -910,7 +910,7 @@ Output style:
 
         return None
 
-    def _contains_high_risk_detail(self, details: Dict[str, Any]) -> bool:
+    def _contains_high_risk_detail(self, details: dict[str, Any]) -> bool:
         details_text = json.dumps(details, default=str).lower()
 
         return any(key.lower() in details_text for key in self.HIGH_RISK_DETAIL_KEYS)
@@ -918,7 +918,7 @@ Output style:
     def _has_cost_sensitive_change(
         self,
         resource_type: str,
-        details: Dict[str, Any],
+        details: dict[str, Any],
     ) -> bool:
         if not self._matches_any(resource_type, self.COST_SENSITIVE_RESOURCE_TYPES):
             return False
@@ -951,8 +951,8 @@ Output style:
         resource_type: str,
         resource_name: str,
         drift_type: str,
-        details: Dict[str, Any],
-        resource_id: Optional[str] = None,
+        details: dict[str, Any],
+        resource_id: str | None = None,
     ) -> Drift:
         """
         Creates a lightweight Drift-like object.

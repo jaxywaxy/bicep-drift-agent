@@ -18,9 +18,9 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.change_origin import (
-    classify_change_origin,
-    build_resource_lifecycle,
     _create_lifecycle_event,
+    build_resource_lifecycle,
+    classify_change_origin,
 )
 
 

@@ -19,7 +19,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools import publish_lz_issue as pli
-from tools.send_notifications import NotificationRouter, DriftEvent
+from tools.send_notifications import DriftEvent, NotificationRouter
 
 
 def _write_report(directory, rg="rg-app", drifts=None, analysis=None):

@@ -16,7 +16,8 @@ Nuance handled:
   change is attributed to WORKLOAD even though the NSG is PLATFORM.
 """
 
-from typing import Optional, Dict, Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 PLATFORM = "platform"
 WORKLOAD = "workload"
@@ -78,8 +79,8 @@ WORKLOAD_OVERRIDE_PROPERTIES = (
 
 def classify_owner(
     resource_type: str,
-    drift: Optional[Dict[str, Any]] = None,
-    platform_types: Optional[Iterable[str]] = None,
+    drift: dict[str, Any] | None = None,
+    platform_types: Iterable[str] | None = None,
 ) -> str:
     """
     Return the owner ("platform" or "workload") for a drift finding.

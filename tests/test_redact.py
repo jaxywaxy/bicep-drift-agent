@@ -1,6 +1,6 @@
 import unittest
 
-from tools.redact import redact_secrets, REDACTED
+from tools.redact import REDACTED, redact_secrets
 
 
 class TestRedactSecrets(unittest.TestCase):

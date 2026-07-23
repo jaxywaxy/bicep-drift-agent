@@ -10,8 +10,8 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.get_live_state import (
-    _normalize_cosmos_account_locations,
     _normalize_aci_container_groups,
+    _normalize_cosmos_account_locations,
 )
 
 

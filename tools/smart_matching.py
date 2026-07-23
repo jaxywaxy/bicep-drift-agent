@@ -6,9 +6,7 @@ them to deployed resources by type.
 """
 
 import re
-from typing import List, Dict, Tuple
 from collections import defaultdict
-
 
 # The normalizer renders an unresolvable uniqueString() as a bracketed hex
 # placeholder ('sqldrift[86c9cbf6]/driftdb') - no function-call marker left.
@@ -30,7 +28,7 @@ UNRESOLVABLE_FUNCTIONS = {
 }
 
 
-def detect_unresolvable_expressions(arm_template: Dict) -> Dict[str, List[str]]:
+def detect_unresolvable_expressions(arm_template: dict) -> dict[str, list[str]]:
     """
     Detect resources with unresolvable runtime expressions in names.
 
@@ -79,10 +77,10 @@ def _has_unresolvable_expression(name_str: str) -> bool:
 
 
 def smart_match_resources(
-    bicep_resources: List[Dict],
-    azure_resources: List[Dict],
-    unresolvable: Dict[str, List[str]]
-) -> Tuple[List[Dict], List[Dict], List[Dict]]:
+    bicep_resources: list[dict],
+    azure_resources: list[dict],
+    unresolvable: dict[str, list[str]]
+) -> tuple[list[dict], list[dict], list[dict]]:
     """
     Attempt to match unresolvable Bicep resources to deployed Azure resources.
 
@@ -150,7 +148,7 @@ def smart_match_resources(
     return matched, unmatched_bicep, unmatched_azure
 
 
-def _find_best_match(bicep_resource: Dict, candidates: List[Dict]) -> Dict:
+def _find_best_match(bicep_resource: dict, candidates: list[dict]) -> dict:
     """
     Find the best matching Azure resource from candidates.
 
@@ -228,9 +226,9 @@ def _find_best_match(bicep_resource: Dict, candidates: List[Dict]) -> Dict:
 
 
 def annotate_drifts_with_matches(
-    drifts: List[Dict],
-    matched_resources: List[Dict]
-) -> List[Dict]:
+    drifts: list[dict],
+    matched_resources: list[dict]
+) -> list[dict]:
     """
     Annotate drift items with smart matching information.
 

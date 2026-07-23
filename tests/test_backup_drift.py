@@ -18,9 +18,9 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.property_drift import PropertyComparator
-from tools.get_live_state import _shape_backup_config, _shape_backup_policy
 from tools.diff_states import filter_unmanaged_live_resources
+from tools.get_live_state import _shape_backup_config, _shape_backup_policy
+from tools.property_drift import PropertyComparator
 
 
 def diffs_by_path(diffs):

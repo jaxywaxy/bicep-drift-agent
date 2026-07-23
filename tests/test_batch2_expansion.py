@@ -83,8 +83,10 @@ class DiagnosticNameQualificationTests(unittest.TestCase):
 
 class DefenderPricingFilterTests(unittest.TestCase):
     def test_only_declared_plans_fetched(self):
+        import io
+        import json as _json
         from unittest import mock
-        import io, json as _json
+
         from tools.get_live_state import fetch_declared_defender_pricings
 
         arm = [{"type": "Microsoft.Security/pricings", "name": "StorageAccounts",

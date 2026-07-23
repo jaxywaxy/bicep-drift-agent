@@ -9,13 +9,12 @@ Phase 1 goal: get this returning real data before touching the agent loop.
 
 import copy
 import json
+import logging
+import re
 import subprocess
 import tempfile
-import re
-import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +154,7 @@ def detect_deployment_scope(arm_template: dict) -> str:
     return "resource_group"
 
 
-def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> List[Dict]:
+def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> list[dict]:
     """
     Extract and normalize resources from an ARM template.
 
@@ -171,7 +170,7 @@ def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = N
     Returns:
         List of normalized resource dicts
     """
-    from .normalizer import flatten_resources, extract_parameters
+    from .normalizer import extract_parameters, flatten_resources
 
     parameters = extract_parameters(arm_template)
     # Override with provided values (e.g., from environment or CLI)

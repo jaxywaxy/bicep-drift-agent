@@ -23,11 +23,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.activity_log import detect_scanning_identity
 from tools.change_origin import (
-    classify_change_origin,
-    build_resource_lifecycle,
-    ChangeOrigin,
     ChangeCategory,
+    ChangeOrigin,
     ChangeSeverity,
+    build_resource_lifecycle,
+    classify_change_origin,
 )
 
 DEPLOYER_OID = "ef83bff1-c6c1-4cb1-84be-9bd758e8fc41"
@@ -181,7 +181,7 @@ class ConfigAllowlistTests(unittest.TestCase):
         import importlib
         os.environ["DRIFT_AUTHORIZED_DEPLOYERS"] = " EF83BFF1-AAAA , deploy@corp.com ,,"
         try:
-            import tools.config as config
+            from tools import config
             importlib.reload(config)
             self.assertEqual(
                 config.AUTHORIZED_DEPLOYERS,
@@ -194,7 +194,7 @@ class ConfigAllowlistTests(unittest.TestCase):
     def test_env_absent_gives_empty_set(self):
         import importlib
         os.environ.pop("DRIFT_AUTHORIZED_DEPLOYERS", None)
-        import tools.config as config
+        from tools import config
         importlib.reload(config)
         self.assertEqual(config.AUTHORIZED_DEPLOYERS, frozenset())
 

@@ -10,7 +10,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.change_origin import classify_change_origin, ChangeOrigin
+from tools.change_origin import ChangeOrigin, classify_change_origin
 
 
 def _log(operation, caller="user@example.com", properties=None):

@@ -12,7 +12,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.normalizer import resolve_expression, _resolve_value
+from tools.normalizer import _resolve_value, resolve_expression
 
 
 class ResolveExpressionTests(unittest.TestCase):

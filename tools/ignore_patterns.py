@@ -2,10 +2,10 @@
 Parse and apply .drift-ignore patterns to filter drift results.
 """
 
-import logging
 import fnmatch
+import logging
 from pathlib import Path
-from typing import List, Optional
+
 import yaml
 
 logger = logging.getLogger(__name__)
@@ -15,11 +15,11 @@ class IgnorePattern:
     """A single ignore pattern for drift filtering."""
 
     def __init__(self, pattern_dict: dict):
-        self.resource_type: Optional[str] = pattern_dict.get("resource_type")
-        self.resource_name: Optional[str] = pattern_dict.get("resource_name")
-        self.drift_type: Optional[str] = pattern_dict.get("drift_type")
-        self.property: Optional[str] = pattern_dict.get("property")
-        self.reason: Optional[str] = pattern_dict.get("reason")
+        self.resource_type: str | None = pattern_dict.get("resource_type")
+        self.resource_name: str | None = pattern_dict.get("resource_name")
+        self.drift_type: str | None = pattern_dict.get("drift_type")
+        self.property: str | None = pattern_dict.get("property")
+        self.reason: str | None = pattern_dict.get("reason")
 
         # Compile regex patterns if they look like regex
         self.resource_type_regex = (
@@ -36,7 +36,7 @@ class IgnorePattern:
         )
 
     @staticmethod
-    def _compile_pattern(pattern: str) -> Optional[str]:
+    def _compile_pattern(pattern: str) -> str | None:
         """Store pattern for fnmatch-based matching (avoids ReDoS vulnerability).
 
         Uses fnmatch instead of regex to avoid catastrophic backtracking issues.
@@ -74,7 +74,7 @@ class IgnorePattern:
 class IgnorePatternList:
     """Load and apply a list of ignore patterns."""
 
-    def __init__(self, patterns: List[dict] = None):
+    def __init__(self, patterns: list[dict] = None):
         self.patterns = [IgnorePattern(p) for p in (patterns or [])]
 
     @staticmethod

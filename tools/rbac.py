@@ -27,7 +27,7 @@ import fnmatch
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ BUILTIN_ROLE_NAMES = {
 }
 
 
-def _extract_guid(value: Any) -> Optional[str]:
+def _extract_guid(value: Any) -> str | None:
     """Pull the role GUID out of a roleDefinitionId in ANY form it appears.
 
     Works on a full ARM id, a bare GUID, or an unresolved bicep expression like
@@ -83,13 +83,13 @@ def _is_unresolved(value: Any) -> bool:
     return not v or any(marker in v for marker in ("[", "(", "{"))
 
 
-def _scope_rg(scope: str) -> Optional[str]:
+def _scope_rg(scope: str) -> str | None:
     """Resource-group name from an assignment scope, or None for sub/MG scopes."""
     m = re.search(r"/resourcegroups/([^/]+)", scope or "", re.IGNORECASE)
     return m.group(1) if m else None
 
 
-def _scope_target_type(scope: str) -> Optional[str]:
+def _scope_target_type(scope: str) -> str | None:
     """The scoped-to resource type ("Microsoft.Network/virtualNetworks") for a
     resource-scoped assignment, or None for sub/RG-level scopes."""
     m = re.search(r"/providers/([^/]+)/([^/]+)/", (scope or "") + "/", re.IGNORECASE)
@@ -100,10 +100,10 @@ def _scope_target_type(scope: str) -> Optional[str]:
 
 def fetch_role_assignments(
     subscription_id: str,
-    resource_group: Optional[str] = None,
+    resource_group: str | None = None,
     scope: str = "resource_group",
     credential: Any = None,
-) -> List[Dict]:
+) -> list[dict]:
     """Fetch live role assignments in the scan scope via Resource Graph.
 
     Returns assignment dicts with resolved role names. Scope filtering keeps
@@ -125,8 +125,8 @@ def fetch_role_assignments(
         credential = credential or DefaultAzureCredential()
         client = ResourceGraphClient(credential)
 
-        def _query(kql: str) -> List[Dict]:
-            rows: List[Dict] = []
+        def _query(kql: str) -> list[dict]:
+            rows: list[dict] = []
             skip_token = None
             while True:
                 request = QueryRequest(
@@ -188,11 +188,11 @@ def fetch_role_assignments(
 
 
 def filter_assignments_to_scope(
-    assignments: List[Dict],
+    assignments: list[dict],
     subscription_id: str,
-    resource_group: Optional[str],
+    resource_group: str | None,
     scope: str,
-) -> List[Dict]:
+) -> list[dict]:
     """Keep only assignments whose scope belongs to the scan (see fetch docstring)."""
     sub_prefix = f"/subscriptions/{subscription_id}".lower()
     kept = []
@@ -207,14 +207,12 @@ def filter_assignments_to_scope(
         else:
             if rg is None:
                 kept.append(a)  # subscription-level assignment
-            elif not resource_group or resource_group in ("*", ""):
-                kept.append(a)
-            elif fnmatch.fnmatch(rg.lower(), resource_group.lower()):
+            elif not resource_group or resource_group in ("*", "") or fnmatch.fnmatch(rg.lower(), resource_group.lower()):
                 kept.append(a)
     return kept
 
 
-def extract_bicep_role_assignments(arm_resources: List[Dict]) -> Tuple[List[Dict], int]:
+def extract_bicep_role_assignments(arm_resources: list[dict]) -> tuple[list[dict], int]:
     """Pull role assignments out of the compiled template for identity matching.
 
     Returns (extracted, skipped_count). An assignment whose roleDefinitionId
@@ -242,7 +240,7 @@ def extract_bicep_role_assignments(arm_resources: List[Dict]) -> Tuple[List[Dict
     return extracted, skipped
 
 
-def collect_managed_identity_principals(live_resources: Optional[List[Dict]]) -> set:
+def collect_managed_identity_principals(live_resources: list[dict] | None) -> set:
     """principalIds of managed identities this estate currently deploys.
 
     A role assignment declared in bicep for a deployed identity carries that
@@ -271,10 +269,10 @@ def collect_managed_identity_principals(live_resources: Optional[List[Dict]]) ->
 
 
 def compare_role_assignments(
-    arm_resources: List[Dict],
-    live_assignments: List[Dict],
-    deployed_principals: Optional[set] = None,
-) -> List[Dict]:
+    arm_resources: list[dict],
+    live_assignments: list[dict],
+    deployed_principals: set | None = None,
+) -> list[dict]:
     """Match bicep assignments to live ones by identity; emit drift dicts.
 
     Matching order (each live assignment is consumed at most once):
@@ -332,7 +330,7 @@ def compare_role_assignments(
         else:
             unmatched_bicep.append(b)
 
-    drifts: List[Dict] = []
+    drifts: list[dict] = []
     for a in remaining:
         details = {
             "role_name": a["role_name"],

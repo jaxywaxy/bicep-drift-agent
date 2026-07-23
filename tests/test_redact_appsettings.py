@@ -22,8 +22,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.redact import redact_secrets, REDACTED
 from tools.property_drift import PropertyComparator
+from tools.redact import REDACTED, redact_secrets
 
 CONN = "DefaultEndpointsProtocol=https;AccountName=st1;AccountKey=cI7rgfcIsecret==;EndpointSuffix=core.windows.net"
 

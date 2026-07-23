@@ -18,7 +18,6 @@ list``) so the logic stays unit-testable.
 import fnmatch
 import re
 import sys
-from typing import List
 
 WILDCARD = "*"
 _GLOB_CHARS = set("*?[]")
@@ -45,12 +44,12 @@ def rg_label(selector) -> str:
     return selector
 
 
-def needs_expansion(patterns: List[str]) -> bool:
+def needs_expansion(patterns: list[str]) -> bool:
     """True if any selector is a wildcard/glob and the caller must enumerate RGs."""
     return any(is_glob(p) for p in patterns)
 
 
-def resolve_resource_groups(patterns: List[str], available: List[str]) -> List[str]:
+def resolve_resource_groups(patterns: list[str], available: list[str]) -> list[str]:
     """Expand ``resource_groups`` selectors against the available RGs.
 
     Rules (order preserved, duplicates removed):
@@ -65,7 +64,7 @@ def resolve_resource_groups(patterns: List[str], available: List[str]) -> List[s
     """
     available = list(available or [])
     avail_lower = {a.lower(): a for a in available}
-    resolved: List[str] = []
+    resolved: list[str] = []
     seen = set()
 
     def _add(rg: str):
@@ -91,7 +90,7 @@ def resolve_resource_groups(patterns: List[str], available: List[str]) -> List[s
     return resolved
 
 
-def _main(argv: List[str]) -> int:
+def _main(argv: list[str]) -> int:
     """CLI: expand selectors, reading available RGs (one per line) from stdin.
 
     Usage:  az group list --query "[].name" -o tsv \\

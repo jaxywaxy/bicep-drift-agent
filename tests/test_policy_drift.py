@@ -10,13 +10,13 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tools.ownership import PLATFORM, classify_owner
 from tools.policy import (
     _definition_ref,
     compare_policy_resources,
     extract_bicep_policy_assignments,
     policy_drift_enabled,
 )
-from tools.ownership import classify_owner, PLATFORM
 
 SUB = "00000000-0000-0000-0000-000000000001"
 TDE_GUID = "06a78e20-9358-41c9-923c-fb736d382a4d"  # Deploy SQL DB TDE (built-in)

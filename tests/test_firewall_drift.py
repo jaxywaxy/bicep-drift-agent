@@ -15,8 +15,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.property_drift import PropertyComparator
 from tools.get_live_state import _CHILD_EXPANSION_SPECS
+from tools.property_drift import PropertyComparator
 
 RCG_TYPE = "Microsoft.Network/firewallPolicies/ruleCollectionGroups"
 POLICY_TYPE = "Microsoft.Network/firewallPolicies"
