@@ -650,6 +650,7 @@ checks:
 - [CAPABILITIES.md](CAPABILITIES.md) 
 - [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) - Teams and Slack Notification configuration
 - [LANDING_ZONES_OPERATIONS.md](LANDING_ZONES_OPERATIONS.md) — Landing Zone configuration
+- [RESOURCE_GROUP_TARGETING.md](RESOURCE_GROUP_TARGETING.md) — How the agent chooses which resource groups to scan
 - [AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md) - Azure authentication configuration
 - [SECURITY.md](SECURITY.md) - Security 
 - [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) - Runbook for Operations team
