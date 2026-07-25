@@ -1,24 +1,23 @@
 """
 Phase 2: Agent-based drift analysis and remediation.
 
-Uses Claude to reason about drift, classify severity, recommend remediation,
-and produce actionable governance-focused output.
+`DriftAgent` is the LLM orchestrator - it owns the Anthropic client, the
+conversation history, and the analyze / follow-up / recommend calls. The work it
+composes lives in mixins it inherits, each independently testable:
 
-Recommended responsibilities:
-- Classify drift severity
-- Identify drift category
-- Flag unmanaged resources
-- Recommend remediation path
-- Produce PR / pipeline-friendly summary
-- Support follow-up Q&A
+- classification.DriftClassifier - deterministic Drift -> DriftFinding (no LLM)
+- live_context.LiveContextMixin   - enrich findings with live Azure state
+- prompts.PromptsMixin            - system prompt + drift-context serialisation
+
+Finding types (severity/category/action enums, DriftFinding) live in findings.py;
+usage/cost accounting in usage.py. All re-exported here for backwards-compatible
+imports.
 """
 
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass, field, replace
-from enum import Enum
-from typing import Any
+from dataclasses import replace
 
 from anthropic import Anthropic
 
