@@ -82,10 +82,13 @@ class LifecycleRenameTests(unittest.TestCase):
             }],
             "live_resources": [],
         }
-        with mock.patch.object(analyze_drift, "fetch_resource_group_activity", return_value=events), \
-             mock.patch.object(analyze_drift, "fetch_policy_principal_ids", return_value=set()), \
-             mock.patch.object(analyze_drift, "detect_scanning_identity", return_value=set()), \
-             mock.patch.object(analyze_drift, "match_activity_for_resource", return_value=events):
+        # The activity-log helpers are now imported and called inside
+        # orchestration.attribution, so patch them there (not on analyze_drift).
+        from orchestration import attribution
+        with mock.patch.object(attribution, "fetch_resource_group_activity", return_value=events), \
+             mock.patch.object(attribution, "fetch_policy_principal_ids", return_value=set()), \
+             mock.patch.object(attribution, "detect_scanning_identity", return_value=set()), \
+             mock.patch.object(attribution, "match_activity_for_resource", return_value=events):
             analyze_drift._build_lifecycle_and_split(report, "rg-x")
         return report["drifts"][0] if report["drifts"] else report["policy_enforced_drifts"][0]
 
