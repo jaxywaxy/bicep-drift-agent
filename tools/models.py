@@ -19,10 +19,6 @@ class Resource:
     properties: dict[str, Any] | None = None
     source: str = "unknown"  # "bicep" or "azure"
 
-    def identifier(self) -> tuple:
-        """Get a stable identifier for this resource."""
-        return (self.type.lower(), self.name.lower())
-
 
 @dataclass
 class Drift:

@@ -7,7 +7,7 @@ classifier produces and the prompt builder serialises. No behaviour here -
 just the vocabulary the mixins and orchestrator agree on.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 

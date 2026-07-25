@@ -52,3 +52,6 @@ CLAUDE.md
 # Added by code-review-graph
 .code-review-graph/
 .github/code-review-graph.instruction.md
+
+# code-review-graph evaluation artifacts (benchmark repos + results)
+evaluate/

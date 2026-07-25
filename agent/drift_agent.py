@@ -21,10 +21,12 @@ from dataclasses import replace
 
 from anthropic import Anthropic
 
-from tools.models import Drift, DriftReport
+from tools.models import DriftReport
 
 from .usage import AgentUsage
-from .findings import DriftSeverity, DriftCategory, RemediationAction, DriftFinding
+from .findings import (  # noqa: F401  (re-exported for callers/tests)
+    DriftSeverity, DriftCategory, RemediationAction, DriftFinding,
+)
 from .classification import DriftClassifier
 from .live_context import LiveContextMixin
 from .prompts import PromptsMixin
