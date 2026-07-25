@@ -186,7 +186,9 @@ class TestFinalizeDriftCount(unittest.TestCase):
         # A new drift_type must not vanish from every surface in silence.
         report = {"drifts": [{"drift_type": "property_drift"},
                              {"drift_type": "brand_new_type"}]}
-        with self.assertLogs(ad.logger, level="WARNING") as captured:
+        # _finalize_drift_count now lives in orchestration.reporting, so its
+        # unrecognised-type warning emits on that module's logger.
+        with self.assertLogs("orchestration.reporting", level="WARNING") as captured:
             self.assertEqual(ad._finalize_drift_count(report), 1)
         self.assertIn("brand_new_type", "\n".join(captured.output))
 
