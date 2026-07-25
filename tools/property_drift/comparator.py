@@ -1,13 +1,18 @@
 """
 tools/property_drift/comparator.py
 
-Property-level comparison between Bicep (desired) and Azure (actual). All
-comparison logic - severity policy, sentinel checks, subset-vs-exact set
-semantics, firewall/rule-collection granularity, Key Vault access-policy
-identity matching, App Service appsettings key-only compare, monitoring
-linkage refs, elevation of severity for monitoring/backup - lives in the
-single `PropertyComparator` class. Keeping the class intact preserves the
-`PropertyComparator._foo` call sites the test suite relies on.
+Property-level comparison between Bicep (desired) and Azure (actual).
+`PropertyComparator.compare_properties` is the orchestrator; the comparison
+logic lives in focused sibling modules it delegates to:
+
+    primitives  - generic value matching (subset, scalar, placeholder, flatten)
+    severity    - critical-property policy + monitoring/backup elevation
+    firewall    - Azure Firewall ruleCollections -> rules -> fields diffing
+    security    - sentinels, network-ACL defaults, allowlists, access policies
+    monitoring  - alert linkage (scopes / action-group) cross-references
+
+The class keeps thin `staticmethod` aliases (PropertyComparator._foo) delegating
+to those modules, preserving every call site the test suite binds to.
 """
 
 import re as _re
