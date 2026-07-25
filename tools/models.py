@@ -66,12 +66,6 @@ class DriftReport:
         """Total number of drift issues."""
         return self.total_missing + self.total_extra + self.total_modified
 
-    def critical_drifts(self) -> list[Drift]:
-        """Return only critical-severity drifts."""
-        if not self.drifts:
-            return []
-        return [d for d in self.drifts if d.severity == "critical"]
-
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         return {
