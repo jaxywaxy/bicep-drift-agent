@@ -189,14 +189,3 @@ def _entry_from_log(log: Any) -> dict[str, Any]:
         'method': props.get('method') if isinstance(props, dict) else None,
         'authorization': log.authorization if hasattr(log, 'authorization') else None,
     }
-
-
-def _extract_rg_from_resource_id(resource_id: str) -> str | None:
-    """Extract the resource group name from an Azure resource ID (case-insensitive)."""
-    if not resource_id:
-        return None
-    parts = resource_id.split("/")
-    for i, part in enumerate(parts):
-        if part.lower() == "resourcegroups" and i + 1 < len(parts):
-            return parts[i + 1]
-    return None
