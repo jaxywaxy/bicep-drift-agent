@@ -28,119 +28,35 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.drift_agent import DriftAgent
-from run_drift_check import run as run_phase1
-from tools.activity_log import (
-    detect_scanning_identity,
-    fetch_policy_principal_ids,
-    fetch_resource_group_activity,
-    match_activity_for_resource,
-)
-from tools.change_origin import (
-    build_resource_lifecycle,
-    classify_change_origin,
-    select_relevant_activity,
-)
-from tools.compile_bicep import compile_bicep, detect_deployment_scope
-from tools.config import AUTHORIZED_DEPLOYERS
-from tools.count_drifts import COUNTED_TYPES
-from tools.diff_states import (
-    _IDENTITY_MATCHED_TYPES,
-    _should_compare_resource,
-    filter_unmanaged_live_resources,
-)
-from tools.html_report import generate_html_report
-from tools.ignore_patterns import IgnorePatternList
 from tools.logger import get_logger, setup_logging
-from tools.models import Drift, DriftReport
-from tools.ownership import classify_owner
-from tools.property_drift import DriftDetector
 from tools.rg_selector import rg_label
-from tools.smart_matching import (
-    _has_unresolvable_expression,
-    annotate_drifts_with_matches,
-    detect_unresolvable_expressions,
-    smart_match_resources,
-)
 
 logger = get_logger(__name__)
 
-from orchestration.analysis import (
-    _run_claude_analysis,
-    _clean_estate_summary,
+# The pipeline phases live in the orchestration/ package; main() is the sole
+# ordering authority and composes them. _build_lifecycle_and_split /
+# _recover_deployed_name are re-imported only so the test suite can reach them
+# through analyze_drift.
+from orchestration.targeting import _resolve_target_resource_groups
+from orchestration.detection import _run_phase1, _consolidate_wildcard_results
+from orchestration.reconciliation import (
+    _apply_smart_matching,
+    _apply_ignore_patterns,
+    _detect_and_merge_property_drift,
 )
-
 from orchestration.attribution import (
     _attribute_lifecycle,
     _split_policy_and_tag_owners,
-    _build_lifecycle_and_split,
-    _recover_deployed_name,
+    _build_lifecycle_and_split,  # noqa: F401  (re-exported for tests)
+    _recover_deployed_name,  # noqa: F401  (re-exported for tests)
 )
-
-from orchestration.reconciliation import (
-    _apply_smart_matching,
-    _flag_unmatched_placeholder_resources,
-    _apply_ignore_patterns,
-    _detect_and_merge_property_drift,
-    _find_deployed_resource,
-)
-
-from orchestration.detection import (
-    _run_phase1,
-    _consolidate_wildcard_results,
-)
-
+from orchestration.analysis import _run_claude_analysis
 from orchestration.reporting import (
     _finalize_drift_count,
-    _drift_type_counts,
+    _drift_type_counts,  # noqa: F401  (re-exported for tests)
     _print_drift_summary,
     _generate_html_report,
 )
-
-from orchestration.targeting import (
-    discover_resource_groups,
-    _resolve_target_resource_groups,
-    _find_repo_ignore,
-)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def main():

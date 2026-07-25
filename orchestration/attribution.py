@@ -15,7 +15,6 @@ from tools.change_origin import build_resource_lifecycle, classify_change_origin
 from tools.config import AUTHORIZED_DEPLOYERS
 from tools.logger import get_logger
 from tools.ownership import classify_owner
-from tools.smart_matching import _has_unresolvable_expression
 
 logger = get_logger(__name__)
 

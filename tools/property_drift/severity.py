@@ -9,7 +9,6 @@ staticmethod aliases (PropertyComparator._get_severity etc.) that delegate
 here, preserving every existing call site.
 """
 
-from typing import Any  # noqa: F401  (PropertyDiff refs use string annotations)
 
 from .models import PropertyDiff  # noqa: F401
 

@@ -15,7 +15,6 @@ The class keeps thin `staticmethod` aliases (PropertyComparator._foo) delegating
 to those modules, preserving every call site the test suite binds to.
 """
 
-import re as _re
 from typing import Any
 
 from .models import PropertyDiff
