@@ -11,6 +11,11 @@ This will:
 1. Run Phase 1 drift check
 2. Feed results to Claude for analysis
 3. Generate actionable recommendations
+
+`main()` is the sole ordering authority for the pipeline; the phase
+implementations live in the `orchestration/` package (targeting, detection,
+reconciliation, attribution, analysis, reporting) and are re-imported below so
+main() and the test suite reach them unchanged.
 """
 
 import json
