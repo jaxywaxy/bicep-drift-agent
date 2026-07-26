@@ -62,6 +62,10 @@ class OperationType(str, Enum):
     DELETE = "delete"
     MODIFY = "modify"
     REMEDIATE = "remediate"
+    # ARM's /write covers create AND update; the operation name cannot separate
+    # them. _classify_operation_type returns this, and build_resource_lifecycle
+    # resolves every WRITE to CREATE or MODIFY, so it never reaches a report.
+    WRITE = "write"
     UNKNOWN = "unknown"
 
 
@@ -471,21 +475,36 @@ def build_resource_lifecycle(
     # Sort chronologically (oldest first)
     sorted_logs = sorted(activity_logs, key=lambda x: x.get('timestamp', ''), reverse=False)
 
+    seen_write = False
     for entry in sorted_logs:
         event = _create_lifecycle_event(entry, authorized_deployers)
-        if event:
-            lifecycle.events.append(event)
+        if not event:
+            continue
 
-            # Track lifecycle milestones
-            if event.operation == OperationType.CREATE:
+        # Resolve the create-or-update ambiguity of ARM's /write positionally:
+        # the first write in the window is the creation, every later one is a
+        # modification. Window-bounded - a resource created before the Activity
+        # Log lookback has its earliest in-window write read as the create - but
+        # strictly better than calling every write a create, which overwrote
+        # created_at on each pass and left last_modified_* permanently empty.
+        if event.operation == OperationType.WRITE:
+            event.operation = OperationType.MODIFY if seen_write else OperationType.CREATE
+            seen_write = True
+
+        lifecycle.events.append(event)
+
+        # Track lifecycle milestones. created_at is only taken from the FIRST
+        # create so a later event cannot move it.
+        if event.operation == OperationType.CREATE:
+            if lifecycle.created_at is None:
                 lifecycle.created_at = event.timestamp
                 lifecycle.created_by = event.actor
-            elif event.operation == OperationType.DELETE:
-                lifecycle.deleted_at = event.timestamp
-                lifecycle.deleted_by = event.actor
-            elif event.operation in (OperationType.UPDATE, OperationType.MODIFY):
-                lifecycle.last_modified_at = event.timestamp
-                lifecycle.last_modified_by = event.actor
+        elif event.operation == OperationType.DELETE:
+            lifecycle.deleted_at = event.timestamp
+            lifecycle.deleted_by = event.actor
+        elif event.operation in (OperationType.UPDATE, OperationType.MODIFY):
+            lifecycle.last_modified_at = event.timestamp
+            lifecycle.last_modified_by = event.actor
 
     return lifecycle
 
@@ -516,9 +535,11 @@ def _create_lifecycle_event(
         # Extract deployment ID if available
         deployment_id = _extract_deployment_id(props)
 
-        # Extract modified properties for UPDATE operations
+        # Extract modified properties for anything that mutates in place. WRITE
+        # is included: it is resolved to CREATE/MODIFY by the caller, and an
+        # ARM /write that turns out to be an update carries them.
         modified_props = None
-        if op_type in (OperationType.UPDATE, OperationType.MODIFY):
+        if op_type in (OperationType.UPDATE, OperationType.MODIFY, OperationType.WRITE):
             modified_props = props.get('modifiedProperties')
 
         reason = _build_event_reason(op_type, origin, caller, policy_info)
@@ -542,19 +563,35 @@ def _create_lifecycle_event(
 
 
 def _classify_operation_type(operation_name: str) -> OperationType:
-    """Classify the operation type from activity log operation name."""
-    op_lower = operation_name.lower()
+    """Classify the operation type from an activity log operation name.
 
-    if any(x in op_lower for x in ["create", "write", "deploy", "put"]):
-        return OperationType.CREATE
-    elif any(x in op_lower for x in ["delete", "remove"]):
-        return OperationType.DELETE
-    elif any(x in op_lower for x in ["modify", "patch", "update"]):
-        return OperationType.MODIFY
-    elif any(x in op_lower for x in ["remediate", "remediation"]):
+    ARM operation names are '{provider}/{type}[/{child}]/{action}' and only the
+    LAST segment is the verb, so the verb match is anchored there. Substring
+    -matching the whole string silently mis-fires: 'Microsoft.Compute/...'
+    contains 'put', which classified every Compute DELETE (VM, disk, VMSS,
+    availability set) as a create - so deleted_at/deleted_by never populated and
+    the lifecycle read 'created by' for a resource that had just been removed.
+
+    'remediation' is matched against the whole name because it identifies the
+    resource TYPE (Microsoft.PolicyInsights/remediations/write), not the verb.
+    """
+    op_lower = (operation_name or "").lower()
+    if "remediat" in op_lower:
         return OperationType.REMEDIATE
-    else:
-        return OperationType.UNKNOWN
+
+    action = op_lower.rsplit("/", 1)[-1].strip()
+    if action in ("delete", "remove"):
+        return OperationType.DELETE
+    if action in ("create", "put", "deploy"):
+        return OperationType.CREATE
+    if action in ("modify", "patch", "update"):
+        return OperationType.MODIFY
+    if action == "write":
+        # ARM uses /write for BOTH create and update, so the name alone cannot
+        # tell them apart. build_resource_lifecycle resolves it positionally;
+        # see OperationType.WRITE.
+        return OperationType.WRITE
+    return OperationType.UNKNOWN
 
 
 def _classify_origin_context(
@@ -667,4 +704,7 @@ def _build_event_reason(
     elif origin == ChangeOrigin.MANUAL_CHANGE:
         return f"Manual change by {actor}"
     else:
-        return f"{op_type.value.title()} operation by {actor}"
+        # WRITE is create-or-update and is resolved by the caller; naming the
+        # verb here would contradict the resolved operation.
+        verb = "Change" if op_type == OperationType.WRITE else op_type.value.title()
+        return f"{verb} operation by {actor}"

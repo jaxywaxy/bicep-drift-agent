@@ -114,13 +114,22 @@ class DriftAgent(DriftClassifier, LiveContextMixin, PromptsMixin):
             }
         ]
 
+        # 3000 truncated a 9-drift report mid-sentence in the remediation plan
+        # (live run 2026-07-26), and the plan is the part operators act on. The
+        # analysis scales with drift count, so the cap has to clear a real
+        # multi-drift estate, not the clean-estate case.
         response = self._create_message(
-            max_tokens=3000,
+            max_tokens=8000,
             system=self._get_system_prompt(),
             messages=self.conversation_history,
         )
 
         analysis = response.content[0].text.strip()
+        if getattr(response, "stop_reason", None) == "max_tokens":
+            logger.warning(
+                "Claude analysis hit the max_tokens cap and is truncated; "
+                "the remediation plan may be incomplete."
+            )
 
         self.conversation_history.append(
             {
