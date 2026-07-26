@@ -457,15 +457,41 @@ def _is_system_managed(caller: str) -> bool:
     return any(sys in caller for sys in system_callers)
 
 
+def _resolve_write(drift_type: str | None, seen_write: bool) -> OperationType:
+    """Decide whether an ARM /write was a creation or a modification.
+
+    The drift type is the authoritative signal and beats event ordering:
+    select_relevant_activity has ALREADY narrowed the log to the one operation
+    that explains this drift, so on a property drift the resource demonstrably
+    exists and its write is a modification; on an extra_in_azure drift the write
+    genuinely is the creation of something undeclared.
+
+    Ordering is only the fallback for callers with no drift context (first write
+    in the window creates, later ones modify). That fallback alone was not
+    enough: production hands this a ONE-event list, so every write looked like a
+    first write and therefore a create.
+    """
+    dt = (drift_type or "").lower()
+    if "property" in dt or "modified" in dt:
+        return OperationType.MODIFY
+    if "extra" in dt:
+        return OperationType.CREATE
+    return OperationType.MODIFY if seen_write else OperationType.CREATE
+
+
 def build_resource_lifecycle(
     resource_id: str,
     activity_logs: list[dict[str, Any]] | None,
     authorized_deployers: set | None = None,
+    drift_type: str | None = None,
 ) -> ResourceLifecycle:
     """
     Build complete resource lifecycle from Activity Log entries.
 
-    Returns all events in chronological order (oldest first).
+    Returns all events in chronological order (oldest first). `drift_type` is
+    what the drift record says happened; it resolves ARM's create-or-update
+    /write ambiguity (see _resolve_write) and is optional so callers without it
+    still get the ordering-based reading.
     """
     lifecycle = ResourceLifecycle(resource_id=resource_id)
 
@@ -481,14 +507,8 @@ def build_resource_lifecycle(
         if not event:
             continue
 
-        # Resolve the create-or-update ambiguity of ARM's /write positionally:
-        # the first write in the window is the creation, every later one is a
-        # modification. Window-bounded - a resource created before the Activity
-        # Log lookback has its earliest in-window write read as the create - but
-        # strictly better than calling every write a create, which overwrote
-        # created_at on each pass and left last_modified_* permanently empty.
         if event.operation == OperationType.WRITE:
-            event.operation = OperationType.MODIFY if seen_write else OperationType.CREATE
+            event.operation = _resolve_write(drift_type, seen_write)
             seen_write = True
 
         lifecycle.events.append(event)

@@ -23,6 +23,7 @@ from tools.change_origin import (
     OperationType,
     _classify_operation_type,
     build_resource_lifecycle,
+    select_relevant_activity,
 )
 
 RESOURCE_ID = (
@@ -146,6 +147,70 @@ class LifecycleMilestoneTests(unittest.TestCase):
         for event in lc.events:
             self.assertNotEqual(event.operation, OperationType.WRITE)
             self.assertNotIn("write", event.to_dict()["reason"].lower())
+
+
+class PipelineShapeTests(unittest.TestCase):
+    """Drive the REAL production path: select_relevant_activity narrows a
+    resource's log to a ONE-event list, and only then does the lifecycle get
+    built. The first version of this fix resolved /write by event ordering and
+    passed its unit tests by feeding the builder several events directly - which
+    production never does. With one event there is no "later" write, so every
+    modification still reported operation 'create' (live run 2026-07-26).
+    """
+
+    def _lifecycle(self, logs, drift_type):
+        relevant = select_relevant_activity(logs, drift_type)
+        return relevant, build_resource_lifecycle("/x/r", relevant, drift_type=drift_type)
+
+    def test_property_drift_on_an_existing_resource_is_a_modification(self):
+        logs = [
+            _entry("Microsoft.Storage/storageAccounts/write", 0, caller="pipeline"),
+            _entry("Microsoft.Storage/storageAccounts/write", 30, caller="jacqui"),
+        ]
+
+        relevant, lc = self._lifecycle(logs, "property_drift")
+
+        self.assertEqual(len(relevant), 1, "production narrows to one event")
+        self.assertEqual([e.operation for e in lc.events], [OperationType.MODIFY])
+        self.assertEqual(lc.last_modified_by, "jacqui")
+        self.assertEqual(lc.last_modified_at, T0 + timedelta(minutes=30))
+        # The write did not create this resource, so created_* must stay empty.
+        self.assertIsNone(lc.created_at)
+        self.assertIsNone(lc.created_by)
+
+    def test_extra_in_azure_write_really_is_a_creation(self):
+        logs = [_entry("Microsoft.Network/networkSecurityGroups/write", 0, caller="jacqui")]
+
+        _, lc = self._lifecycle(logs, "extra_in_azure")
+
+        self.assertEqual([e.operation for e in lc.events], [OperationType.CREATE])
+        self.assertEqual(lc.created_by, "jacqui")
+        self.assertIsNone(lc.last_modified_at)
+
+    def test_missing_in_azure_still_reports_the_deletion(self):
+        logs = [
+            _entry("Microsoft.Compute/availabilitySets/write", 0, caller="pipeline"),
+            _entry("Microsoft.Compute/availabilitySets/delete", 30, caller="jacqui"),
+        ]
+
+        _, lc = self._lifecycle(logs, "missing_in_azure")
+
+        self.assertEqual([e.operation for e in lc.events], [OperationType.DELETE])
+        self.assertEqual(lc.deleted_by, "jacqui")
+        self.assertEqual(lc.deleted_at, T0 + timedelta(minutes=30))
+
+    def test_no_drift_context_falls_back_to_ordering(self):
+        logs = [
+            _entry("Microsoft.Storage/storageAccounts/write", 0),
+            _entry("Microsoft.Storage/storageAccounts/write", 30),
+        ]
+
+        lc = build_resource_lifecycle("/x/r", logs)  # no drift_type
+
+        self.assertEqual(
+            [e.operation for e in lc.events],
+            [OperationType.CREATE, OperationType.MODIFY],
+        )
 
 
 if __name__ == "__main__":

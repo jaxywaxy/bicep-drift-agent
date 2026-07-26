@@ -121,7 +121,12 @@ def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
                         logger.info(f"  Resolved deployed name: {bicep_name} -> {real_name}")
                         break
 
-            lifecycle = build_resource_lifecycle(resource_id, relevant_logs, authorized_deployers)
+            # Pass the drift type through: relevant_logs is a ONE-event list, so
+            # the builder cannot tell a create from an update by ordering alone.
+            lifecycle = build_resource_lifecycle(
+                resource_id, relevant_logs, authorized_deployers,
+                drift_type=drift.get("drift_type", ""),
+            )
             drift["lifecycle"] = lifecycle.to_dict()
 
             origin_info = classify_change_origin(
