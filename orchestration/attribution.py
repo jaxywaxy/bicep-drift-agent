@@ -163,6 +163,80 @@ def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
     logger.info("Resource lifecycle detection completed")
 
 
+def _claim_policy_required_tags(report_data: dict) -> int:
+    """Move tag properties an in-scope policy MANDATES out of the actionable set.
+
+    An inherit-tag Modify effect rewrites the value inside the deployer's own
+    write, so the activity log shows one event attributed to the pipeline and the
+    policy identity never appears - the caller-based path in change_origin
+    cannot see it (issue #321). The evidence used here is therefore what policy
+    REQUIRES: template says X, live says Y, and an in-scope assignment mandates
+    exactly Y.
+
+    Per-PROPERTY on purpose. A storage account whose tags.environment is
+    policy-imposed can carry a genuinely critical allowBlobPublicAccess in the
+    same record; moving the whole record to the governance section would bury it.
+    Claimed properties move to `policy_enforced_properties`; only a drift with
+    nothing left becomes policy-enforced outright.
+    """
+    required = report_data.get("policy_required_tags") or {}
+    if not required:
+        return 0
+
+    claimed = 0
+    for drift in report_data.get("drifts", []):
+        if drift.get("drift_type") != "property_drift":
+            continue
+        changed = (drift.get("details") or {}).get("changed_properties") or {}
+        for path in list(changed):
+            if not path.lower().startswith("tags."):
+                continue
+            rule = required.get(path.split(".", 1)[1].lower())
+            if not rule:
+                continue
+            change = changed[path] or {}
+            # Only claim when policy's mandated value is what is actually live.
+            # A third value means someone else moved it and policy has not
+            # reconverged - that is real drift and must stay actionable.
+            if str(change.get("actual")) != str(rule["value"]):
+                continue
+            if str(change.get("desired")) == str(rule["value"]):
+                continue  # template already agrees; nothing to attribute
+            drift.setdefault("policy_enforced_properties", {})[path] = {
+                **change,
+                "policy_assignment": rule["assignment"],
+                "policy_definition": rule["definition_ref"],
+                "reason": (
+                    f"Value imposed by policy assignment '{rule['assignment']}' "
+                    f"(inherit tag from resource group). Reconcile the template "
+                    f"with the policy - redeploying loses the race on the next write."
+                ),
+            }
+            changed.pop(path)
+            claimed += 1
+
+        if claimed and not changed:
+            # Nothing actionable left on this resource - attribute the whole
+            # record so it lands in the governance section, not the drift list.
+            drift["change_origin"] = {
+                **(drift.get("change_origin") or {}),
+                "origin": "policy_modify",
+                "category": "policy",
+                "expected": True,
+                "severity": "low",
+                "reason": (
+                    "Tag value imposed in-flight by an inherit-tag policy "
+                    "assignment; no other property drifted."
+                ),
+            }
+    if claimed:
+        logger.info(
+            f"Attributed {claimed} tag value(s) to in-scope policy assignments "
+            f"(in-flight Modify - invisible to activity-log attribution)"
+        )
+    return claimed
+
+
 def _split_policy_and_tag_owners(report_data: dict) -> list:
     """Phase 3/4 tail: split policy/system-enforced changes out of the actionable
     drift set and tag each actionable drift with its owner. Runs AFTER the Claude
@@ -173,6 +247,10 @@ def _split_policy_and_tag_owners(report_data: dict) -> list:
     # change_origin.expected is True for POLICY_DINE / POLICY_MODIFY /
     # POLICY_REMEDIATION / SYSTEM_MANAGED - detected and shown in a dedicated
     # governance section, but NOT actionable drift.
+    # Runs first: an in-flight Modify has no activity-log event to classify, so
+    # change_origin.expected is still False for it at this point.
+    _claim_policy_required_tags(report_data)
+
     actionable, policy_enforced = [], []
     for drift in report_data.get("drifts", []):
         if (drift.get("change_origin") or {}).get("expected") is True:
