@@ -121,10 +121,17 @@ ignore:
   - resource_type: "Microsoft.Network/networkInterfaces"
     reason: "NICs are created by VMs or parameter expressions, config drift only"
 
-  # API versions (metadata, not functional)
-  - resource_type: "Microsoft.RecoveryServices/vaults"
-    drift_type: "property_drift"
-    reason: "API version differences are metadata - property drift only; a deleted/added vault is still real drift"
+  # NO blanket rule for Microsoft.RecoveryServices/vaults. There used to be one
+  # ("API version differences are metadata"), scoped only by type + drift_type,
+  # so it discarded EVERY property drift on a vault. It hid a real
+  # tags.environment change on 2026-07-26, and would equally hide
+  # publicNetworkAccess or a soft-delete flip on a backup vault.
+  # It could not be narrowed to an API-version property either: apiVersion is
+  # never compared (see tools/property_drift/extractor.py - "skip apiVersion,
+  # it's ARM template metadata"), so a property-scoped version would match
+  # nothing and only look like protection. The rule's real origin was AVM
+  # union(createObject(...)) TAG expressions in a template this estate no
+  # longer uses; against the current vault the comparison is already clean.
 
   # Recovery Services child resources with unresolvable parameter expressions
   - resource_type: "Microsoft.RecoveryServices/vaults/replicationFabrics"
@@ -169,11 +176,12 @@ ignore:
     drift_type: "extra_in_azure"
     reason: "A records in privatelink.* zones are auto-created by private endpoint DNS zone groups"
 
-  # Optional resource properties (not defined in Bicep)
-  # These appear in Azure but weren't explicitly set in template
-  - resource_type: "Microsoft.RecoveryServices/vaults"
-    drift_type: "property_drift"
-    reason: "Optional properties (sku fields, tags added by Azure) ignored if not in Bicep - property drift only"
+  # (A second blanket Microsoft.RecoveryServices/vaults property_drift rule used
+  # to sit here, justified as "optional properties ignored if not in Bicep".
+  # The comparator ALREADY skips properties absent from the template globally -
+  # see the skip-added branch in tools/property_drift/comparator.py - so the
+  # rule bought nothing and silenced declared properties too. See the note
+  # above the vault child rules.)
 
   # NARROWED from a blanket property_drift ignore: only the agentPoolProfiles
   # array is genuinely noisy (separately-declared agentPools children materialize
