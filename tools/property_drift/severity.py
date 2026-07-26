@@ -54,6 +54,11 @@ CRITICAL_PROPERTIES = {
     "properties.adminuserenabled",
     "properties.anonymouspullenabled",
     "properties.allowblobpublicaccess",
+    # The blob CONTAINER's own switch (None/Blob/Container). allowBlobPublicAccess
+    # only permits anonymous access; this is what actually turns it on, so a
+    # container flipped to Blob is the same exposure class as the account flag
+    # and must not fall through to the default "warning".
+    "properties.publicaccess",
     "properties.allowsharedkeyaccess",
     "properties.disablelocalauth",
     # Transport security (TLS floor / https enforcement).

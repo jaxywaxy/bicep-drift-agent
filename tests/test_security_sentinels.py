@@ -214,6 +214,24 @@ class GeneralizedSentinelTests(unittest.TestCase):
                             {"allowBlobPublicAccess": True})
         self._single_critical(diffs, "allowBlobPublicAccess")
 
+    def test_blob_container_public_access_is_critical(self):
+        # The account flag only PERMITS anonymous access; the container's own
+        # publicAccess is what turns it on, so it must not fall through to the
+        # default "warning" (live run 2026-07-26 rated a container flipped to
+        # Blob as a warning while the account flag beside it was critical).
+        bicep = {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "name": "st/default/drift-data",
+            "properties": {"publicAccess": "None"},
+        }
+        live = {**bicep, "properties": {"publicAccess": "Blob"}}
+
+        diffs = PropertyComparator.compare_properties(bicep, live)
+
+        self.assertEqual(len(diffs), 1, diffs)
+        self.assertTrue(diffs[0].property_path.endswith("publicAccess"), diffs[0])
+        self.assertEqual(diffs[0].severity, "critical")
+
     def test_sql_public_network_access_change_is_critical_drift(self):
         diffs = self._diffs("Microsoft.Sql/servers",
                             {"publicNetworkAccess": "Disabled"})
