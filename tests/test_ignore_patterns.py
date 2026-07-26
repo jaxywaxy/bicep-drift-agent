@@ -203,6 +203,59 @@ class RepoIgnoreLoadBalancerPublicIpScopingTests(unittest.TestCase):
             "details": {"changed_properties": {"properties.sku.name": {}}}}))
 
 
+class RepoIgnoreRecoveryServicesVaultScopingTests(unittest.TestCase):
+    """A Recovery Services vault must surface property drift. The baseline
+    carried a rule scoped only by type + drift_type ("API version differences
+    are metadata"), so it discarded EVERY property drift on a vault - it hid a
+    real tags.environment change on 2026-07-26, and would equally hide
+    publicNetworkAccess or a soft-delete flip on a backup vault.
+
+    It cannot come back property-scoped either: apiVersion is never compared
+    (tools/property_drift/extractor.py skips it as ARM template metadata), so an
+    API-version-scoped rule would match nothing while looking like protection.
+    Vault CHILDREN keep their own name-expression rules - those are unaffected."""
+
+    @classmethod
+    def setUpClass(cls):
+        repo_ignore = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".drift-ignore"
+        )
+        cls.il = IgnorePatternList.from_file(repo_ignore)
+
+    def _ignored(self, drift):
+        _, ignored = self.il.filter_drifts([drift])
+        return bool(ignored)
+
+    def _vault_property_drift(self, prop):
+        return {"type": "Microsoft.RecoveryServices/vaults", "name": "rsv-drift-test",
+                "drift_type": "property_drift",
+                "details": {"changed_properties": {prop: {"desired": "a", "actual": "b"}}}}
+
+    def test_vault_tag_change_is_not_swallowed(self):
+        """The exact drift the old rule hid."""
+        self.assertFalse(self._ignored(self._vault_property_drift("tags.environment")))
+
+    def test_vault_security_properties_are_not_swallowed(self):
+        for prop in ("properties.publicNetworkAccess",
+                     "properties.securitySettings.softDeleteSettings.softDeleteState",
+                     "properties.securitySettings.softDeleteSettings.enhancedSecurityState"):
+            with self.subTest(prop=prop):
+                self.assertFalse(self._ignored(self._vault_property_drift(prop)))
+
+    def test_vault_lifecycle_drift_still_surfaces(self):
+        for dt in ("missing_in_azure", "extra_in_azure"):
+            with self.subTest(drift_type=dt):
+                self.assertFalse(self._ignored({
+                    "type": "Microsoft.RecoveryServices/vaults",
+                    "name": "rsv-drift-test", "drift_type": dt}))
+
+    def test_vault_child_name_expression_rules_still_apply(self):
+        """Removing the parent rule must not disturb the child rules."""
+        self.assertTrue(self._ignored({
+            "type": "Microsoft.RecoveryServices/vaults/backupPolicies",
+            "name": "rsv-drift-test/drift-vm-daily", "drift_type": "missing_in_azure"}))
+
+
 class RepoIgnorePrivatelinkRecordScopingTests(unittest.TestCase):
     """A records in privatelink.* zones are auto-created by a private endpoint's
     DNS zone group, so their extras are suppressed — but ONLY extras, and ONLY in
