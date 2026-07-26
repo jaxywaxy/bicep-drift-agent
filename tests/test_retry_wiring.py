@@ -9,6 +9,12 @@ first, and asserts the collector still produced its rows.
 
 The write paths are asserted to be EXCLUDED: retrying a GitHub issue POST or a
 Slack webhook would duplicate it. time.sleep is patched so backoff adds no delay.
+
+`token="t"` carries `# nosec B106` (hardcoded_password_funcarg). It is not a
+credential: the collectors accept a PRE-ACQUIRED ARM token so the caller can
+share one across them, and supplying it is precisely what keeps these tests off
+DefaultAzureCredential. The transport is faked - nothing authenticates, and no
+value here reaches a real endpoint.
 """
 
 import io
@@ -137,7 +143,7 @@ class AppServiceCollectorRetryTests(_RetryTestCase):
         )
         self.patch_transport(transport)
         site = json.loads(json.dumps(self.SITE))  # deep copy; the collector mutates it
-        children = _expand_appservice_config([site], token="t")
+        children = _expand_appservice_config([site], token="t")  # nosec B106
         return children, site, transport
 
     def test_transient_on_config_web_still_yields_child_and_overlay(self):
@@ -177,7 +183,7 @@ class BackupCollectorRetryTests(_RetryTestCase):
         transport = _FakeTransport(errors=[_http_error(500)], default=self.CONFIG)
         self.patch_transport(transport)
 
-        out = _query_backup_children([dict(self.VAULT)], "S", token="t")
+        out = _query_backup_children([dict(self.VAULT)], "S", token="t")  # nosec B106
 
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["name"], "rsv-drift-test/vaultconfig")
@@ -188,7 +194,7 @@ class BackupCollectorRetryTests(_RetryTestCase):
         transport = _FakeTransport(errors=[_http_error(503)] * MAX_ATTEMPTS)
         self.patch_transport(transport)
 
-        out = _query_backup_children([dict(self.VAULT)], "S", token="t")
+        out = _query_backup_children([dict(self.VAULT)], "S", token="t")  # nosec B106
 
         self.assertEqual(out, [])  # sidecar contract: skip, don't sink the scan
         self.assertEqual(transport.calls, MAX_ATTEMPTS)
