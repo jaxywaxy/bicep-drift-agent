@@ -282,13 +282,25 @@ class PropertyComparator:
                 if not bicep_value or (isinstance(bicep_value, (dict, list)) and len(bicep_value) == 0):
                     continue
 
+                # Tags are the exception to the blanket 'info'. That default
+                # hedges against properties Azure simply does not return, but
+                # Azure reports the tag map faithfully - a declared key absent
+                # from it really was deleted, so there is no FP to hedge.
+                # Deleting a tag the template asserts is at least as serious as
+                # changing its value (mandatory tag sets are usually policy-
+                # enforced), so it scores the same instead of landing at the
+                # bottom of the report.
+                is_tag = key == "tags" or key.startswith("tags.")
+
                 diffs.append(
                     PropertyDiff(
                         property_path=key,
                         desired_value=bicep_value,
                         actual_value=None,
                         change_type="removed",
-                        severity="info",
+                        severity=(
+                            PropertyComparator._get_severity(key) if is_tag else "info"
+                        ),
                     )
                 )
 
