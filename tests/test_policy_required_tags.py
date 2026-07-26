@@ -158,5 +158,130 @@ class ClaimTests(unittest.TestCase):
         self.assertNotIn("policy_enforced_properties", extra)
 
 
+class ReportConsistencyTests(unittest.TestCase):
+    """`property_drifts` is a parallel array html_report renders the summary table
+    from. A live report (2026-07-27) claimed 19 tags into the governance section
+    and left every one of them listed in that table, so the table contradicted
+    drift_count. A report that argues with itself is worse than a noisy one -
+    the reader cannot tell which half to believe."""
+
+    def _report(self):
+        # drifts and property_drifts describe the SAME two resources - that is
+        # the point of the invariant, so the fixture must not diverge either.
+        storage = _tag_drift(extra_props={
+            "properties.allowBlobPublicAccess": {"desired": False, "actual": True}})
+        dns = {"type": "Microsoft.Network/dnsZones",
+               "name": "drifttest.example.com", "drift_type": "property_drift",
+               "details": {"changed_properties": {
+                   "tags.environment": {"desired": "test", "actual": "production"}}},
+               "change_origin": {"origin": "authorized_deployment", "expected": False}}
+        return {
+            "drifts": [storage, dns],
+            "property_drifts": [
+                {"resource_type": "Microsoft.Storage/storageAccounts",
+                 "resource_name": "sttestdrift", "drift_type": "modified",
+                 "property_diffs": [
+                     {"property_path": "tags.environment",
+                      "desired_value": "test", "actual_value": "production"},
+                     {"property_path": "properties.allowBlobPublicAccess",
+                      "desired_value": False, "actual_value": True},
+                 ]},
+                {"resource_type": "Microsoft.Network/dnsZones",
+                 "resource_name": "drifttest.example.com", "drift_type": "modified",
+                 "property_diffs": [
+                     {"property_path": "tags.environment",
+                      "desired_value": "test", "actual_value": "production"}]},
+                {"resource_type": "Microsoft.Network/networkSecurityGroups",
+                 "resource_name": "nsg-rogue-drift", "drift_type": "extra",
+                 "property_diffs": []},
+            ],
+            "policy_required_tags": {
+                "environment": {"value": "production",
+                                "assignment": "drift-inherit-environment",
+                                "definition_ref": INHERIT_REPLACE, "mode": "replace"}},
+        }
+
+    def test_claimed_tag_leaves_the_summary_table(self):
+        report = self._report()
+
+        _claim_policy_required_tags(report)
+
+        paths = [d["property_path"]
+                 for e in report["property_drifts"] for d in e["property_diffs"]]
+        self.assertNotIn("tags.environment", paths)
+
+    def test_a_row_whose_only_diff_was_claimed_is_dropped(self):
+        report = self._report()
+
+        _claim_policy_required_tags(report)
+
+        names = [e["resource_name"] for e in report["property_drifts"]]
+        self.assertNotIn("drifttest.example.com", names)
+
+    def test_the_critical_sibling_row_survives_with_its_diff(self):
+        report = self._report()
+
+        _claim_policy_required_tags(report)
+
+        row = next(e for e in report["property_drifts"]
+                   if e["resource_name"] == "sttestdrift")
+        self.assertEqual([d["property_path"] for d in row["property_diffs"]],
+                         ["properties.allowBlobPublicAccess"])
+
+    def test_extra_rows_carrying_no_diffs_are_untouched(self):
+        """A drift_type 'extra' row legitimately has an empty property_diffs;
+        dropping empty rows blindly would erase unmanaged resources."""
+        report = self._report()
+
+        _claim_policy_required_tags(report)
+
+        self.assertIn("nsg-rogue-drift",
+                      [e["resource_name"] for e in report["property_drifts"]])
+
+    def test_governance_row_is_labelled_with_its_assignment(self):
+        """The governance section titles each row from change_origin.policy_name;
+        without it every row reads a bare 'Modified by Azure Policy'."""
+        report = self._report()
+
+        _claim_policy_required_tags(report)
+
+        dns = next(d for d in report["drifts"]
+                   if d["name"] == "drifttest.example.com")
+        self.assertTrue(dns["change_origin"]["expected"])
+        self.assertEqual(dns["change_origin"]["policy_name"],
+                         "drift-inherit-environment")
+
+    def test_the_mixed_resource_stays_out_of_governance(self):
+        report = self._report()
+
+        _claim_policy_required_tags(report)
+
+        storage = next(d for d in report["drifts"] if d["name"] == "sttestdrift")
+        self.assertIsNot(storage["change_origin"].get("expected"), True)
+        self.assertIn("properties.allowBlobPublicAccess",
+                      storage["details"]["changed_properties"])
+
+    def test_an_empty_property_drift_is_not_swept_up_by_an_earlier_claim(self):
+        """The counter used to be the running total across all drifts, so once
+        anything was claimed every later property_drift with no changed
+        properties inherited a policy verdict it never earned."""
+        claimed_one = _tag_drift()
+        empty = {"type": "Microsoft.Network/virtualNetworks", "name": "vnet",
+                 "drift_type": "property_drift",
+                 "details": {"changed_properties": {}},
+                 "change_origin": {"origin": "manual_change", "expected": False}}
+        report = {"drifts": [claimed_one, empty], "property_drifts": [],
+                  "policy_required_tags": {
+                      "environment": {"value": "production",
+                                      "assignment": "drift-inherit-environment",
+                                      "definition_ref": INHERIT_REPLACE,
+                                      "mode": "replace"}}}
+
+        _claim_policy_required_tags(report)
+
+        self.assertIsNot(empty["change_origin"].get("expected"), True)
+        self.assertEqual(empty["change_origin"]["origin"], "manual_change")
+
+
 if __name__ == "__main__":
     unittest.main()

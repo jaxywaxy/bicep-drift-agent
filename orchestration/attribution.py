@@ -163,6 +163,54 @@ def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
     logger.info("Resource lifecycle detection completed")
 
 
+def _policy_imposed(path: str, desired, actual, required: dict) -> dict | None:
+    """The rule for 'policy mandates this exact value', shared by the drift list
+    and the property_drifts summary array so the two cannot disagree.
+
+    Returns the matching requirement, or None. Two deliberate abstentions:
+    a live value that is NEITHER the template's nor policy's means someone moved
+    it and policy has not reconverged (real drift), and a template that already
+    agrees with policy has nothing to attribute.
+    """
+    if not path.lower().startswith("tags."):
+        return None
+    rule = required.get(path.split(".", 1)[1].lower())
+    if not rule:
+        return None
+    if str(actual) != str(rule["value"]) or str(desired) == str(rule["value"]):
+        return None
+    return rule
+
+
+def _prune_property_drift_summary(report_data: dict, required: dict) -> None:
+    """Drop policy-claimed properties from `property_drifts` too.
+
+    That array is a PARALLEL copy which tools/html_report.py renders the summary
+    table from. Claiming a tag in `drifts` while leaving it here made the report
+    contradict itself - the table listed tag rows the drift count no longer
+    included, which reads as untrustworthy rather than as a filtered view
+    (live report 2026-07-27).
+    """
+    kept = []
+    for entry in report_data.get("property_drifts", []):
+        diffs = entry.get("property_diffs") or []
+        if not diffs:
+            # extra/missing rows carry no diffs; they are not ours to touch.
+            kept.append(entry)
+            continue
+        remaining = [
+            d for d in diffs
+            if not _policy_imposed(d.get("property_path", ""),
+                                   d.get("desired_value"), d.get("actual_value"),
+                                   required)
+        ]
+        if not remaining:
+            continue  # every diff was policy-imposed - the row is governance now
+        entry["property_diffs"] = remaining
+        kept.append(entry)
+    report_data["property_drifts"] = kept
+
+
 def _claim_policy_required_tags(report_data: dict) -> int:
     """Move tag properties an in-scope policy MANDATES out of the actionable set.
 
@@ -188,20 +236,13 @@ def _claim_policy_required_tags(report_data: dict) -> int:
         if drift.get("drift_type") != "property_drift":
             continue
         changed = (drift.get("details") or {}).get("changed_properties") or {}
+        claimed_here = 0
         for path in list(changed):
-            if not path.lower().startswith("tags."):
-                continue
-            rule = required.get(path.split(".", 1)[1].lower())
+            change = changed[path] or {}
+            rule = _policy_imposed(
+                path, change.get("desired"), change.get("actual"), required)
             if not rule:
                 continue
-            change = changed[path] or {}
-            # Only claim when policy's mandated value is what is actually live.
-            # A third value means someone else moved it and policy has not
-            # reconverged - that is real drift and must stay actionable.
-            if str(change.get("actual")) != str(rule["value"]):
-                continue
-            if str(change.get("desired")) == str(rule["value"]):
-                continue  # template already agrees; nothing to attribute
             drift.setdefault("policy_enforced_properties", {})[path] = {
                 **change,
                 "policy_assignment": rule["assignment"],
@@ -213,22 +254,32 @@ def _claim_policy_required_tags(report_data: dict) -> int:
                 ),
             }
             changed.pop(path)
+            claimed_here += 1
             claimed += 1
 
-        if claimed and not changed:
+        # Per-DRIFT, not the running total: a property_drift that claimed nothing
+        # and merely has no changed properties must not inherit a policy verdict
+        # just because an earlier resource in the loop was claimed.
+        if claimed_here and not changed:
             # Nothing actionable left on this resource - attribute the whole
             # record so it lands in the governance section, not the drift list.
+            first = next(iter(drift["policy_enforced_properties"].values()))
             drift["change_origin"] = {
                 **(drift.get("change_origin") or {}),
                 "origin": "policy_modify",
                 "category": "policy",
                 "expected": True,
                 "severity": "low",
+                # The governance section labels each row from policy_name; without
+                # it every row reads a bare "Modified by Azure Policy".
+                "policy_name": first["policy_assignment"],
                 "reason": (
                     "Tag value imposed in-flight by an inherit-tag policy "
                     "assignment; no other property drifted."
                 ),
             }
+
+    _prune_property_drift_summary(report_data, required)
     if claimed:
         logger.info(
             f"Attributed {claimed} tag value(s) to in-scope policy assignments "
@@ -247,10 +298,6 @@ def _split_policy_and_tag_owners(report_data: dict) -> list:
     # change_origin.expected is True for POLICY_DINE / POLICY_MODIFY /
     # POLICY_REMEDIATION / SYSTEM_MANAGED - detected and shown in a dedicated
     # governance section, but NOT actionable drift.
-    # Runs first: an in-flight Modify has no activity-log event to classify, so
-    # change_origin.expected is still False for it at this point.
-    _claim_policy_required_tags(report_data)
-
     actionable, policy_enforced = [], []
     for drift in report_data.get("drifts", []):
         if (drift.get("change_origin") or {}).get("expected") is True:
@@ -287,4 +334,5 @@ def _build_lifecycle_and_split(report_data: dict, resource_group: str) -> list:
     Claude analysis; retained for callers/tests that want the combined step.
     """
     _attribute_lifecycle(report_data, resource_group)
+    _claim_policy_required_tags(report_data)
     return _split_policy_and_tag_owners(report_data)

@@ -46,6 +46,7 @@ from orchestration.reconciliation import (
 )
 from orchestration.attribution import (
     _attribute_lifecycle,
+    _claim_policy_required_tags,
     _split_policy_and_tag_owners,
     _build_lifecycle_and_split,  # noqa: F401  (re-exported for tests)
     _recover_deployed_name,  # noqa: F401  (re-exported for tests)
@@ -133,6 +134,13 @@ def main():
         # ordering ran attribution after the analysis, leaving both null in the
         # prompt.)
         _attribute_lifecycle(report_data, resource_group)
+
+        # BEFORE the analysis, not with the split: an in-flight Modify leaves no
+        # activity-log event, so this is the only stage that can tell the agent a
+        # value is policy-mandated. Run it after the analysis and the agent still
+        # sees a bare tag drift and recommends "fix the parameter and redeploy",
+        # which loses the race on the very next write (live report 2026-07-27).
+        _claim_policy_required_tags(report_data)
 
         # Claude analysis of the attributed drift set (only when a key is available).
         agent_analysis = _run_claude_analysis(agent, report_data)
