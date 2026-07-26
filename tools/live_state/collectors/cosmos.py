@@ -7,7 +7,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
-from ...http_util import urlopen_checked
+from ..common import arm_urlopen
 from ..common import _extract_resource_group_from_id
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ def _query_cosmos_children(resources: list[dict], sub_id: str, token: str | None
 
     def _get(url: str) -> dict:
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urlopen_checked(req, timeout=30) as resp:
+        with arm_urlopen(req, timeout=30) as resp:
             return _json.load(resp)
 
     children: list[dict] = []

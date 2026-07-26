@@ -7,7 +7,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
-from ...http_util import urlopen_checked
+from ..common import arm_urlopen
 from ..common import _extract_resource_group_from_id
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def _query_backup_children(resources: list[dict], sub_id: str, token: str | None
         url = f"https://management.azure.com{vault_id}/backupconfig/vaultconfig?api-version={api_version}"
         try:
             req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-            with urlopen_checked(req, timeout=30) as resp:
+            with arm_urlopen(req, timeout=30) as resp:
                 payload = _json.load(resp)
         except Exception as e:
             logger.warning(f"Could not query backupconfig for vault {vault_name}: {e}")
@@ -114,7 +114,7 @@ def _query_backup_policies(resources: list[dict], sub_id: str, token: str | None
         url = f"https://management.azure.com{vault_id}/backupPolicies?api-version={api_version}"
         try:
             req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-            with urlopen_checked(req, timeout=30) as resp:
+            with arm_urlopen(req, timeout=30) as resp:
                 data = _json.load(resp)
         except Exception as e:
             logger.warning(f"Could not query backup policies for vault {vault_name}: {e}")

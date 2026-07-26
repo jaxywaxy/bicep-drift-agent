@@ -15,7 +15,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
-from ...http_util import urlopen_checked
+from ..common import arm_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ def _expand_appservice_config(resources: list[dict], token: str | None = None) -
             url, headers={"Authorization": f"Bearer {token}", "Content-Length": "0"},
             method=method, data=b"" if method == "POST" else None,
         )
-        with urlopen_checked(req, timeout=30) as resp:
+        with arm_urlopen(req, timeout=30) as resp:
             return _json.load(resp)
 
     children: list[dict] = []

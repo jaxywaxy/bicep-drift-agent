@@ -12,7 +12,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
-from ...http_util import urlopen_checked
+from ..common import arm_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ def fetch_declared_defender_pricings(
             f"https://management.azure.com/subscriptions/{sub_id}/providers/Microsoft.Security/pricings?api-version=2024-01-01",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urlopen_checked(req, timeout=30) as resp:
+        with arm_urlopen(req, timeout=30) as resp:
             items = _json.load(resp).get("value", [])
     except Exception as e:
         logger.warning(f"Could not fetch Defender pricings: {e}")

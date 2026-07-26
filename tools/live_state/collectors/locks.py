@@ -12,7 +12,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
-from ...http_util import urlopen_checked
+from ..common import arm_urlopen
 from ..common import _extract_resource_group_from_id
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def _query_locks(
             )
 
         req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urlopen_checked(req, timeout=30) as resp:
+        with arm_urlopen(req, timeout=30) as resp:
             data = _json.load(resp)
 
         locks = []
