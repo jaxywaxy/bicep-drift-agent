@@ -45,6 +45,8 @@ from tools.logger import get_logger, setup_logging
 from tools.policy import (
     compare_policy_resources,
     fetch_policy_resources,
+    fetch_resource_group_tags,
+    resolve_policy_required_tags,
     policy_drift_enabled,
 )
 from tools.rbac import (
@@ -286,14 +288,17 @@ def _run_rbac_sidecar(arm_resources: list[dict], live_resources: list[dict],
 
 def _run_policy_sidecar(arm_resources: list[dict], resource_group: str,
                         deployment_scope: str, ignore_patterns: IgnorePatternList,
-                        drifts: list[ResourceDrift]) -> None:
+                        drifts: list[ResourceDrift]) -> dict:
     """Step 4c: Policy assignment/exemption drift - the governance twin of 4b.
 
     policyresources table; identity-based matching; out-of-band exemptions are
     audit-critical. Disable with INCLUDE_POLICY_ASSIGNMENTS=false.
+
+    Returns the tag values in-scope policy requires (see
+    tools.policy.resolve_policy_required_tags); {} when disabled or on failure.
     """
     if not policy_drift_enabled():
-        return
+        return {}
     logger.info("Step 4c: Checking policy assignments and exemptions...")
     try:
         live_pol, live_exemptions = fetch_policy_resources(
@@ -304,8 +309,18 @@ def _run_policy_sidecar(arm_resources: list[dict], resource_group: str,
         policy_drift_dicts = compare_policy_resources(arm_resources, live_pol, live_exemptions)
         policy_drift_dicts = _apply_sidecar_ignore(policy_drift_dicts, ignore_patterns, "policy")
         drifts.extend(_to_resource_drifts(policy_drift_dicts))
+        # Reuse the fetch we just made: derive the tag values in-scope policy
+        # REQUIRES, so Phase 3 can recognise an in-flight Modify it could never
+        # see in the activity log. Costs one extra Resource Graph read (the RG's
+        # own tags), not a per-resource call.
+        return resolve_policy_required_tags(
+            live_pol,
+            fetch_resource_group_tags(os.environ.get("AZURE_SUBSCRIPTION_ID"),
+                                      resource_group),
+        )
     except Exception as e:
         logger.warning(f"Policy drift check failed (continuing without it): {e}")
+    return {}
 
 
 def _run_stack_sidecar(live_resources: list[dict], resource_group: str,
@@ -351,7 +366,8 @@ def _run_stack_sidecar(live_resources: list[dict], resource_group: str,
 
 def _save_phase1_report(bicep_file: str, resource_group: str,
                         arm_resources: list[dict], live_resources: list[dict],
-                        drifts: list[ResourceDrift]) -> None:
+                        drifts: list[ResourceDrift],
+                        policy_required_tags: dict | None = None) -> None:
     """Persist the raw Phase 1 report.
 
     A subscription-scope scan may use '*' or a glob selector (e.g. 'prefix-*');
@@ -370,6 +386,9 @@ def _save_phase1_report(bicep_file: str, resource_group: str,
                 "arm_resources": redact_secrets(arm_resources),
                 "live_resources": redact_secrets(live_resources),
                 "drift_count": len(drifts),
+                # What in-scope policy MANDATES, not what it changed - Phase 3
+                # matches drifted tag values against this.
+                "policy_required_tags": policy_required_tags or {},
                 "drifts": [
                     {
                         "type": d.resource_type,
@@ -397,14 +416,15 @@ def run(bicep_file: str, resource_group: str):
 
     _run_rbac_sidecar(arm_resources, live_resources, resource_group, deployment_scope,
                       ignore_patterns, drifts)
-    _run_policy_sidecar(arm_resources, resource_group, deployment_scope,
-                        ignore_patterns, drifts)
+    policy_required_tags = _run_policy_sidecar(arm_resources, resource_group,
+                                               deployment_scope, ignore_patterns, drifts)
     _run_stack_sidecar(live_resources, resource_group, deployment_scope,
                        ignore_patterns, drifts)
 
     logger.info("Drift Report Summary")
     logger.info(format_drift_report(drifts, resource_group))
-    _save_phase1_report(bicep_file, resource_group, arm_resources, live_resources, drifts)
+    _save_phase1_report(bicep_file, resource_group, arm_resources, live_resources, drifts,
+                        policy_required_tags)
 
 
 def main():

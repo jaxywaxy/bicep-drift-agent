@@ -30,6 +30,23 @@ logger = logging.getLogger(__name__)
 POLICY_ASSIGNMENT_TYPE = "Microsoft.Authorization/policyAssignments"
 POLICY_EXEMPTION_TYPE = "Microsoft.Authorization/policyExemptions"
 
+# Built-in "inherit a tag from the resource group" definitions. Both are Modify
+# effects taking a single `tagName` parameter; the value they impose is the
+# RESOURCE GROUP's tag of that name.
+#
+# Why an explicit map instead of introspecting the policy rule: a Modify effect
+# mutates the write IN FLIGHT, so the Activity Log records one event whose caller
+# is whoever deployed - the policy identity never appears, and a compliant estate
+# never runs a remediation task either. Attribution therefore cannot come from
+# the log; it has to come from "what does an in-scope assignment REQUIRE". These
+# two definitions cover the case that actually occurs in client estates. Parsing
+# arbitrary Modify rules (then.details.operations) is the documented next step -
+# see issue #321 - and slots in behind resolve_policy_required_tags unchanged.
+INHERIT_TAG_DEFINITIONS = {
+    "cd3aa116-8754-49c9-a813-ad46512ece54": "replace",     # Inherit a tag from the resource group
+    "ea3f2387-9b95-492a-a190-fcdc54f7b070": "if_missing",  # ...if missing
+}
+
 
 def _definition_ref(value: Any) -> str | None:
     """The definition's identity: trailing segment of a policyDefinitionId.
@@ -131,6 +148,9 @@ def fetch_policy_resources(
             "scope": scope_val or "",
             "display_name": props.get("displayName") or row.get("name"),
             "definition_ref": _definition_ref(props.get("policyDefinitionId")),
+            # Kept for the required-value resolver: an inherit-tag assignment's
+            # tagName lives here and is otherwise dropped on the floor.
+            "parameters": props.get("parameters") or {},
             "assignment_id": (props.get("policyAssignmentId") or "").lower(),  # exemptions only
             "enforcement_mode": props.get("enforcementMode"),
             "exemption_category": props.get("exemptionCategory"),
@@ -151,6 +171,88 @@ def fetch_policy_resources(
         f"exemption(s) in scan scope"
     )
     return assignments, exemptions
+
+
+def fetch_resource_group_tags(
+    subscription_id: str, resource_group: str, credential=None
+) -> dict[str, str]:
+    """The resource group's own tags - the value an inherit-tag policy imposes.
+
+    Resource groups live in Resource Graph's ``resourcecontainers`` table, not
+    ``Resources``, which is why the normal live-state fetch never sees them.
+    Returns {} on any failure: a missing RG tag map must degrade to "cannot
+    prove policy required this", never to a guess.
+    """
+    if not subscription_id or not resource_group or "*" in resource_group:
+        return {}
+    try:
+        from azure.identity import DefaultAzureCredential
+        from azure.mgmt.resourcegraph import ResourceGraphClient
+        from azure.mgmt.resourcegraph.models import QueryRequest
+
+        client = ResourceGraphClient(credential or DefaultAzureCredential())
+        rows = client.resources(QueryRequest(
+            subscriptions=[subscription_id],
+            query=(
+                "resourcecontainers"
+                " | where type =~ 'microsoft.resources/subscriptions/resourcegroups'"
+                f" | where name =~ '{resource_group}'"
+                " | project tags"
+            ),
+        )).data or []
+        return (rows[0].get("tags") or {}) if rows else {}
+    except Exception as e:  # sidecar rule: log and degrade, never fail the scan
+        logger.warning(f"Could not read resource group tags (continuing without): {e}")
+        return {}
+
+
+def resolve_policy_required_tags(
+    assignments: list[dict], rg_tags: dict[str, str]
+) -> dict[str, dict]:
+    """Tag values an in-scope inherit-tag assignment REQUIRES, keyed by lowercased
+    tag name: {tag: {value, assignment, definition_ref, mode}}.
+
+    This is the attribution signal for in-flight Modify effects. It deliberately
+    asks "what does policy mandate", not "who wrote this" - the latter is
+    unanswerable for a Modify, which rewrites a value inside someone else's write
+    (see INHERIT_TAG_DEFINITIONS).
+
+    An empty RG tag value yields NO requirement: the built-in rule short-circuits
+    on `resourceGroup().tags[name] notEquals ''`, so with no RG tag the policy
+    imposes nothing and any drift on that tag is genuinely someone's doing.
+    """
+    required: dict[str, dict] = {}
+    lowered = {str(k).lower(): v for k, v in (rg_tags or {}).items()}
+
+    for a in assignments or []:
+        mode = INHERIT_TAG_DEFINITIONS.get((a.get("definition_ref") or "").lower())
+        if not mode:
+            continue
+        tag_name = (((a.get("parameters") or {}).get("tagName") or {}).get("value"))
+        if not tag_name:
+            continue
+        value = lowered.get(str(tag_name).lower())
+        if value in (None, ""):
+            continue
+        # 'replace' wins over 'if_missing' on the same key: it overwrites a value
+        # the template set, which is the case that produces template-vs-policy
+        # conflict. if_missing only fills a gap and never contradicts the template.
+        key = str(tag_name).lower()
+        if key in required and required[key]["mode"] == "replace":
+            continue
+        required[key] = {
+            "value": value,
+            "assignment": a.get("name") or a.get("display_name"),
+            "definition_ref": a.get("definition_ref"),
+            "mode": mode,
+        }
+
+    if required:
+        logger.info(
+            f"Policy requires {len(required)} inherited tag value(s): "
+            f"{', '.join(sorted(required))}"
+        )
+    return required
 
 
 def extract_bicep_policy_assignments(arm_resources: list[dict]) -> tuple[list[dict], int]:
