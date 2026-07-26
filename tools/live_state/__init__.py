@@ -70,6 +70,7 @@ from .common import (  # noqa: F401
     _kql_rg_filter,
     _qualify_child_resource_names,
     _rg_of,
+    arm_urlopen,
     retry_with_backoff,
 )
 from .resource_graph import (  # noqa: F401

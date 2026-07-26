@@ -13,7 +13,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
-from ...http_util import urlopen_checked
+from ..common import arm_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ def _expand_data_plane_children(resources: list[dict], token: str | None = None)
             f"https://management.azure.com{parent_id}/{path}?api-version={api}",
             headers={"Authorization": f"Bearer {token}"},
         )
-        with urlopen_checked(req, timeout=30) as resp:
+        with arm_urlopen(req, timeout=30) as resp:
             return _json.load(resp).get("value", [])
 
     # Some child types ARE Resource Graph rows in some cases (virtualNetworkLinks,

@@ -32,9 +32,18 @@ from .common import (
     _is_rg_glob,
     _kql_rg_filter,
     _qualify_child_resource_names,
+    retry_with_backoff,
 )
 
 logger = logging.getLogger(__name__)
+
+
+@retry_with_backoff()
+def _run_resource_graph_query(client, request):
+    """Execute the Resource Graph query, retrying transient 429/5xx. Isolated so
+    the retry wraps only the SDK call (idempotent read), not the result handling
+    or the ResourceManagementClient fallback."""
+    return client.resources(request)
 
 try:
     from azure.mgmt.resourcegraph import ResourceGraphClient
@@ -104,7 +113,7 @@ def get_live_state(
 
     try:
         request = QueryRequest(subscriptions=[sub_id], query=kql_query)
-        response = client.resources(request)
+        response = _run_resource_graph_query(client, request)
     except Exception as e:
         logger.error(f"Resource Graph query failed: {e}, falling back to ResourceManagementClient")
         return _get_live_state_fallback(resource_group, sub_id, scope)

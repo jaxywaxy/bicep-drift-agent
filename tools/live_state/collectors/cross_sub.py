@@ -13,7 +13,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
-from ...http_util import urlopen_checked
+from ..common import arm_urlopen
 from ..common import _has_unresolved
 
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ def fetch_cross_subscription_resources(arm_resources: list[dict]) -> list[dict]:
             if not token:
                 token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
             req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-            with urlopen_checked(req, timeout=30) as resp:
+            with arm_urlopen(req, timeout=30) as resp:
                 data = json.load(resp)
             fetched.append({
                 "type": rtype, "name": name, "location": data.get("location"),

@@ -12,11 +12,14 @@ import fnmatch
 import logging
 import re
 import time
+import urllib.error
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar
 
 from azure.core.exceptions import HttpResponseError
+
+from ..http_util import urlopen_checked
 
 logger = logging.getLogger(__name__)
 
@@ -91,45 +94,65 @@ def _has_unresolved(value: str) -> bool:
     return any(m in v for m in ("(", "[", "subscription-id", "parameters"))
 
 
-def retry_with_backoff(max_retries: int = 3, initial_delay: float = 1.0) -> Callable:
-    """Decorator to retry Azure SDK calls with exponential backoff.
+# 429 (throttling) and 5xx are transient; anything else is a real answer.
+_TRANSIENT_STATUS = (429, 500, 502, 503, 504)
 
-    Retries on transient HTTP errors (5xx, 429 rate limiting). Non-transient
-    errors fail immediately. Logs each retry and the final failure.
+
+def _transient_status(err: Exception) -> int | None:
+    """The retryable HTTP status of an error, or None. Bridges the two exception
+    types the Azure-facing calls raise: azure SDK HttpResponseError (.status_code)
+    and urllib HTTPError (.code)."""
+    status = getattr(err, "status_code", None)
+    if status is None:
+        status = getattr(err, "code", None)  # urllib.error.HTTPError
+    return status if status in _TRANSIENT_STATUS else None
+
+
+def retry_with_backoff(max_retries: int = 3, initial_delay: float = 1.0) -> Callable:
+    """Retry an Azure-facing call on transient HTTP errors with exponential backoff.
+
+    Handles both exception types the codebase raises: azure SDK HttpResponseError
+    (Resource Graph / ARM SDK) and urllib HTTPError (the raw ARM REST collectors).
+    Only 429 and 5xx are retried; every other status - and any non-HTTP error -
+    fails immediately. Logs each retry (debug) and the final give-up (warning).
+    Decorate idempotent reads only, never non-idempotent writes.
     """
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
             delay = initial_delay
-            last_error = None
-
             for attempt in range(max_retries + 1):
                 try:
                     return func(*args, **kwargs)
-                except HttpResponseError as e:
-                    last_error = e
-                    if e.status_code not in (429, 500, 502, 503, 504):
+                except (HttpResponseError, urllib.error.HTTPError) as e:
+                    status = _transient_status(e)
+                    if status is None or attempt >= max_retries:
+                        if status is not None:
+                            logger.warning(
+                                f"Failed after {max_retries + 1} attempts in {func.__name__}: {e}"
+                            )
                         raise
-                    if attempt < max_retries:
-                        logger.debug(
-                            f"Transient error in {func.__name__} (attempt {attempt + 1}/{max_retries}): "
-                            f"HTTP {e.status_code}, retrying in {delay}s..."
-                        )
-                        time.sleep(delay)
-                        delay *= 2
-                    else:
-                        logger.warning(
-                            f"Failed after {max_retries + 1} attempts in {func.__name__}: {e}"
-                        )
-                except Exception:
-                    raise
-
-            if last_error:
-                raise last_error
-            return func(*args, **kwargs)
+                    logger.debug(
+                        f"Transient error in {func.__name__} (attempt {attempt + 1}/{max_retries}): "
+                        f"HTTP {status}, retrying in {delay}s..."
+                    )
+                    time.sleep(delay)
+                    delay *= 2
+            return func(*args, **kwargs)  # unreachable; keeps type checkers happy
 
         return wrapper
     return decorator
+
+
+@retry_with_backoff()
+def arm_urlopen(req, timeout: int = 30):
+    """urlopen_checked with transient-error retry, for idempotent ARM REST reads.
+
+    The live-state collectors use this instead of urlopen_checked so a throttled
+    (429) or briefly-unavailable (5xx) ARM endpoint is retried rather than
+    silently dropping a child-resource expansion. Reads only (incl. ARM
+    list-via-POST) - never non-idempotent writes."""
+    return urlopen_checked(req, timeout=timeout)
 
 
 def _dedupe_resources_by_id(resources: list[dict]) -> None:
