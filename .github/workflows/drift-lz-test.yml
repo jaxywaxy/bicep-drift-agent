@@ -25,9 +25,11 @@ jobs:
   drift-check:
     uses: ./.github/workflows/drift-check-lz-hybrid.yml
     with:
-      # feat/vhub-routing-drift: temporarily points at the vhub-test LZ to verify
-      # Virtual Hub routing remediations in CI. Revert to test-resources before merge.
-      landing_zone: vhub-test
+      # Standing target: the test-resources LZ (bicep/main.bicep against
+      # rg-drift-test). Point this at vhub-test only for the duration of a
+      # Virtual Hub round, and revert it before merge - the vHub estate lives in
+      # its own RG and its config is a subset template.
+      landing_zone: test-resources
       override_subscription: ${{ github.event.inputs.subscription_id }}
       override_resource_group: ${{ github.event.inputs.resource_group }}
     # Explicit secrets (least privilege) instead of `secrets: inherit`, which
