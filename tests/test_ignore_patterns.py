@@ -525,16 +525,37 @@ class RepoIgnorePrivateDnsZoneGroupScopingTests(unittest.TestCase):
                 "details": {"changed_properties": {
                     "properties.privateDnsZoneConfigs": {"desired": "a", "actual": []}}}}
 
-    def test_missing_is_still_suppressed(self):
-        # Resource Graph does not index zone groups and no collector fetches
-        # them yet, so every declared group reports missing. That is the gap.
-        _, ignored = self.il.filter_drifts([self._drift("missing_in_azure")])
-        self.assertEqual(len(ignored), 1)
+    def test_missing_is_no_longer_suppressed(self):
+        # This asserted the opposite until #329. The scoped rule was a stopgap
+        # for a COLLECTION gap: nothing fetched zone groups, so every declared
+        # group reported missing. private_dns.py now fetches them, so "missing"
+        # means the group is genuinely gone - private endpoint name resolution
+        # is broken and traffic falls back to the public endpoint. Suppressing
+        # that would be the failure the rule was accused of.
+        kept, ignored = self.il.filter_drifts([self._drift("missing_in_azure")])
+        self.assertEqual(len(kept), 1, "a deleted zone group must surface")
+        self.assertEqual(ignored, [])
 
     def test_property_drift_is_not_suppressed(self):
         kept, ignored = self.il.filter_drifts([self._drift("property_drift")])
         self.assertEqual(len(kept), 1, "a zone-group config change must surface")
         self.assertEqual(ignored, [])
+
+    def test_a_declared_workspace_table_is_not_suppressed(self):
+        # Same round, same shape: the type-only rule read "parent name contains
+        # unresolved parameter expressions", which was true of the NAME but is a
+        # matching problem, not grounds to discard the type. The record it hid
+        # claimed the table "has been deleted or was never created" - and
+        # CustomLog_CL was present all along.
+        for dt in ("missing_in_azure", "property_drift"):
+            with self.subTest(dt):
+                kept, ignored = self.il.filter_drifts([{
+                    "type": "Microsoft.OperationalInsights/workspaces/tables",
+                    "name": "log-[86c9cbf6]/CustomLog_CL", "drift_type": dt,
+                    "details": {"changed_properties": {
+                        "properties.totalRetentionInDays": {"desired": 30, "actual": 7}}}}])
+                self.assertEqual(len(kept), 1)
+                self.assertEqual(ignored, [])
 
 
 if __name__ == "__main__":

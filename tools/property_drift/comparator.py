@@ -37,6 +37,7 @@ class PropertyComparator:
     _get_severity = staticmethod(_severity.get_severity)
     _elevate_monitoring_severity = staticmethod(_severity.elevate_monitoring_severity)
     _elevate_backup_severity = staticmethod(_severity.elevate_backup_severity)
+    _elevate_workspace_table_severity = staticmethod(_severity.elevate_workspace_table_severity)
     _is_write_only_property = staticmethod(_severity.is_write_only_property)
     _is_unprojected_property = staticmethod(_severity.is_unprojected_property)
     # monitoring: extracted to monitoring.py; aliases preserve call sites.
@@ -319,7 +320,8 @@ class PropertyComparator:
         )
 
         diffs = PropertyComparator._elevate_monitoring_severity(rtype, diffs)
-        return PropertyComparator._elevate_backup_severity(rtype, diffs)
+        diffs = PropertyComparator._elevate_backup_severity(rtype, diffs)
+        return PropertyComparator._elevate_workspace_table_severity(rtype, diffs)
 
 
 

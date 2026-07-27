@@ -47,6 +47,8 @@ from .collectors.data_plane import (  # noqa: F401
     _skip_default_consumer_group,
 )
 from .collectors.defender import fetch_declared_defender_pricings  # noqa: F401
+from .collectors.private_dns import query_private_dns_zone_groups  # noqa: F401
+from .collectors.workspace_tables import fetch_declared_workspace_tables  # noqa: F401
 from .collectors.extensions import (  # noqa: F401
     _DCR_ASSOCIATION_PARENT_TYPES,
     _DIAGNOSTIC_PARENT_TYPES,
@@ -85,6 +87,8 @@ __all__ = [
     "get_live_state",
     "fetch_cross_subscription_resources",
     "fetch_declared_defender_pricings",
+    "query_private_dns_zone_groups",
+    "fetch_declared_workspace_tables",
     "qualify_extension_resource_names",
     "qualify_diagnostic_setting_names",
     "retry_with_backoff",

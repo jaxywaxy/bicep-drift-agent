@@ -169,18 +169,12 @@ ignore:
   # pipeline while the vault happened to be clean, so nothing looked wrong.
   # tests/test_ignore_patterns.py asserts no collected type is blanket-ignored.
 
-  # Private endpoint DNS zone groups are not indexed by Resource Graph and have
-  # no collector yet (issue #329), so a declared group is always reported
-  # missing. Scoped to missing_in_azure ONLY: that is the false positive the
-  # collection gap causes. A property drift on a zone group is NOT suppressed -
-  # today none can fire (there is no live state to compare), so this rule stops
-  # lying about what it protects and stops hiding real drift the day the
-  # collector lands. It is not a name-expression rule: it fired on
-  # 'pe-kv-drift-test/default', a fully literal name, under a reason that said
-  # otherwise.
-  - resource_type: "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
-    drift_type: "missing_in_azure"
-    reason: "Not indexed by Resource Graph and not yet collected (see issue #329)"
+  # NO rule for privateEndpoints/privateDnsZoneGroups. Resource Graph does not
+  # index them, so a declared group used to report missing forever and the false
+  # positive was suppressed here - which hid the real thing too. Now collected
+  # over ARM REST (tools/live_state/collectors/private_dns.py, issue #329), so
+  # missing means the group is genuinely gone: private endpoint name resolution
+  # is broken and traffic falls back to the public endpoint.
 
   # A records inside privatelink.* zones are auto-created by a private endpoint's
   # DNS zone group (Azure manages them), so they appear as extras. Scoped to
@@ -251,8 +245,15 @@ ignore:
 
   # Log Analytics resources with unresolvable parameter names
   # Custom tables and solutions with parameter-based parent names cannot be reliably matched
-  - resource_type: "Microsoft.OperationalInsights/workspaces/tables"
-    reason: "Child resource with parent name containing unresolved parameter expressions"
+  #
+  # NO rule for workspaces/tables. The reason above was true of the NAME - the
+  # parent is a uniqueString() placeholder - but that is a matching problem, not
+  # grounds to discard the type: the collector resolves it by fetching each
+  # declared table's LEAF name against every live workspace
+  # (tools/live_state/collectors/workspace_tables.py, issue #329). The rule was
+  # suppressing a row whose own note read "the deployed instance has been
+  # deleted or was never created" - a claim worth checking, and false:
+  # CustomLog_CL was present all along.
 
   - resource_type: "Microsoft.OperationalInsights/workspaces/savedSearches"
     reason: "Child resource with parent name containing unresolved parameter expressions"
