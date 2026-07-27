@@ -100,7 +100,8 @@ class ClaimTests(unittest.TestCase):
         report = self._report([drift])
 
         self.assertEqual(_claim_policy_required_tags(report), 1)
-        self.assertNotIn("tags.environment", drift["details"]["changed_properties"])
+        self.assertNotIn("tags.environment",
+                         (drift["details"].get("changed_properties") or {}))
         claimed = drift["policy_enforced_properties"]["tags.environment"]
         self.assertEqual(claimed["policy_assignment"], "drift-inherit-environment")
         self.assertIn("reconcile the template", claimed["reason"].lower())
@@ -127,6 +128,34 @@ class ClaimTests(unittest.TestCase):
                       drift["details"]["changed_properties"])
         self.assertIn("tags.environment", drift["policy_enforced_properties"])
         self.assertIsNot(drift["change_origin"].get("expected"), True)
+
+    def test_an_emptied_changed_properties_is_replaced_by_a_statement(self):
+        """A bare `changed_properties: {}` reads as "no property differs". A live
+        analysis concluded exactly that, called a real template-vs-policy conflict
+        "not configuration drift", and sent the operator to read the assignment for
+        values the finding already had. An absence cannot carry meaning."""
+        drift = _tag_drift()
+
+        _claim_policy_required_tags(self._report([drift]))
+
+        self.assertNotIn("changed_properties", drift["details"])
+        summary = drift["details"]["policy_enforced_summary"]
+        self.assertIn("tags.environment", summary)
+        self.assertIn("test", summary)
+        self.assertIn("production", summary)
+        self.assertIn("drift-inherit-environment", summary)
+
+    def test_a_partly_claimed_finding_keeps_its_changed_properties(self):
+        """The summary is only for findings with nothing actionable left; a mixed
+        finding must keep the real drift where every consumer looks for it."""
+        drift = _tag_drift(extra_props={
+            "properties.allowBlobPublicAccess": {"desired": False, "actual": True}})
+
+        _claim_policy_required_tags(self._report([drift]))
+
+        self.assertIn("properties.allowBlobPublicAccess",
+                      drift["details"]["changed_properties"])
+        self.assertNotIn("policy_enforced_summary", drift["details"])
 
     def test_a_third_value_is_not_claimed(self):
         """Live is neither the template's value nor policy's - someone else moved
