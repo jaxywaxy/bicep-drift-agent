@@ -50,7 +50,7 @@ jobs:
       lz-subscription-id: ${{ steps.validate.outputs.subscription_id }}
     steps:
       - name: Checkout drift-agent (for index)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: drift-agent
 
@@ -115,7 +115,7 @@ jobs:
           PYTHON_SCRIPT
 
       - name: Checkout external Bicep repo
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ steps.load.outputs.repo }}
           path: lz-repo
@@ -233,12 +233,12 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
       - name: Checkout drift detection tools
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           path: drift-tools
 
       - name: Checkout Bicep repository
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ matrix.check.repo }}
           ref: ${{ matrix.check.branch || 'main' }}
@@ -373,7 +373,7 @@ jobs:
       NODE_OPTIONS: --no-warnings=DEP0005
     steps:
       - name: Checkout drift detection tools
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Download all drift reports
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -412,7 +412,7 @@ jobs:
           python3 tools/count_drifts.py .
 
       - name: Checkout external repo for notifications config
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ needs.load-config.outputs.lz-repo }}
           path: lz-repo
