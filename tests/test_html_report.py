@@ -337,6 +337,175 @@ class ReportCssTests(unittest.TestCase):
         self.assertIn(_REPORT_CSS, _render())
 
 
+def _inherit_tag_group(n, policy="drift-inherit-environment", actual="production",
+                       days=None):
+    """n resources carrying the SAME policy-imposed tag - the real-world shape.
+
+    An inherit-tag assignment applies to every resource in the RG, so this is
+    what the section actually receives; a one-record fixture cannot exercise it.
+    """
+    return [{
+        "type": "Microsoft.Network/dnsZones",
+        "name": f"zone-{i}.example.com",
+        "drift_type": "property_drift",
+        "details": {"policy_enforced_summary": f"tags.environment: test -> {actual}"},
+        "change_origin": {"origin": "policy_modify", "expected": True,
+                          "policy_name": policy,
+                          "timestamp": f"2026-07-{(days[i] if days else 27):02d}T00:00:00Z"},
+        "policy_enforced_properties": {"tags.environment": {
+            "desired": "test", "actual": actual, "policy_assignment": policy}},
+    } for i in range(n)]
+
+
+def _governance_html(policy_enforced, **kw):
+    data = _report(agent_analysis="## TL;DR\nnarrative",
+                   policy_enforced_drifts=policy_enforced, **kw)
+    with tempfile.TemporaryDirectory() as d:
+        src, out = Path(d) / "in.json", Path(d) / "out.html"
+        src.write_text(json.dumps(data))
+        generate_html_report(src, out, "rg-drift-test", "bicep/main.bicep")
+        return out.read_text()
+
+
+class GovernanceGroupingTests(unittest.TestCase):
+    """One governance fact should occupy one row, not one row per resource.
+
+    An inherit-tag policy fans out across the whole RG: a live report carried
+    nineteen rows differing only in the resource name, a screen and a half of
+    scrolling for a single fact. Grouping is the normal case for Modify/DINE
+    effects, so the section groups by (what changed, who imposed it).
+    """
+
+    def _rows(self, html):
+        body = html[html.index("Policy / System-Enforced Changes"):]
+        return body[:body.index("</table>")].count("<tr>") - 1  # minus the header row
+
+    def test_resources_sharing_one_policy_change_collapse_to_one_row(self):
+        html = _governance_html(_inherit_tag_group(19))
+        self.assertEqual(self._rows(html), 1)
+        self.assertIn("<strong>19 resources</strong>", html)
+
+    def test_the_collapsed_row_still_names_every_resource(self):
+        # Grouping must not lose evidence - the names move behind a <details>,
+        # they do not leave the report.
+        html = _governance_html(_inherit_tag_group(19))
+        for i in range(19):
+            self.assertIn(f"zone-{i}.example.com", html)
+
+    def test_different_facts_do_not_merge(self):
+        # Same policy, different imposed value: two distinct facts, two rows.
+        # Collapsing these would state something untrue about the estate.
+        html = _governance_html(_inherit_tag_group(3)
+                                + _inherit_tag_group(2, actual="staging"))
+        self.assertEqual(self._rows(html), 2)
+        self.assertIn("production", html)
+        self.assertIn("staging", html)
+
+    def test_different_policies_do_not_merge(self):
+        html = _governance_html(_inherit_tag_group(3)
+                                + _inherit_tag_group(3, policy="other-assignment"))
+        self.assertEqual(self._rows(html), 2)
+
+    def test_a_single_resource_is_not_hidden_behind_a_disclosure(self):
+        # One resource is not a list; making the reader click to see one name
+        # is worse than the duplication grouping set out to fix.
+        html = _governance_html(_inherit_tag_group(1))
+        self.assertIn("zone-0.example.com", html)
+        self.assertNotIn("1 resources", html)
+
+    def test_a_group_spanning_days_reports_the_range(self):
+        html = _governance_html(_inherit_tag_group(3, days={0: 24, 1: 26, 2: 25}))
+        self.assertIn("2026-07-24 &ndash; 2026-07-26", html)
+
+    def test_a_group_with_no_timestamps_renders(self):
+        # An in-flight Modify leaves no activity-log event, which is precisely
+        # why this section exists - the common case must not crash the report.
+        rows = _inherit_tag_group(3)
+        for r in rows:
+            r["change_origin"]["timestamp"] = ""
+        html = _governance_html(rows)
+        self.assertEqual(self._rows(html), 1)
+
+    def test_grouping_is_deterministic(self):
+        rows = _inherit_tag_group(3) + _inherit_tag_group(2, actual="staging")
+        self.assertEqual(_governance_html(rows), _governance_html(rows))
+
+
+class DriftDetailsCellTests(unittest.TestCase):
+    """The Details cell renders the change; it does not dump the record.
+
+    It used to be json.dumps(indent=2) in a <pre> inside a fixed-layout
+    six-column table - developer syntax restating what the Modified
+    Configuration section above had already shown properly.
+    """
+
+    def test_a_changed_property_renders_as_values_not_json(self):
+        h = _render()
+        cell = h[h.index("Drift Details"):]
+        self.assertIn("detail-change", cell)
+        self.assertNotIn("&quot;changed_properties&quot;", cell)
+        self.assertNotIn("&quot;desired&quot;", cell)
+
+    def test_the_property_path_and_both_values_survive(self):
+        h = _render(drifts=[{
+            "type": "Microsoft.Storage/storageAccounts", "name": "stdrift",
+            "drift_type": "property_drift", "owner": "workload",
+            "details": {"changed_properties": {"properties.allowBlobPublicAccess": {
+                "desired": False, "actual": True, "severity": "critical"}}},
+        }])
+        self.assertIn("properties.allowBlobPublicAccess", h)
+        self.assertIn("false", h)
+        self.assertIn("true", h)
+        self.assertIn('<span class="badge critical">critical</span>', h)
+
+    def test_details_keys_we_do_not_model_are_still_shown(self):
+        # This is the diagnostic cell. Dropping an unanticipated key would lose
+        # evidence silently, which is worse than an ugly cell.
+        h = _render(drifts=[{
+            "type": "T", "name": "n", "drift_type": "property_drift",
+            "details": {"changed_properties": {}, "policy_enforced_summary": "tag imposed",
+                        "some_future_key": "keep me"},
+        }])
+        self.assertIn("policy_enforced_summary", h)
+        self.assertIn("keep me", h)
+
+    def test_a_hostile_property_path_is_escaped(self):
+        h = _render(drifts=[{
+            "type": "T", "name": "n", "drift_type": "property_drift",
+            "details": {"changed_properties": {"<img src=x onerror=alert(1)>": {
+                "desired": "a", "actual": "<script>", "severity": "low"}}},
+        }])
+        self.assertNotIn("<img src=x", h)
+        self.assertNotIn("<script>", h)
+
+    def test_a_drift_with_no_details_says_so(self):
+        h = _render(drifts=[{"type": "T", "name": "n", "drift_type": "extra_in_azure"}])
+        self.assertIn("No additional details", h)
+
+
+class OwnerBadgeTests(unittest.TestCase):
+    """Ownership is routing information, not a judgement.
+
+    The badges reused .modified (orange) and .origin-policy (green), so an
+    owner sat beside a drift-type badge in the same row wearing the same
+    colours and read as a second severity signal.
+    """
+
+    def test_owner_badges_do_not_reuse_the_severity_or_origin_palette(self):
+        h = _render(drifts=[
+            {"type": "T", "name": "a", "drift_type": "property_drift", "owner": "workload"},
+            {"type": "T", "name": "b", "drift_type": "property_drift", "owner": "platform"},
+        ])
+        self.assertIn("badge owner-workload", h)
+        self.assertIn("badge owner-platform", h)
+        self.assertNotIn('badge modified" title="Owned by', h)
+        self.assertNotIn('badge origin-policy" title="Owned by', h)
+
+    def test_both_owner_classes_are_styled(self):
+        for cls in ("owner-workload", "owner-platform"):
+            self.assertIn(f".badge.{cls}", _REPORT_CSS)
+
+
 class PolicyEnforcedSectionTests(unittest.TestCase):
     """Placement and content of the governance section.
 
@@ -424,13 +593,20 @@ class PolicyEnforcedSectionTests(unittest.TestCase):
         # The complaint that started this: a header reading "Total Issues: 1"
         # over a table of governance rows reads as a report contradicting
         # itself. Every row the section renders must be accounted for above.
-        html = self._html()
+        # Uses the MULTI-resource fixture on purpose. With a single record the
+        # card, the heading and the row count are all 1, so a single-record
+        # assertion holds no matter how the section groups - it would have gone
+        # on passing after grouping landed while measuring nothing.
+        html = _governance_html(_inherit_tag_group(4))
         card = re.search(
             r'metric-label">Policy-Enforced</div>\s*<div class="metric-number">(\d+)<',
             html)
         self.assertIsNotNone(card, "no Policy-Enforced metric card")
-        self.assertEqual(int(card.group(1)),
-                         html.count('<span class="badge origin-policy">'))
+        self.assertEqual(int(card.group(1)), 4)
+        # The heading counts resources, not rendered rows: after grouping the
+        # four resources occupy one row, and the header must still describe the
+        # estate rather than the layout.
+        self.assertIn("Policy / System-Enforced Changes (4)", html)
 
     def test_the_governance_card_is_not_folded_into_total_issues(self):
         # These rows are deliberately outside COUNTED_TYPES. If the card ever

@@ -251,6 +251,57 @@ _REPORT_CSS = """            * {
                 color: #e65100;
             }
 
+            /* Severity chips in the Drift Details cell. Same palette as the
+               property-change cards above, so one property reads the same in
+               both places. */
+            .badge.critical { background: #ffebee; color: #c62828; }
+            .badge.high     { background: #fff3e0; color: #e65100; }
+            .badge.medium   { background: #fff8e1; color: #f57f17; }
+            .badge.low,
+            .badge.info     { background: #e3f2fd; color: #1565c0; }
+
+            .badge.owner-platform {
+                background: #eceff1;
+                color: #455a64;
+                border: 1px solid #b0bec5;
+            }
+
+            .badge.owner-workload {
+                background: #ede7f6;
+                color: #5e35b1;
+                border: 1px solid #b39ddb;
+            }
+
+            .affected-type {
+                color: #888;
+                font-size: 11px;
+            }
+
+            .affected-list {
+                margin-top: 8px;
+                padding-left: 12px;
+                border-left: 2px solid #e0e0e0;
+                font-size: 13px;
+            }
+
+            .detail-change {
+                padding: 8px 0;
+                border-bottom: 1px solid #f0f0f0;
+                font-size: 13px;
+            }
+
+            .detail-change:last-child {
+                border-bottom: none;
+            }
+
+            .detail-values {
+                font-family: monospace;
+                font-size: 12px;
+                color: #555;
+                margin-top: 4px;
+                word-break: break-all;
+            }
+
             .badge.origin-policy {
                 background: #e8f5e9;
                 color: #2e7d32;
@@ -632,12 +683,7 @@ def generate_html_report(
         drift_type = drift["drift_type"]
         type_badge = _get_type_badge(drift_type)
 
-        # Format details
-        details = drift.get("details", "")
-        if isinstance(details, dict):
-            details = json.dumps(details, indent=2)
-        elif not details:
-            details = "No additional details"
+        details_html = _render_details_cell(drift.get("details", ""))
 
         # Get change origin info
         change_origin = drift.get("change_origin", {})
@@ -656,7 +702,7 @@ def generate_html_report(
             <td>{owner_badge}</td>
             <td>{origin_badge}</td>
             <td>
-                <pre>{html.escape(details)}</pre>
+                {details_html}
                 {lifecycle_html}
             </td>
         </tr>
@@ -707,7 +753,7 @@ def generate_html_report(
                 <div class="metric-card critical">
                     <div class="metric-label">Critical</div>
                     <div class="metric-number">{critical}</div>
-                    <div class="metric-sub">property changes rated critical</div>
+                    <div class="metric-sub">of the {changed_properties} property path(s)</div>
                 </div>
                 <div class="metric-card missing">
                     <div class="metric-label">Missing</div>
@@ -728,7 +774,7 @@ def generate_html_report(
             {_render_property_drift_section(data)}
 
             <div class="section">
-                <h2>Drift Details</h2>
+                <h2>📋 Drift Details ({total})</h2>
                 {_render_drift_section(total, drift_rows)}
             </div>
 
@@ -770,10 +816,14 @@ def _get_type_badge(drift_type: str) -> str:
 
 def _get_owner_badge(owner) -> str:
     """Get HTML badge for the responsible owner (platform vs workload)."""
+    # Muted, and never the drift-type or origin palette. These reused .modified
+    # (orange) and .origin-policy (green), so an owner sat next to a severity
+    # badge in the same row wearing the same colours and read as a second
+    # severity signal. Ownership is routing information, not a judgement.
     if owner == "platform":
-        return '<span class="badge origin-policy" title="Owned by the platform team">🏛️ Platform</span>'
+        return '<span class="badge owner-platform" title="Owned by the platform team">🏛️ Platform</span>'
     if owner == "workload":
-        return '<span class="badge modified" title="Owned by the application/workload team">📦 Workload</span>'
+        return '<span class="badge owner-workload" title="Owned by the application/workload team">📦 Workload</span>'
     return '<span class="badge origin-unknown">—</span>'
 
 
@@ -872,6 +922,44 @@ def _get_lifecycle_html(lifecycle: dict) -> str:
     return timeline_html
 
 
+def _render_details_cell(details) -> str:
+    """Render a drift's details as prose, not as a JSON dump.
+
+    This cell used to be json.dumps(indent=2) inside a <pre>, squeezed into a
+    fixed-layout six-column table. It restated - in developer syntax - what the
+    Modified Configuration section above had already shown properly, so the two
+    disagreed on which was authoritative while neither was pleasant to read.
+
+    Keys other than changed_properties still fall through to the <pre>: this is
+    a diagnostic cell and dropping a key we did not anticipate would lose
+    evidence silently, which is worse than an ugly cell.
+    """
+    if not isinstance(details, dict):
+        return f"<pre>{html.escape(str(details))}</pre>" if details else "<em>No additional details</em>"
+
+    changed = details.get("changed_properties") or {}
+    blocks = ""
+    for path, change in changed.items():
+        if not isinstance(change, dict):
+            # A shape we don't model - show it rather than swallow it.
+            blocks += (f'<div class="detail-change"><code>{html.escape(str(path))}</code>: '
+                       f"{html.escape(str(change))}</div>")
+            continue
+        severity = str(change.get("severity", "")).lower()
+        chip = (f'<span class="badge {html.escape(severity)}">{html.escape(severity)}</span>'
+                if severity else "")
+        blocks += f"""<div class="detail-change">
+                    <code>{html.escape(str(path))}</code> {chip}
+                    <div class="detail-values">{_esc(json.dumps(change.get("desired"), default=str))}
+                        &rarr; <strong>{_esc(json.dumps(change.get("actual"), default=str))}</strong></div>
+                </div>"""
+
+    rest = {k: v for k, v in details.items() if k != "changed_properties"}
+    if rest:
+        blocks += f"<pre>{html.escape(json.dumps(rest, indent=2, default=str))}</pre>"
+    return blocks or "<em>No additional details</em>"
+
+
 def _render_governance_metric(data: dict) -> str:
     """A card for the policy-enforced rows, so the header accounts for the page.
 
@@ -913,7 +1001,13 @@ def _render_policy_enforced_section(data: dict) -> str:
     def _agent(origin: str) -> str:
         return "an Azure service" if origin == "system_managed" else "Azure Policy"
 
-    rows = ""
+    # Group by the governance FACT (what changed + who imposed it), not by
+    # resource. An inherit-tag policy applies to every resource in the RG, so
+    # one assignment produced nineteen rows that differed only in the resource
+    # name - a screen and a half of scrolling carrying a single fact. Grouping
+    # is the normal case for Modify/DINE effects, not a fixture artifact.
+    # dict preserves insertion order, so the grouped output stays deterministic.
+    groups: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
     for d in items:
         co = d.get("change_origin", {}) or {}
         origin = co.get("origin") or "unknown"
@@ -934,13 +1028,42 @@ def _render_policy_enforced_section(data: dict) -> str:
             for path, v in (d.get("policy_enforced_properties") or {}).items()
         ) or "<em>whole resource</em>"
 
+        groups.setdefault((changes, summary), []).append(
+            (str(d.get("type", "")), str(d.get("name", "")), when))
+
+    rows = ""
+    for (changes, summary), members in groups.items():
+        # A group can span days (a policy sweeping an RG is not instantaneous)
+        # and can carry no timestamp at all - a Modify effect leaves no activity
+        # log event, which is the whole reason this section exists.
+        dates = sorted({w for _, _, w in members if w and w != "-"})
+        if not dates:
+            when = "-"
+        elif len(dates) == 1:
+            when = dates[0]
+        else:
+            when = f"{dates[0]} &ndash; {dates[-1]}"
+
+        listing = "".join(
+            f"<div><code>{html.escape(name)}</code> "
+            f"<span class=\"affected-type\">{html.escape(rtype)}</span></div>"
+            for rtype, name, _ in members
+        )
+        if len(members) == 1:
+            affected = listing
+        else:
+            # Collapsed by default: the count is the fact, the names are the
+            # evidence, and an operator only needs the evidence when the count
+            # surprises them.
+            affected = (f"<details><summary><strong>{len(members)} resources</strong></summary>"
+                        f'<div class="affected-list">{listing}</div></details>')
+
         rows += f"""
                 <tr>
-                    <td><strong>{html.escape(str(d.get('type', '')))}</strong></td>
-                    <td><code>{html.escape(str(d.get('name', '')))}</code></td>
                     <td>{changes}</td>
                     <td><span class="badge origin-policy">🛡️ {html.escape(summary)}</span></td>
-                    <td>{html.escape(str(when))}</td>
+                    <td>{affected}</td>
+                    <td>{when or '-'}</td>
                 </tr>
         """
 
@@ -956,8 +1079,8 @@ def _render_policy_enforced_section(data: dict) -> str:
                 <table>
                     <thead>
                         <tr>
-                            <th>Resource Type</th><th>Name</th><th>Change</th>
-                            <th>What happened</th><th>When</th>
+                            <th>Change</th><th>What happened</th>
+                            <th>Affected</th><th>When</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1050,7 +1173,7 @@ def _render_property_drift_section(data: dict) -> str:
         paths = sum(len(r.get("property_diffs") or []) for r in modified)
         html += f"""
             <div class="section">
-                <h2>⚙️ Modified Configuration</h2>
+                <h2>⚙️ Modified Configuration ({len(modified)})</h2>
                 <p>These resources exist in both Bicep and Azure, but their configuration has changed
                    — <strong>{len(modified)} resource(s)</strong>, {paths} property path(s):</p>
                 <div style="margin-top: 16px;">
@@ -1216,7 +1339,7 @@ def _render_smart_matched_section(data: dict) -> str:
 
     return f"""
             <div class="section">
-                <h2>🔗 Smart-Matched Resources</h2>
+                <h2>🔗 Smart-Matched Resources ({len(matched)})</h2>
                 <p>These resources are defined in Bicep but use runtime-generated names (like uniqueString()). They have been matched to deployed resources:</p>
                 {flagged_html}
                 {confident_html}
