@@ -261,9 +261,24 @@ def _claim_policy_required_tags(report_data: dict) -> int:
         # and merely has no changed properties must not inherit a policy verdict
         # just because an earlier resource in the loop was claimed.
         if claimed_here and not changed:
+            # Replace the now-EMPTY changed_properties with a positive statement
+            # of what moved. An empty dict reads as "no property differs": a live
+            # analysis concluded exactly that, called a real template-vs-policy
+            # conflict "not configuration drift", and told the operator to go read
+            # the assignment for values that were in the record all along. An
+            # absence cannot carry that meaning; a sentence can.
+            claims = drift["policy_enforced_properties"]
+            details = drift.setdefault("details", {})
+            details.pop("changed_properties", None)
+            details["policy_enforced_summary"] = "; ".join(
+                f"{path}: {v.get('desired')} -> {v.get('actual')} "
+                f"(imposed by policy assignment '{v.get('policy_assignment')}')"
+                for path, v in claims.items()
+            )
+
             # Nothing actionable left on this resource - attribute the whole
             # record so it lands in the governance section, not the drift list.
-            first = next(iter(drift["policy_enforced_properties"].values()))
+            first = next(iter(claims.values()))
             drift["change_origin"] = {
                 **(drift.get("change_origin") or {}),
                 "origin": "policy_modify",
