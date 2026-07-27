@@ -142,6 +142,12 @@ _REPORT_CSS = """            * {
                 border-top: 4px solid #d32f2f;
             }
 
+            /* Green, matching the origin-policy badge: this card is the only
+               one on the header that is not a call to action. */
+            .metric-card.governance {
+                border-top: 4px solid #2e7d32;
+            }
+
             .metric-sub {
                 font-size: 11px;
                 color: #888;
@@ -716,6 +722,7 @@ def generate_html_report(
                     <div class="metric-number">{total}</div>
                     <div class="metric-sub">changed + missing + extra</div>
                 </div>
+                {_render_governance_metric(data)}
             </div>
 
             {_render_property_drift_section(data)}
@@ -863,6 +870,31 @@ def _get_lifecycle_html(lifecycle: dict) -> str:
 
     timeline_html += '</div>'
     return timeline_html
+
+
+def _render_governance_metric(data: dict) -> str:
+    """A card for the policy-enforced rows, so the header accounts for the page.
+
+    Without it the header reads "Total Issues: 1" above a table of nineteen
+    governance rows, and a reader who trusts the number does not know they are
+    there while a reader who scrolls concludes the number is wrong. Both
+    readings cost the report its credibility, and an operator reported exactly
+    the second one.
+
+    It sits AFTER Total Issues and says so in the sub-line: these are
+    deliberately outside that sum (see count_drifts.COUNTED_TYPES), and a card
+    placed among the summed ones would imply it is part of the arithmetic.
+    Rendered only when non-zero, matching the section itself - a clean estate
+    should not carry a governance card reading zero.
+    """
+    count = len(data.get("policy_enforced_drifts") or [])
+    if not count:
+        return ""
+    return f"""<div class="metric-card governance">
+                    <div class="metric-label">Policy-Enforced</div>
+                    <div class="metric-number">{count}</div>
+                    <div class="metric-sub">governance &mdash; not in Total Issues</div>
+                </div>"""
 
 
 def _render_policy_enforced_section(data: dict) -> str:

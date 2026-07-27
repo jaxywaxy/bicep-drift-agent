@@ -420,6 +420,36 @@ class PolicyEnforcedSectionTests(unittest.TestCase):
             generate_html_report(src, out, "rg-drift-test", "bicep/main.bicep")
             self.assertNotIn("Policy / System-Enforced Changes", out.read_text())
 
+    def test_the_header_counts_the_governance_rows_it_is_about_to_show(self):
+        # The complaint that started this: a header reading "Total Issues: 1"
+        # over a table of governance rows reads as a report contradicting
+        # itself. Every row the section renders must be accounted for above.
+        html = self._html()
+        card = re.search(
+            r'metric-label">Policy-Enforced</div>\s*<div class="metric-number">(\d+)<',
+            html)
+        self.assertIsNotNone(card, "no Policy-Enforced metric card")
+        self.assertEqual(int(card.group(1)),
+                         html.count('<span class="badge origin-policy">'))
+
+    def test_the_governance_card_is_not_folded_into_total_issues(self):
+        # These rows are deliberately outside COUNTED_TYPES. If the card ever
+        # starts adding to the headline, "Total Issues" stops meaning
+        # "things to act on" and the split loses its point.
+        html = self._html()
+        total = re.search(
+            r'metric-label">Total Issues</div>\s*<div class="metric-number">(\d+)<', html)
+        self.assertEqual(int(total.group(1)), tally_report(_report())["total_issues"])
+        # ...and it renders after that card, where "not in Total Issues" reads
+        # as a statement about the number above rather than a bare disclaimer.
+        self.assertLess(html.index('metric-label">Total Issues'),
+                        html.index('metric-label">Policy-Enforced'))
+
+    def test_no_governance_card_on_an_estate_with_no_governance_rows(self):
+        # A card reading 0 would be the only always-on card for a section that
+        # is itself conditional.
+        self.assertNotIn("Policy-Enforced", _render(policy_enforced_drifts=[]))
+
 
 if __name__ == "__main__":
     unittest.main()
