@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "code-review-graph": {
+      "command": "uvx",
+      "args": [
+        "code-review-graph",
+        "serve"
+      ],
+      "cwd": "/Users/jacquirennie/Desktop/git/bicep-drift-agent",
+      "type": "stdio"
+    }
+  }
+}

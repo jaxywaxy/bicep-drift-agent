@@ -49,6 +49,12 @@ CRITICAL_PROPERTIES = {
     "properties.softdeletefeaturestate",
     "properties.softdeletestate",
     "properties.enhancedsecuritystate",
+    # Private endpoint DNS zone group wiring. The zone group is what makes a
+    # private endpoint resolvable by its own name; repoint privateDnsZoneId at
+    # the wrong zone (or drop the config) and clients silently fall back to
+    # public DNS - the Private Link bypass succeeds, so nothing errors and
+    # nothing looks broken. Substring is unique to privateDnsZoneGroups.
+    "properties.privatednszoneconfigs",
     # Credential / anonymous-access exposure (ACR admin account, anonymous
     # pull, storage public blobs, key-based auth left enabled).
     "properties.adminuserenabled",
@@ -305,6 +311,27 @@ def elevate_backup_severity(
     for d in diffs:
         path = d.property_path.lower()
         if "retention" in path or "schedule" in path:
+            d.severity = "critical"
+    return diffs
+
+
+def elevate_workspace_table_severity(
+    resource_type: str, diffs: list["PropertyDiff"]
+) -> list["PropertyDiff"]:
+    """Raise severity to critical for workspace-table retention and plan.
+
+    Shortening retention silently shrinks how far back you can query, and
+    switching plan Analytics -> Basic drops most query capability on the table;
+    both are discovered during an incident, which is the worst time. Same class
+    as backup retention, and type-scoped for the same reason: 'retentionindays'
+    also appears on the WORKSPACE itself, on ACR retention policies and on
+    diagnostic settings, where the default warning is right.
+    """
+    if resource_type != "microsoft.operationalinsights/workspaces/tables":
+        return diffs
+    for d in diffs:
+        path = d.property_path.lower()
+        if "retention" in path or path.endswith("plan"):
             d.severity = "critical"
     return diffs
 

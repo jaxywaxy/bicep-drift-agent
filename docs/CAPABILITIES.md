@@ -65,6 +65,8 @@ Use this document to understand what the agent can detect, how findings are clas
 | AI Safety Policies | ARM REST |
 | Foundry Projects | ARM REST |
 | Foundry Connections | ARM REST |
+| Private Endpoint DNS Zone Groups | ARM REST |
+| Log Analytics Workspace Tables | ARM REST (declared tables only) |
 | Cross-Subscription Resources | Resource Graph and ARM REST |
 
 ---
@@ -359,6 +361,50 @@ auto-created when a VNet connects to the hub is filtered from peering comparison
 has any custom route table (`CantConfigureRoutingIntentIfCustomRouteTablesPresent`).
 A hub is therefore either custom-route-table mode or routing-intent mode; the two
 are never compared together on the same hub.
+
+### Private endpoint DNS zone groups
+
+Not indexed by Resource Graph, so they are listed per private endpoint via ARM
+REST and compared as `{privateEndpoint}/{group}`.
+`properties.privateDnsZoneConfigs` is rated **critical**: the zone group is what
+makes a private endpoint resolvable by its own name, so deleting it or
+repointing `privateDnsZoneId` at the wrong zone makes clients fall back to
+public DNS — the Private Link bypass *succeeds*, nothing errors, and nothing
+looks broken.
+
+Listed rather than declared-driven (unlike the tables below): an endpoint
+carries at most a handful of groups, so the payload is small, and an
+**undeclared** group is worth seeing — something added the DNS integration out
+of band.
+
+### Log Analytics workspace tables
+
+Not indexed by Resource Graph. Fetched **only for the tables the template
+declares** — one `GET {workspace}/tables/{name}` each — because a workspace
+carries the entire built-in catalogue: 679 tables and 2.8 MB of JSON on the
+drift-test workspace. Listing them to keep the one declared row would bloat
+every report artifact with rows that get dropped again at diff time. Same
+bicep-driven rationale as Defender pricings.
+
+Matched by **leaf name** across every live workspace, because the declared
+parent is normally a `uniqueString()` placeholder
+(`log-[86c9cbf6]/CustomLog_CL`) and cannot be resolved at compile time. A
+declared table that returns 404 is simply absent from live state, which is
+precisely the `missing_in_azure` signal wanted — so 404 is handled apart from
+real errors and does **not** log a warning.
+
+Built-in tables are declarable too (setting `retentionInDays` on `Heartbeat` is
+a normal retention-management pattern), so this deliberately does not filter to
+custom `_CL` tables. `retention*` and `plan` are rated **critical**, type-scoped
+for the same reason backup retention is: `retentionInDays` also appears on the
+workspace itself, on ACR retention policies and on diagnostic settings, where
+the default warning is right.
+
+> Both types were previously suppressed by `.drift-ignore` rules standing in for
+> the collection gap (issue #329). Suppressing the false positive suppressed the
+> real finding too — the workspace-tables row carried a note claiming the table
+> "has been deleted or was never created", and `CustomLog_CL` was present the
+> whole time.
 
 ### Recovery Services vault backup config
 

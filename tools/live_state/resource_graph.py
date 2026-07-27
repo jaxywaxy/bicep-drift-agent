@@ -18,6 +18,7 @@ from azure.identity import DefaultAzureCredential
 from .collectors.aci import _normalize_aci_container_groups
 from .collectors.appservice import _expand_appservice_config
 from .collectors.backup import _query_backup_children, _query_backup_policies
+from .collectors.private_dns import query_private_dns_zone_groups
 from .collectors.cognitive import _query_cognitive_deployments
 from .collectors.cosmos import _normalize_cosmos_account_locations, _query_cosmos_children
 from .collectors.data_plane import _expand_data_plane_children
@@ -209,6 +210,7 @@ def _augment_untracked_resources(
 
     - Management locks (Microsoft.Authorization/locks) via ARM REST
     - Recovery Services vault backupconfig + backupPolicies via ARM REST
+    - Private endpoint DNS zone groups via ARM REST
     - Cosmos DB SQL databases/containers via ARM REST
     - Cognitive Services / Foundry children via ARM REST
     - Generic data-plane children (storage/servicebus/eventhub/DNS/AKS pools/FW/...)
@@ -239,6 +241,8 @@ def _augment_untracked_resources(
                        "vault backup config")
     _extend_swallowing(resources, lambda: _query_backup_policies(resources, sub_id, token=token),
                        "vault backup policies")
+    _extend_swallowing(resources, lambda: query_private_dns_zone_groups(resources, sub_id, token=token),
+                       "private DNS zone groups")
     _extend_swallowing(resources, lambda: _query_cognitive_deployments(resources, token=token),
                        "Cognitive Services deployments")
     _extend_swallowing(resources, lambda: _expand_data_plane_children(resources, token=token),
