@@ -337,5 +337,119 @@ class ReportCssTests(unittest.TestCase):
         self.assertIn(_REPORT_CSS, _render())
 
 
+class PolicyEnforcedSectionTests(unittest.TestCase):
+    """Placement and content of the governance section.
+
+    A live reader (2026-07-27) read the report and concluded the policy-imposed
+    tag change "isn't reported or fixed". It was reported - but the section sat
+    AFTER the remediation narrative, and its rows named only the resource, never
+    the property or the two values. Both are fixed here; both are asserted,
+    because either one alone reproduces the same wrong conclusion.
+    """
+
+    def _html(self, **kw):
+        data = _report(
+            agent_analysis="## TL;DR\nnarrative",
+            policy_enforced_drifts=[{
+                "type": "Microsoft.Network/dnsZones",
+                "name": "drifttest.example.com",
+                "drift_type": "property_drift",
+                "details": {"changed_properties": {}},
+                "change_origin": {"origin": "policy_modify", "expected": True,
+                                  "policy_name": "drift-inherit-environment",
+                                  "timestamp": "2026-07-27T00:00:00Z"},
+                "policy_enforced_properties": {"tags.environment": {
+                    "desired": "test", "actual": "production",
+                    "policy_assignment": "drift-inherit-environment"}},
+            }],
+            **kw)
+        with tempfile.TemporaryDirectory() as d:
+            src, out = Path(d) / "in.json", Path(d) / "out.html"
+            src.write_text(json.dumps(data))
+            generate_html_report(src, out, "rg-drift-test", "bicep/main.bicep")
+            return out.read_text()
+
+    def test_governance_precedes_the_remediation_narrative(self):
+        html = self._html()
+        policy_at = html.index("Policy / System-Enforced Changes")
+        analysis_at = html.index("Remediation Analysis")
+        drift_at = html.index("Drift Details")
+
+        self.assertLess(drift_at, policy_at, "governance must follow the drift detail")
+        self.assertLess(policy_at, analysis_at,
+                        "governance must come BEFORE the remediation narrative")
+
+    def test_the_row_names_the_property_and_both_values(self):
+        html = self._html()
+        section = html[html.index("Policy / System-Enforced Changes"):]
+        section = section[:section.index("</table>")]
+
+        self.assertIn("tags.environment", section)
+        self.assertIn("test", section)
+        self.assertIn("production", section)
+
+    def test_the_row_names_the_assignment(self):
+        section = self._html()
+        self.assertIn("drift-inherit-environment", section)
+
+    def test_a_dine_created_resource_renders_without_claimed_properties(self):
+        """A DINE-created resource is policy-enforced as a WHOLE resource - it has
+        no policy_enforced_properties. The Change cell must degrade, not vanish or
+        raise."""
+        data = _report(policy_enforced_drifts=[{
+            "type": "Microsoft.Insights/diagnosticSettings", "name": "kv-audit",
+            "drift_type": "extra_in_azure", "details": {},
+            "change_origin": {"origin": "policy_dine", "expected": True,
+                              "policy_name": "deploy-kv-diagnostics",
+                              "timestamp": "2026-07-27T00:00:00Z"},
+        }])
+        with tempfile.TemporaryDirectory() as d:
+            src, out = Path(d) / "in.json", Path(d) / "out.html"
+            src.write_text(json.dumps(data))
+            generate_html_report(src, out, "rg-drift-test", "bicep/main.bicep")
+            html = out.read_text()
+
+        self.assertIn("kv-audit", html)
+        self.assertIn("whole resource", html)
+
+    def test_section_is_absent_when_nothing_is_policy_enforced(self):
+        data = _report(policy_enforced_drifts=[])
+        with tempfile.TemporaryDirectory() as d:
+            src, out = Path(d) / "in.json", Path(d) / "out.html"
+            src.write_text(json.dumps(data))
+            generate_html_report(src, out, "rg-drift-test", "bicep/main.bicep")
+            self.assertNotIn("Policy / System-Enforced Changes", out.read_text())
+
+    def test_the_header_counts_the_governance_rows_it_is_about_to_show(self):
+        # The complaint that started this: a header reading "Total Issues: 1"
+        # over a table of governance rows reads as a report contradicting
+        # itself. Every row the section renders must be accounted for above.
+        html = self._html()
+        card = re.search(
+            r'metric-label">Policy-Enforced</div>\s*<div class="metric-number">(\d+)<',
+            html)
+        self.assertIsNotNone(card, "no Policy-Enforced metric card")
+        self.assertEqual(int(card.group(1)),
+                         html.count('<span class="badge origin-policy">'))
+
+    def test_the_governance_card_is_not_folded_into_total_issues(self):
+        # These rows are deliberately outside COUNTED_TYPES. If the card ever
+        # starts adding to the headline, "Total Issues" stops meaning
+        # "things to act on" and the split loses its point.
+        html = self._html()
+        total = re.search(
+            r'metric-label">Total Issues</div>\s*<div class="metric-number">(\d+)<', html)
+        self.assertEqual(int(total.group(1)), tally_report(_report())["total_issues"])
+        # ...and it renders after that card, where "not in Total Issues" reads
+        # as a statement about the number above rather than a bare disclaimer.
+        self.assertLess(html.index('metric-label">Total Issues'),
+                        html.index('metric-label">Policy-Enforced'))
+
+    def test_no_governance_card_on_an_estate_with_no_governance_rows(self):
+        # A card reading 0 would be the only always-on card for a section that
+        # is itself conditional.
+        self.assertNotIn("Policy-Enforced", _render(policy_enforced_drifts=[]))
+
+
 if __name__ == "__main__":
     unittest.main()

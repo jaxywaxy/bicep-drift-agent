@@ -142,6 +142,12 @@ _REPORT_CSS = """            * {
                 border-top: 4px solid #d32f2f;
             }
 
+            /* Green, matching the origin-policy badge: this card is the only
+               one on the header that is not a call to action. */
+            .metric-card.governance {
+                border-top: 4px solid #2e7d32;
+            }
+
             .metric-sub {
                 font-size: 11px;
                 color: #888;
@@ -716,6 +722,7 @@ def generate_html_report(
                     <div class="metric-number">{total}</div>
                     <div class="metric-sub">changed + missing + extra</div>
                 </div>
+                {_render_governance_metric(data)}
             </div>
 
             {_render_property_drift_section(data)}
@@ -725,9 +732,9 @@ def generate_html_report(
                 {_render_drift_section(total, drift_rows)}
             </div>
 
-            {_render_agent_analysis_section(agent_analysis)}
-
             {_render_policy_enforced_section(data)}
+
+            {_render_agent_analysis_section(agent_analysis)}
 
             {_render_smart_matched_section(data)}
 
@@ -865,6 +872,31 @@ def _get_lifecycle_html(lifecycle: dict) -> str:
     return timeline_html
 
 
+def _render_governance_metric(data: dict) -> str:
+    """A card for the policy-enforced rows, so the header accounts for the page.
+
+    Without it the header reads "Total Issues: 1" above a table of nineteen
+    governance rows, and a reader who trusts the number does not know they are
+    there while a reader who scrolls concludes the number is wrong. Both
+    readings cost the report its credibility, and an operator reported exactly
+    the second one.
+
+    It sits AFTER Total Issues and says so in the sub-line: these are
+    deliberately outside that sum (see count_drifts.COUNTED_TYPES), and a card
+    placed among the summed ones would imply it is part of the arithmetic.
+    Rendered only when non-zero, matching the section itself - a clean estate
+    should not carry a governance card reading zero.
+    """
+    count = len(data.get("policy_enforced_drifts") or [])
+    if not count:
+        return ""
+    return f"""<div class="metric-card governance">
+                    <div class="metric-label">Policy-Enforced</div>
+                    <div class="metric-number">{count}</div>
+                    <div class="metric-sub">governance &mdash; not in Total Issues</div>
+                </div>"""
+
+
 def _render_policy_enforced_section(data: dict) -> str:
     """Render the Policy / System-Enforced changes section (detected, not actionable drift)."""
     items = data.get("policy_enforced_drifts", [])
@@ -892,10 +924,21 @@ def _render_policy_enforced_section(data: dict) -> str:
         # e.g. "Added by Azure Policy: DINE CanNotDelete lock on storage"
         summary = f"{action} {agent}" + (f": {policy}" if policy and policy != "Unknown Policy" else "")
         when = (co.get("timestamp") or "").split("T")[0] or "-"
+        # Show the property and BOTH values. Without them the row says only
+        # "Modified by Azure Policy", which reads as if the change itself were
+        # missing from the report - a live reader concluded exactly that.
+        changes = "<br>".join(
+            f"<code>{html.escape(path)}</code>: "
+            f"{html.escape(str(v.get('desired')))} &rarr; "
+            f"<strong>{html.escape(str(v.get('actual')))}</strong>"
+            for path, v in (d.get("policy_enforced_properties") or {}).items()
+        ) or "<em>whole resource</em>"
+
         rows += f"""
                 <tr>
                     <td><strong>{html.escape(str(d.get('type', '')))}</strong></td>
                     <td><code>{html.escape(str(d.get('name', '')))}</code></td>
+                    <td>{changes}</td>
                     <td><span class="badge origin-policy">🛡️ {html.escape(summary)}</span></td>
                     <td>{html.escape(str(when))}</td>
                 </tr>
@@ -905,12 +948,16 @@ def _render_policy_enforced_section(data: dict) -> str:
             <div class="section">
                 <h2>🛡️ Policy / System-Enforced Changes ({len(items)})</h2>
                 <p>These resources were <strong>added, modified, or removed by Azure Policy or an
-                   Azure service</strong> — not manual/out-of-band changes. They are detected for
-                   audit/governance but are <strong>not counted as actionable drift</strong>.</p>
+                   Azure service</strong> — not manual/out-of-band changes. The values below
+                   <strong>are</strong> different from the template; they are separated out because
+                   policy re-applies them on every write, so <strong>redeploying will not fix
+                   them</strong> — reconcile the template with the policy instead. Not counted as
+                   actionable drift.</p>
                 <table>
                     <thead>
                         <tr>
-                            <th>Resource Type</th><th>Name</th><th>What happened</th><th>When</th>
+                            <th>Resource Type</th><th>Name</th><th>Change</th>
+                            <th>What happened</th><th>When</th>
                         </tr>
                     </thead>
                     <tbody>
