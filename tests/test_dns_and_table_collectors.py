@@ -3,6 +3,12 @@
 Both were suppressed by .drift-ignore rules standing in for a COLLECTION gap:
 Resource Graph indexes neither, so a declared instance reported missing forever.
 Suppressing the false positive also suppressed the real thing.
+
+`token="t"` carries `# nosec B106` (hardcoded_password_funcarg), matching
+tests/test_retry_wiring.py. It is not a credential: these collectors accept a
+PRE-ACQUIRED ARM token so one can be shared across them, and passing a dummy
+is precisely what keeps these tests off DefaultAzureCredential. The transport
+is faked - nothing authenticates and no value here reaches a real endpoint.
 """
 
 import os
@@ -73,13 +79,13 @@ class ZoneGroupCollectorTests(unittest.TestCase):
                               "properties": {"privateDnsZoneConfigs": [{"name": "vaultcore"}]}}]}
         with mock.patch("tools.live_state.collectors.private_dns.arm_urlopen",
                         _urlopen_returning({"privateDnsZoneGroups": payload})):
-            out = query_private_dns_zone_groups([PE, WS], "s", token="t")
+            out = query_private_dns_zone_groups([PE, WS], "s", token="t")  # nosec B106
         self.assertEqual([r["name"] for r in out], ["pe-kv/default"])
 
     def test_no_private_endpoints_means_no_calls(self):
         # Guard against a collector that authenticates or calls ARM for nothing.
         with mock.patch("tools.live_state.collectors.private_dns.arm_urlopen") as m:
-            self.assertEqual(query_private_dns_zone_groups([WS], "s", token="t"), [])
+            self.assertEqual(query_private_dns_zone_groups([WS], "s", token="t"), [])  # nosec B106
         m.assert_not_called()
 
     def test_a_failing_endpoint_does_not_sink_the_others(self):
@@ -88,7 +94,7 @@ class ZoneGroupCollectorTests(unittest.TestCase):
                "id": f"{SUB}/providers/Microsoft.Network/privateEndpoints/pe-two"}
         with mock.patch("tools.live_state.collectors.private_dns.arm_urlopen",
                         _urlopen_returning({"pe-kv": RuntimeError("boom"), "pe-two": good})):
-            out = query_private_dns_zone_groups([PE, pe2], "s", token="t")
+            out = query_private_dns_zone_groups([PE, pe2], "s", token="t")  # nosec B106
         self.assertEqual([r["name"] for r in out], ["pe-two/default"])
 
 
@@ -109,7 +115,7 @@ class DeclaredTableSelectionTests(unittest.TestCase):
 
     def test_nothing_declared_means_no_calls(self):
         with mock.patch("tools.live_state.collectors.workspace_tables.arm_urlopen") as m:
-            self.assertEqual(fetch_declared_workspace_tables([], [WS], token="t"), [])
+            self.assertEqual(fetch_declared_workspace_tables([], [WS], token="t"), [])  # nosec B106
         m.assert_not_called()
 
     def test_only_the_declared_table_is_requested(self):
@@ -123,7 +129,7 @@ class DeclaredTableSelectionTests(unittest.TestCase):
         arm = [{"type": "Microsoft.OperationalInsights/workspaces/tables",
                 "name": "log-[86c9cbf6]/CustomLog_CL"}]
         with mock.patch("tools.live_state.collectors.workspace_tables.arm_urlopen", _fake):
-            out = fetch_declared_workspace_tables(arm, [WS], token="t")
+            out = fetch_declared_workspace_tables(arm, [WS], token="t")  # nosec B106
         self.assertEqual(len(seen), 1, "one GET per declared table, not a list call")
         self.assertIn("/tables/CustomLog_CL", seen[0])
         self.assertEqual(out[0]["name"], "log-real/CustomLog_CL")
@@ -151,7 +157,7 @@ class MissingTableIsAbsentNotAnErrorTests(unittest.TestCase):
                         _urlopen_returning({"GoneTable": err})):
             with self.assertLogs("tools.live_state.collectors.workspace_tables",
                                  level="WARNING") as logs:
-                out = fetch_declared_workspace_tables(arm, [WS], token="t")
+                out = fetch_declared_workspace_tables(arm, [WS], token="t")  # nosec B106
                 # assertLogs demands at least one record; the INFO summary is
                 # not one, so emit a sentinel to keep the assertion honest.
                 import logging
@@ -169,7 +175,7 @@ class MissingTableIsAbsentNotAnErrorTests(unittest.TestCase):
                         _urlopen_returning({"CustomLog_CL": err})):
             with self.assertLogs("tools.live_state.collectors.workspace_tables",
                                  level="WARNING") as logs:
-                out = fetch_declared_workspace_tables(arm, [WS], token="t")
+                out = fetch_declared_workspace_tables(arm, [WS], token="t")  # nosec B106
         self.assertEqual(out, [])
         self.assertTrue(any("CustomLog_CL" in r for r in logs.output),
                         "a 500 is a failure and must be logged with context")
