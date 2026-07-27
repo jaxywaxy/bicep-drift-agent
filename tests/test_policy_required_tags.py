@@ -26,10 +26,17 @@ INHERIT_IF_MISSING = "ea3f2387-9b95-492a-a190-fcdc54f7b070"
 RG_TAGS = {"environment": "production", "costCentre": "CC-1234"}
 
 
+RG_SCOPE = "/subscriptions/594e0bd0/resourceGroups/rg-drift-test"
+ASSIGNMENT_ID = (f"{RG_SCOPE}/providers/Microsoft.Authorization"
+                 "/policyAssignments/drift-inherit-environment")
+
+
 def _assignment(definition_ref, tag_name, name="drift-inherit-environment"):
     return {
         "name": name,
         "display_name": name,
+        "id": ASSIGNMENT_ID,
+        "scope": RG_SCOPE,
         "definition_ref": definition_ref,
         "parameters": {"tagName": {"value": tag_name}},
     }
@@ -310,6 +317,77 @@ class ReportConsistencyTests(unittest.TestCase):
 
         self.assertIsNot(empty["change_origin"].get("expected"), True)
         self.assertEqual(empty["change_origin"]["origin"], "manual_change")
+
+
+class PolicyProvenanceIsStatedNotInferredTests(unittest.TestCase):
+    """The claim must answer the two questions the agent had to decline.
+
+    A live analysis (2026-07-27) wrote: "policy_id is null on every finding, so
+    I cannot confirm the assignment's effect (Modify vs Append) or its exact
+    scope from the data alone." Both were already resolved - the assignment id
+    and scope were in the shaped row and dropped, and the effect is implied by
+    the definition GUID the resolver selected on. Declining was the right call
+    on the data it had; the fix is to stop withholding it."""
+
+    def _claimed(self):
+        req = resolve_policy_required_tags(
+            [_assignment(INHERIT_REPLACE, "environment")], RG_TAGS)
+        report = {"policy_required_tags": req, "drifts": [_tag_drift()],
+                  "property_drifts": []}
+        _claim_policy_required_tags(report)
+        return report["drifts"][0]
+
+    def test_the_resolver_carries_the_assignment_id_and_scope(self):
+        req = resolve_policy_required_tags(
+            [_assignment(INHERIT_REPLACE, "environment")], RG_TAGS)
+        self.assertEqual(req["environment"]["assignment_id"], ASSIGNMENT_ID)
+        self.assertEqual(req["environment"]["scope"], RG_SCOPE)
+
+    def test_policy_id_is_the_assignment_id_not_the_definition_guid(self):
+        # change_origin.policy_id means policyAssignmentId everywhere else
+        # (tools/change_origin.py reads it from props['policyAssignmentId']).
+        # Putting the definition GUID here would answer the question with a
+        # different wrong value.
+        co = self._claimed()["change_origin"]
+        self.assertEqual(co["policy_id"], ASSIGNMENT_ID)
+        self.assertNotEqual(co["policy_id"], INHERIT_REPLACE)
+
+    def test_the_effect_is_named(self):
+        # Not inferred: INHERIT_TAG_DEFINITIONS selects on exactly the two
+        # inherit-tag built-ins, both of which are Modify - which is why a
+        # redeploy cannot win against them.
+        d = self._claimed()
+        self.assertIn("Modify", d["change_origin"]["reason"])
+        self.assertEqual(
+            d["policy_enforced_properties"]["tags.environment"]["policy_effect"],
+            "Modify")
+
+    def test_the_scope_is_stated(self):
+        d = self._claimed()
+        self.assertIn(RG_SCOPE, d["change_origin"]["reason"])
+        self.assertEqual(
+            d["policy_enforced_properties"]["tags.environment"]["policy_scope"],
+            RG_SCOPE)
+
+    def test_the_mode_is_stated_so_replace_is_distinguishable_from_if_missing(self):
+        d = self._claimed()
+        self.assertIn("replace",
+                      d["policy_enforced_properties"]["tags.environment"]["reason"])
+
+    def test_an_assignment_without_an_id_still_claims(self):
+        # Resource Graph rows normally carry an id, but a claim must not depend
+        # on one - losing the whole attribution to gain a provenance field
+        # would be a bad trade.
+        a = _assignment(INHERIT_REPLACE, "environment")
+        a.pop("id"); a.pop("scope")
+        req = resolve_policy_required_tags([a], RG_TAGS)
+        report = {"policy_required_tags": req, "drifts": [_tag_drift()],
+                  "property_drifts": []}
+        self.assertEqual(_claim_policy_required_tags(report), 1)
+        co = report["drifts"][0]["change_origin"]
+        self.assertIsNone(co["policy_id"])
+        self.assertIn("Modify", co["reason"])
+        self.assertNotIn("at scope", co["reason"])   # no empty "at scope " tail
 
 
 if __name__ == "__main__":
