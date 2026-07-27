@@ -132,6 +132,24 @@ Attribution precedence: Azure Policy managed identities always classify as
 policy-enforced, even if listed as deployers; deployer attribution wins over
 Terraform/manual.
 
+**A resolved attribution outranks the type heuristics.** The finding classifier
+otherwise reasons from resource type and drift type alone, which is right only
+while the origin is unknown. Once `change_origin.expected` is set — a policy
+Modify/DINE effect or an Azure service — the finding is re-rated as
+**governance**, takes the attributed severity, and is never recommended for
+redeploy: a Modify effect re-imposes its value inside the deploying identity's
+own write, so redeploying loses the race on the very next write. The action is
+`approve_exception`, not `no_action`, because there *is* a decision — reconcile
+the template to the policy, or narrow the assignment.
+
+One exception, deliberately: a **critical** property drift is never downgraded
+this way. `expected` describes where the change came from, not whether its
+content is safe — a DINE-created resource can still carry a genuinely critical
+property, and burying it to keep the governance section tidy is the failure this
+rule exists to prevent. Same reason tag claiming is per-property: a storage
+account with a policy-imposed tag *and* a manual `allowBlobPublicAccess` flip
+keeps its critical finding.
+
 ---
 
 # Governance Capabilities

@@ -100,9 +100,13 @@ class DriftClassifier:
         details = getattr(drift, "details", None) or {}
         resource_id = self._extract_resource_id(drift, details)
 
+        change_origin = getattr(drift, "change_origin", None)
+
         category = self._classify_category(resource_type, drift_type, details)
         severity = self._classify_severity(resource_type, drift_type, details, category)
         action = self._recommend_action(drift_type, category, severity)
+        category, severity, action = self._honour_attribution(
+            change_origin, details, category, severity, action)
         confidence = self._calculate_confidence(resource_id, resource_type, drift_type, details)
         reason = self._classification_reason(resource_type, drift_type, category, severity, details)
 
@@ -119,6 +123,61 @@ class DriftClassifier:
             details=details,
             change_origin=getattr(drift, "change_origin", None),
         )
+
+    def _honour_attribution(
+        self,
+        change_origin: dict | None,
+        details: dict[str, Any],
+        category: DriftCategory,
+        severity: DriftSeverity,
+        action: RemediationAction,
+    ) -> tuple[DriftCategory, DriftSeverity, RemediationAction]:
+        """Let a resolved attribution override the type-shape heuristics.
+
+        Everything above this point reasons from resource type and drift type
+        alone. That is right when we do not know who changed what - but by the
+        time a finding reaches the agent, `_attribute_lifecycle` and
+        `_claim_policy_required_tags` have often already established it, and
+        ignoring that produced findings the agent had to argue with:
+
+            "the report labels four of these high/security_drift - that severity
+             reflects the RESOURCE's sensitivity, not the CHANGE"
+            "the redeploy_bicep recommendation on these 19 is wrong"
+
+        Both were fair. An NSG whose only drifted property is a policy-imposed
+        tag is not a security finding, and redeploying it loses the race on the
+        next write - a Modify effect re-imposes the value inside the deploying
+        identity's own write. Two of five Confidence bullets in the live
+        analysis were spent correcting inputs we control (issue #327).
+
+        A CRITICAL property still wins. `expected` says the CHANGE was
+        attributable, not that its content is harmless: a DINE-created resource
+        can still carry a genuinely critical property, and burying that to keep
+        the governance section tidy would repeat the mistake this fix exists to
+        undo.
+        """
+        if not isinstance(change_origin, dict) or not change_origin.get("expected"):
+            return category, severity, action
+        if self._max_property_severity(details) == DriftSeverity.CRITICAL:
+            return category, severity, action
+
+        origin = str(change_origin.get("origin") or "").lower()
+        if origin == "system_managed":
+            return (DriftCategory.SYSTEM_MANAGED, DriftSeverity.INFORMATIONAL,
+                    RemediationAction.IGNORE_SYSTEM_MANAGED)
+
+        # Trust the attributed severity when it names one; it was set by the
+        # stage that identified the origin and knows more than a type lookup.
+        attributed = str(change_origin.get("severity") or "").lower()
+        try:
+            severity = DriftSeverity(attributed)
+        except ValueError:
+            severity = DriftSeverity.LOW
+
+        # APPROVE_EXCEPTION, not NO_ACTION: there IS a decision here - reconcile
+        # the template to the policy, or narrow the assignment. Saying "no
+        # action" would hide a real template-vs-policy conflict.
+        return DriftCategory.GOVERNANCE_DRIFT, severity, RemediationAction.APPROVE_EXCEPTION
 
     def _classify_category(
         self,
