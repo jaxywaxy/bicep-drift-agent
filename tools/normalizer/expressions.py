@@ -330,6 +330,28 @@ def _resolve_resource_id(resource_id_expr: str, parameters: dict, variables: dic
     return f"resourceId('{resource_type}', '{name}')"
 
 
+# The shape _resolve_resource_id emits when it cannot flatten the target to a
+# path. Defined next to the producer so the two cannot drift apart: a consumer
+# that re-derives this format by hand gets it wrong the moment either side
+# changes - which is exactly what happened (issue #326).
+_RESOURCE_ID_EXPR_RE = re.compile(r"^resourceId\('[^']*',\s*'(?P<name>.*)'\)$")
+
+
+def resource_id_expression_name(expr: str) -> str | None:
+    """The NAME argument of a `resourceId('<type>', '<name>')` expression.
+
+    Returns None for anything else - a real ARM id, a resolved provider path,
+    or an unresolvable stub - so callers can fall back to their own handling.
+
+    Exists because `.split('/')[-1]` is the obvious way to get a parent's short
+    name and is correct for a path, but silently wrong for this form: splitting
+    `resourceId('Microsoft.KeyVault/vaults', 'kvdrift[86c9cbf6]')` on '/' cuts
+    inside the call and yields `vaults', 'kvdrift[86c9cbf6]')`.
+    """
+    m = _RESOURCE_ID_EXPR_RE.match((expr or "").strip())
+    return (m.group("name") or None) if m else None
+
+
 def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     """Resolve simple function calls like uniqueString(), copyIndex(), etc.
 

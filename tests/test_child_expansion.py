@@ -180,6 +180,108 @@ class Batch3ExpansionTests(unittest.TestCase):
         self.assertEqual(arm[1]["name"], "vm1/vm-dcra")
 
 
+class ExtensionScopeIsAnExpressionTests(unittest.TestCase):
+    """A scope is not always a path.
+
+    When the parent's own name is unresolvable at compile time - a
+    uniqueString() vault - the normaliser cannot flatten it and emits the
+    expression form, `resourceId('<type>', '<name>')`. `.split('/')[-1]` cuts
+    inside the function call, and live reports carried
+    `vaults', 'kvdrift[86c9cbf6]')/kv-audit` for weeks (issue #326)."""
+
+    def _qualified(self, scope, name="kv-audit"):
+        from tools.get_live_state import qualify_extension_resource_names
+        arm = [{"type": "Microsoft.Insights/diagnosticSettings", "name": name, "scope": scope}]
+        qualify_extension_resource_names(arm)
+        return arm[0]["name"]
+
+    def test_an_expression_scope_yields_the_parent_name(self):
+        self.assertEqual(
+            self._qualified("resourceId('Microsoft.KeyVault/vaults', 'kvdrift[86c9cbf6]')"),
+            "kvdrift[86c9cbf6]/kv-audit")
+
+    def test_a_nested_type_does_not_confuse_the_parser(self):
+        # The TYPE argument contains slashes too - the reason the naive split
+        # landed where it did.
+        self.assertEqual(
+            self._qualified(
+                "resourceId('Microsoft.Sql/servers/databases', 'sqldrift[86c9cbf6]/driftdb')"),
+            "sqldrift[86c9cbf6]/driftdb/kv-audit")
+
+    def test_no_derived_name_ever_carries_expression_syntax(self):
+        # The property that actually failed: quotes and unbalanced parens in a
+        # resource name. Asserted over every scope shape we emit.
+        for scope in (
+            "resourceId('Microsoft.KeyVault/vaults', 'kvdrift[86c9cbf6]')",
+            "resourceId('Microsoft.Sql/servers/databases', 'sqldrift[86c9cbf6]/driftdb')",
+            "Microsoft.Storage/storageAccounts/stfixedname",
+            "/subscriptions/s/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kvreal",
+        ):
+            with self.subTest(scope):
+                n = self._qualified(scope)
+                self.assertNotIn("'", n)
+                self.assertEqual(n.count("("), n.count(")"))
+
+    def test_path_and_arm_id_scopes_are_unchanged(self):
+        # Regression guard: the leaf-split is still correct for these, and this
+        # fix must not disturb the common case.
+        self.assertEqual(
+            self._qualified("Microsoft.Storage/storageAccounts/stfixedname"),
+            "stfixedname/kv-audit")
+        self.assertEqual(
+            self._qualified(
+                "/subscriptions/s/resourceGroups/rg/providers/Microsoft.KeyVault/vaults/kvreal"),
+            "kvreal/kv-audit")
+
+    def test_the_corrected_name_still_smart_matches(self):
+        # The point of the issue was not cosmetics: a name we cannot parse is
+        # one whose MATCHING cannot be reasoned about. Enter through the stage
+        # above rather than asserting on the helper alone.
+        from tools.get_live_state import qualify_extension_resource_names
+        from tools.smart_matching import smart_match_resources
+        bicep = [{"type": "Microsoft.Insights/diagnosticSettings", "name": "kv-audit",
+                  "scope": "resourceId('Microsoft.KeyVault/vaults', 'kvdrift[86c9cbf6]')",
+                  "properties": {}}]
+        qualify_extension_resource_names(bicep)
+        live = [{"type": "Microsoft.Insights/diagnosticSettings",
+                 "name": "kvdrift3s7c7weddxr3s/kv-audit", "properties": {}}]
+        matched, _, _ = smart_match_resources(
+            bicep, live,
+            {"Microsoft.Insights/diagnosticSettings": [bicep[0]["name"]]})
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]["matched_to"], "kvdrift3s7c7weddxr3s/kv-audit")
+        self.assertEqual(matched[0]["match_confidence"], "high")
+
+
+class ResourceIdExpressionNameTests(unittest.TestCase):
+    """The parser lives beside the function that EMITS the format, so the two
+    cannot drift apart - a consumer re-deriving the syntax by hand is what
+    produced #326."""
+
+    def test_returns_the_name_argument(self):
+        from tools.normalizer.expressions import resource_id_expression_name
+        self.assertEqual(
+            resource_id_expression_name("resourceId('Microsoft.KeyVault/vaults', 'kv1')"), "kv1")
+
+    def test_returns_none_for_anything_that_is_not_the_expression_form(self):
+        from tools.normalizer.expressions import resource_id_expression_name
+        for other in ("Microsoft.KeyVault/vaults/kv1",
+                      "/subscriptions/s/providers/Microsoft.KeyVault/vaults/kv1",
+                      "resourceId-unresolved", "", None):
+            with self.subTest(other):
+                self.assertIsNone(resource_id_expression_name(other))
+
+    def test_it_round_trips_what_the_resolver_emits(self):
+        # Bind the parser to the producer: if _resolve_resource_id ever changes
+        # its output shape, this fails rather than the report going strange.
+        from tools.normalizer.expressions import (
+            _resolve_resource_id, resource_id_expression_name)
+        emitted = _resolve_resource_id(
+            "resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))",
+            {}, {"keyVaultName": "kvdrift[86c9cbf6]"})
+        self.assertEqual(resource_id_expression_name(emitted), "kvdrift[86c9cbf6]")
+
+
 class ContainerAppsSecurityTests(unittest.TestCase):
     def test_ingress_exposure_paths_are_critical(self):
         from tools.property_drift import PropertyComparator
