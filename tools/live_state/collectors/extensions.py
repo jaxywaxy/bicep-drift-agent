@@ -13,6 +13,7 @@ import urllib.request
 
 from azure.identity import DefaultAzureCredential
 
+from ...normalizer.expressions import resource_id_expression_name
 from ..common import arm_urlopen
 
 logger = logging.getLogger(__name__)
@@ -123,6 +124,13 @@ def qualify_extension_resource_names(arm_resources: list[dict]) -> None:
     A bicep extension resource compiles with a plain name plus a 'scope' field
     ('Microsoft.Storage/storageAccounts/stX'); live expansion names them
     '{resourceName}/{settingName}'. Mutates in place.
+
+    The scope arrives in one of two shapes. Usually it is a path and the leaf is
+    the parent name. But when the parent's own name is unresolvable at compile
+    time - a uniqueString() vault, say - the normaliser cannot flatten it and
+    emits the expression form instead, `resourceId('<type>', '<name>')`.
+    Leaf-splitting THAT cuts inside the function call and produced names like
+    `vaults', 'kvdrift[86c9cbf6]')/kv-audit` in live reports (issue #326).
     """
     for r in arm_resources:
         if (r.get("type") or "").lower() not in _EXTENSION_TYPES_LOWER:
@@ -130,9 +138,11 @@ def qualify_extension_resource_names(arm_resources: list[dict]) -> None:
         scope = str(r.get("scope") or "")
         if not scope or "/" in (r.get("name") or ""):
             continue
-        scope_leaf = scope.split("/")[-1]
-        if scope_leaf:
-            r["name"] = f"{scope_leaf}/{r['name']}"
+        # Ask the module that PRODUCES the expression form what the name is,
+        # rather than re-deriving its syntax here.
+        parent = resource_id_expression_name(scope) or scope.split("/")[-1]
+        if parent:
+            r["name"] = f"{parent}/{r['name']}"
 
 
 # Back-compat alias.
