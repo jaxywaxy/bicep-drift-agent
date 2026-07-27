@@ -725,9 +725,9 @@ def generate_html_report(
                 {_render_drift_section(total, drift_rows)}
             </div>
 
-            {_render_agent_analysis_section(agent_analysis)}
-
             {_render_policy_enforced_section(data)}
+
+            {_render_agent_analysis_section(agent_analysis)}
 
             {_render_smart_matched_section(data)}
 
@@ -892,10 +892,21 @@ def _render_policy_enforced_section(data: dict) -> str:
         # e.g. "Added by Azure Policy: DINE CanNotDelete lock on storage"
         summary = f"{action} {agent}" + (f": {policy}" if policy and policy != "Unknown Policy" else "")
         when = (co.get("timestamp") or "").split("T")[0] or "-"
+        # Show the property and BOTH values. Without them the row says only
+        # "Modified by Azure Policy", which reads as if the change itself were
+        # missing from the report - a live reader concluded exactly that.
+        changes = "<br>".join(
+            f"<code>{html.escape(path)}</code>: "
+            f"{html.escape(str(v.get('desired')))} &rarr; "
+            f"<strong>{html.escape(str(v.get('actual')))}</strong>"
+            for path, v in (d.get("policy_enforced_properties") or {}).items()
+        ) or "<em>whole resource</em>"
+
         rows += f"""
                 <tr>
                     <td><strong>{html.escape(str(d.get('type', '')))}</strong></td>
                     <td><code>{html.escape(str(d.get('name', '')))}</code></td>
+                    <td>{changes}</td>
                     <td><span class="badge origin-policy">🛡️ {html.escape(summary)}</span></td>
                     <td>{html.escape(str(when))}</td>
                 </tr>
@@ -905,12 +916,16 @@ def _render_policy_enforced_section(data: dict) -> str:
             <div class="section">
                 <h2>🛡️ Policy / System-Enforced Changes ({len(items)})</h2>
                 <p>These resources were <strong>added, modified, or removed by Azure Policy or an
-                   Azure service</strong> — not manual/out-of-band changes. They are detected for
-                   audit/governance but are <strong>not counted as actionable drift</strong>.</p>
+                   Azure service</strong> — not manual/out-of-band changes. The values below
+                   <strong>are</strong> different from the template; they are separated out because
+                   policy re-applies them on every write, so <strong>redeploying will not fix
+                   them</strong> — reconcile the template with the policy instead. Not counted as
+                   actionable drift.</p>
                 <table>
                     <thead>
                         <tr>
-                            <th>Resource Type</th><th>Name</th><th>What happened</th><th>When</th>
+                            <th>Resource Type</th><th>Name</th><th>Change</th>
+                            <th>What happened</th><th>When</th>
                         </tr>
                     </thead>
                     <tbody>
