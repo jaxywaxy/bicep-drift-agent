@@ -344,6 +344,16 @@ are never compared together on the same hub.
 
 ### Recovery Services vault backup config
 
+> **Fixed 2026-07-27.** Both types below were documented as compared while the
+> baseline `.drift-ignore` carried type-only rules that discarded every drift
+> they produced — the rules predated the collector and outlived the problem they
+> were written for. The comparators were dead in the pipeline for about a month;
+> nothing looked wrong because the fixture vault happened to be clean.
+> `tests/test_ignore_patterns.py::CollectedTypesAreNotBlanketIgnoredTests` now
+> derives the collected types from the collectors and fails if any of them is
+> blanket-ignored, so documented coverage and shipped coverage cannot diverge
+> silently again.
+
 `vaults/backupconfig` is not indexed by Resource Graph, so it is fetched via ARM
 REST and compared as `{vault}/vaultconfig`. `softDeleteFeatureState` and
 `enhancedSecurityState` are rated **critical**: disabling soft delete lets

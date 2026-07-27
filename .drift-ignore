@@ -155,17 +155,32 @@ ignore:
   - resource_type: "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers/protectedItems"
     reason: "Child resource with unresolvable parameter expressions in name"
 
-  - resource_type: "Microsoft.RecoveryServices/vaults/backupPolicies"
-    reason: "Child resource with unresolvable parameter expressions in name"
-
-  - resource_type: "Microsoft.RecoveryServices/vaults/backupconfig"
-    reason: "Child resource with unresolvable parameter expressions in name"
-
   - resource_type: "Microsoft.RecoveryServices/vaults/replicationAlertSettings"
     reason: "Child resource with unresolvable parameter expressions in name"
 
+  # NO rules for vaults/backupPolicies or vaults/backupconfig. They were here,
+  # type-only, and they silently discarded every drift the backup comparator
+  # produced - soft-delete being disabled, retention shortened, schedule moved.
+  # They were written when Resource Graph's failure to index those children made
+  # a declared backupconfig look permanently missing. That is precisely the
+  # problem tools/live_state/collectors/backup.py was built to solve: it fetches
+  # both over ARM REST. Once we go to the trouble of fetching a type, discarding
+  # it wholesale is a contradiction - and it left the comparator dead in the
+  # pipeline while the vault happened to be clean, so nothing looked wrong.
+  # tests/test_ignore_patterns.py asserts no collected type is blanket-ignored.
+
+  # Private endpoint DNS zone groups are not indexed by Resource Graph and have
+  # no collector yet (issue #329), so a declared group is always reported
+  # missing. Scoped to missing_in_azure ONLY: that is the false positive the
+  # collection gap causes. A property drift on a zone group is NOT suppressed -
+  # today none can fire (there is no live state to compare), so this rule stops
+  # lying about what it protects and stops hiding real drift the day the
+  # collector lands. It is not a name-expression rule: it fired on
+  # 'pe-kv-drift-test/default', a fully literal name, under a reason that said
+  # otherwise.
   - resource_type: "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
-    reason: "Child resource with unresolvable parameter expressions in name"
+    drift_type: "missing_in_azure"
+    reason: "Not indexed by Resource Graph and not yet collected (see issue #329)"
 
   # A records inside privatelink.* zones are auto-created by a private endpoint's
   # DNS zone group (Azure manages them), so they appear as extras. Scoped to

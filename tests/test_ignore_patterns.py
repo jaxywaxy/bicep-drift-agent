@@ -10,10 +10,13 @@ These lock in the behavior around several regressions we hit:
 """
 
 import os
+import re
 import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import yaml
 
 from tools.ignore_patterns import IgnorePatternList
 
@@ -250,8 +253,22 @@ class RepoIgnoreRecoveryServicesVaultScopingTests(unittest.TestCase):
                     "name": "rsv-drift-test", "drift_type": dt}))
 
     def test_vault_child_name_expression_rules_still_apply(self):
-        """Removing the parent rule must not disturb the child rules."""
+        """Removing the parent rule must not disturb the child rules.
+
+        The example used to be backupPolicies. That was wrong: a collector
+        fetches backupPolicies over ARM REST, so a declared policy that is gone
+        from the vault is real drift and must surface. This now uses a child we
+        genuinely do not collect - see
+        CollectedTypesAreNotBlanketIgnoredTests for the line between the two."""
         self.assertTrue(self._ignored({
+            "type": "Microsoft.RecoveryServices/vaults/replicationFabrics",
+            "name": "rsv-drift-test/fabric", "drift_type": "missing_in_azure"}))
+
+    def test_a_collected_backup_policy_that_vanished_is_reported(self):
+        # The counterpart. tools/live_state/collectors/backup.py fetches these,
+        # so "missing" means the policy is actually gone, not that we failed to
+        # look - and a deleted backup policy is exactly what this tool is for.
+        self.assertFalse(self._ignored({
             "type": "Microsoft.RecoveryServices/vaults/backupPolicies",
             "name": "rsv-drift-test/drift-vm-daily", "drift_type": "missing_in_azure"}))
 
@@ -412,6 +429,112 @@ class PropertyScopedStrippingTests(unittest.TestCase):
         self.assertEqual(
             list(filtered[0]["details"]["changed_properties"]),
             ["properties.agentPoolProfiles"])
+
+
+class CollectedTypesAreNotBlanketIgnoredTests(unittest.TestCase):
+    """A type we go to the trouble of FETCHING must not be discarded wholesale.
+
+    The baseline carried type-only rules for vaults/backupPolicies and
+    vaults/backupconfig. They dated from before
+    tools/live_state/collectors/backup.py existed, when Resource Graph's failure
+    to index those children made a declared backupconfig look permanently
+    missing. The collector solved that over ARM REST - and the rules stayed,
+    silently discarding every drift the backup comparator produced (soft-delete
+    disabled, retention shortened, schedule moved) for roughly a month. Nothing
+    looked wrong because the fixture vault happened to be clean.
+
+    Most type-only rules in the baseline are legitimate: Azure-created children
+    that Bicep never declares and we never fetch. The line is not "type-only is
+    banned", it is "collected implies comparable". This test derives the
+    collected set from the collectors themselves so it cannot go stale."""
+
+    REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    @classmethod
+    def setUpClass(cls):
+        collectors = os.path.join(cls.REPO, "tools", "live_state", "collectors")
+        pattern = re.compile(r'"type":\s*"(Microsoft\.[A-Za-z0-9/]+)"')
+        cls.collected = set()
+        for entry in sorted(os.listdir(collectors)):
+            if not entry.endswith(".py"):
+                continue
+            with open(os.path.join(collectors, entry), encoding="utf-8") as f:
+                cls.collected |= set(pattern.findall(f.read()))
+
+        with open(os.path.join(cls.REPO, ".drift-ignore"), encoding="utf-8") as f:
+            rules = (yaml.safe_load(f) or {}).get("ignore") or []
+        cls.rules = rules
+        cls.blanket = {
+            r["resource_type"] for r in rules
+            if set(r) <= {"resource_type", "reason"} and r.get("resource_type")
+        }
+
+    def test_the_extraction_actually_found_collectors(self):
+        # Guard against a vacuous pass: if the regex or the layout changes and
+        # nothing is extracted, every assertion below succeeds while measuring
+        # nothing. Both sides must be non-empty for the cross-reference to mean
+        # anything.
+        self.assertGreaterEqual(len(self.collected), 5,
+                                "no collected types extracted - the check is vacuous")
+        self.assertGreaterEqual(len(self.blanket), 5,
+                                "no blanket rules parsed - the check is vacuous")
+
+    def test_no_collected_type_is_blanket_ignored(self):
+        overlap = sorted(t for t in self.collected
+                         if any(t.lower() == b.lower() for b in self.blanket))
+        self.assertEqual(overlap, [],
+                         "these types are fetched by a collector AND discarded by a "
+                         "type-only ignore rule, so their comparator is dead: "
+                         f"{overlap}")
+
+    def test_backup_children_specifically_survive_the_real_baseline(self):
+        # The two that were actually dead. Named explicitly so the regression is
+        # legible even if the derivation above is later reworked.
+        il = IgnorePatternList.from_file(os.path.join(self.REPO, ".drift-ignore"))
+        for rtype, name in (
+            ("Microsoft.RecoveryServices/vaults/backupPolicies", "rsv-drift-test/drift-vm-daily"),
+            ("Microsoft.RecoveryServices/vaults/backupconfig", "rsv-drift-test/vaultconfig"),
+        ):
+            kept, ignored = il.filter_drifts([{
+                "type": rtype, "name": name, "drift_type": "property_drift",
+                "details": {"changed_properties": {
+                    "properties.softDeleteFeatureState": {"desired": "Enabled",
+                                                          "actual": "Disabled"}}}}])
+            self.assertEqual(len(kept), 1, f"{rtype} property drift is being discarded")
+            self.assertEqual(ignored, [])
+
+
+class RepoIgnorePrivateDnsZoneGroupScopingTests(unittest.TestCase):
+    """The zone-group rule may suppress the collection gap, not real drift.
+
+    It was type-only, with the reason "Child resource with unresolvable
+    parameter expressions in name" - and it fired on 'pe-kv-drift-test/default',
+    a fully literal name, so the reason was false for the record it suppressed.
+    A deleted zone group breaks private-endpoint name resolution and can send
+    traffic to the public endpoint, so the blanket form hid something that
+    matters."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.il = IgnorePatternList.from_file(os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".drift-ignore"))
+
+    def _drift(self, drift_type):
+        return {"type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+                "name": "pe-kv-drift-test/default", "drift_type": drift_type,
+                "details": {"changed_properties": {
+                    "properties.privateDnsZoneConfigs": {"desired": "a", "actual": []}}}}
+
+    def test_missing_is_still_suppressed(self):
+        # Resource Graph does not index zone groups and no collector fetches
+        # them yet, so every declared group reports missing. That is the gap.
+        _, ignored = self.il.filter_drifts([self._drift("missing_in_azure")])
+        self.assertEqual(len(ignored), 1)
+
+    def test_property_drift_is_not_suppressed(self):
+        kept, ignored = self.il.filter_drifts([self._drift("property_drift")])
+        self.assertEqual(len(kept), 1, "a zone-group config change must surface")
+        self.assertEqual(ignored, [])
 
 
 if __name__ == "__main__":
