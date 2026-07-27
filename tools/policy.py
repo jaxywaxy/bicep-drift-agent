@@ -210,7 +210,13 @@ def resolve_policy_required_tags(
     assignments: list[dict], rg_tags: dict[str, str]
 ) -> dict[str, dict]:
     """Tag values an in-scope inherit-tag assignment REQUIRES, keyed by lowercased
-    tag name: {tag: {value, assignment, definition_ref, mode}}.
+    tag name: {tag: {value, assignment, assignment_id, scope, definition_ref, mode}}.
+
+    `assignment_id` and `scope` are carried for attribution, not matching. A live
+    analysis could not confirm the assignment's effect or scope and said so -
+    "policy_id is null on every finding, so I cannot confirm the assignment's
+    effect (Modify vs Append) or its exact scope from the data alone" - while
+    both were sitting in the row we shaped and then dropped.
 
     This is the attribution signal for in-flight Modify effects. It deliberately
     asks "what does policy mandate", not "who wrote this" - the latter is
@@ -243,6 +249,8 @@ def resolve_policy_required_tags(
         required[key] = {
             "value": value,
             "assignment": a.get("name") or a.get("display_name"),
+            "assignment_id": a.get("id"),
+            "scope": a.get("scope") or "",
             "definition_ref": a.get("definition_ref"),
             "mode": mode,
         }

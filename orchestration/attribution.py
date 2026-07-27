@@ -18,6 +18,11 @@ from tools.ownership import classify_owner
 
 logger = get_logger(__name__)
 
+# The effect both inherit-tag built-ins use. Not a guess: INHERIT_TAG_DEFINITIONS
+# selects on exactly those two definition GUIDs, so anything reaching the claim
+# is a Modify - which is precisely why a redeploy cannot win against it.
+_MODIFY_EFFECT = "Modify"
+
 
 def _recover_deployed_name(resource_type: str, event_resource_id: str) -> str:
     """Extract the real deployed name for resource_type from an activity-log id.
@@ -247,9 +252,16 @@ def _claim_policy_required_tags(report_data: dict) -> int:
                 **change,
                 "policy_assignment": rule["assignment"],
                 "policy_definition": rule["definition_ref"],
+                "policy_assignment_id": rule.get("assignment_id"),
+                "policy_scope": rule.get("scope") or "",
+                # Both inherit-tag built-ins use a Modify effect - that is what
+                # INHERIT_TAG_DEFINITIONS selects on - so the effect is known,
+                # not inferred, and saying so saves the reader a lookup.
+                "policy_effect": _MODIFY_EFFECT,
                 "reason": (
-                    f"Value imposed by policy assignment '{rule['assignment']}' "
-                    f"(inherit tag from resource group). Reconcile the template "
+                    f"Value imposed by the {_MODIFY_EFFECT} effect of inherit-tag "
+                    f"assignment '{rule['assignment']}' (inherit tag from resource "
+                    f"group, mode: {rule.get('mode')}). Reconcile the template "
                     f"with the policy - redeploying loses the race on the next write."
                 ),
             }
@@ -288,9 +300,19 @@ def _claim_policy_required_tags(report_data: dict) -> int:
                 # The governance section labels each row from policy_name; without
                 # it every row reads a bare "Modified by Azure Policy".
                 "policy_name": first["policy_assignment"],
+                # policy_id means policyAssignmentId everywhere else in
+                # change_origin - so this is the ASSIGNMENT's id, never the
+                # definition GUID. Left null, a live analysis correctly refused
+                # to state the effect or scope: "policy_id is null on every
+                # finding, so I cannot confirm the assignment's effect (Modify
+                # vs Append) or its exact scope from the data alone." Both were
+                # already resolved one key away.
+                "policy_id": first.get("policy_assignment_id"),
                 "reason": (
-                    "Tag value imposed in-flight by an inherit-tag policy "
-                    "assignment; no other property drifted."
+                    f"Tag value imposed in-flight by the {_MODIFY_EFFECT} effect of "
+                    f"inherit-tag assignment '{first['policy_assignment']}'"
+                    + (f" at scope {first['policy_scope']}" if first.get("policy_scope") else "")
+                    + "; no other property drifted."
                 ),
             }
 
