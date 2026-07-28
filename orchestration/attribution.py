@@ -11,7 +11,7 @@ import os
 
 from orchestration.reconciliation import _find_deployed_resource
 from tools.activity_log import detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource
-from tools.change_origin import build_resource_lifecycle, classify_change_origin, select_relevant_activity
+from tools.change_origin import build_resource_lifecycle, classify_change_origin, event_explains_drift, select_relevant_activity
 from tools.config import AUTHORIZED_DEPLOYERS
 from tools.logger import get_logger
 from tools.ownership import classify_owner
@@ -134,8 +134,17 @@ def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
             )
             drift["lifecycle"] = lifecycle.to_dict()
 
+            # The lifecycle keeps whatever was found; the CAUSE claim does not.
+            # select_relevant_activity falls back to a write when no delete
+            # exists, which is useful history but cannot explain a resource
+            # being gone.
+            explained = event_explains_drift(
+                relevant_logs[0] if relevant_logs else None,
+                drift.get("drift_type", ""),
+            )
             origin_info = classify_change_origin(
-                relevant_logs, policy_principal_ids, authorized_deployers
+                relevant_logs, policy_principal_ids, authorized_deployers,
+                explained=explained,
             )
             drift["change_origin"] = origin_info.to_dict()
 
@@ -308,6 +317,18 @@ def _claim_policy_required_tags(report_data: dict) -> int:
                 # vs Append) or its exact scope from the data alone." Both were
                 # already resolved one key away.
                 "policy_id": first.get("policy_assignment_id"),
+                # A Modify effect has no actor of its own - it rewrites the value
+                # inside somebody else's write. Whatever changed_by/timestamp the
+                # record carried describes THAT write, which may be unrelated to
+                # the tag (on rsv-drift-test it was a backup-retention edit on a
+                # child resource, 45 minutes later). Leaving it in place made the
+                # record assert "a policy did this, and the person who did it was
+                # <name>" - and agent/prompts.py tells the analysis to cite
+                # changed_by directly. Keep the fact, move it out of the field
+                # that reads as causation.
+                "changed_by": None,
+                "last_write_by": (drift.get("change_origin") or {}).get("changed_by"),
+                "last_write_at": (drift.get("change_origin") or {}).get("timestamp"),
                 "reason": (
                     f"Tag value imposed in-flight by the {_MODIFY_EFFECT} effect of "
                     f"inherit-tag assignment '{first['policy_assignment']}'"

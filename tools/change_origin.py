@@ -226,10 +226,32 @@ def select_relevant_activity(
     return [candidates[0]]
 
 
+def event_explains_drift(event: dict[str, Any] | None, drift_type: str) -> bool:
+    """Could this event have CAUSED the observed drift?
+
+    select_relevant_activity returns a best-effort event so the lifecycle
+    timeline keeps its context, falling back to a write when no delete exists.
+    That fallback is useful history and a false cause: a create or update cannot
+    account for a resource being GONE. Attributing one anyway produced findings
+    reading "Deployed by authorized pipeline identity" for resources that no
+    longer exist (four of them in the 2026-07-28 teardown run), and, on a
+    freshly-changed resource whose write had not yet reached the Activity Log,
+    reported an out-of-band edit as an authorized deployment (issue #337).
+    """
+    if not event:
+        return False
+    op = (event.get("operation") or "").lower()
+    if "missing" in (drift_type or "").lower():
+        return op.endswith("delete") or op == "delete"
+    # Property/config drift: a write is the explanation; a delete is not.
+    return not (op.endswith("delete") or op == "delete")
+
+
 def classify_change_origin(
     activity_logs: list[dict[str, Any]] | None,
     policy_principal_ids: set | None = None,
     authorized_deployers: set | None = None,
+    explained: bool = True,
 ) -> ChangeOriginInfo:
     """
     Classify the origin of a drift based on Activity Log entries.
@@ -259,6 +281,25 @@ def classify_change_origin(
             severity=ChangeSeverity.MEDIUM,
             expected=False,
             reason="No activity log entries found (logs may have expired)",
+        )
+
+    # Events exist but none of them could have caused this drift. Say that,
+    # rather than binding the newest unrelated one: a confident wrong actor is
+    # worse than an admitted gap, and UNKNOWN already rates MEDIUM so a
+    # genuinely unattributed change outranks a falsely reassuring
+    # "authorized_deployment / low".
+    if not explained:
+        return ChangeOriginInfo(
+            origin=ChangeOrigin.UNKNOWN,
+            category=ChangeCategory.UNKNOWN,
+            severity=ChangeSeverity.MEDIUM,
+            expected=False,
+            reason=(
+                "No Activity Log event accounts for this change - the events on "
+                "this resource predate it or describe a different operation. The "
+                "log may not have ingested it yet; the timeline still shows what "
+                "was found."
+            ),
         )
 
     # Get most recent entry

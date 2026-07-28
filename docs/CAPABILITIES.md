@@ -134,6 +134,22 @@ Attribution precedence: Azure Policy managed identities always classify as
 policy-enforced, even if listed as deployers; deployer attribution wins over
 Terraform/manual.
 
+**An attribution must be able to account for the drift.** The event search falls
+back to a write when no delete exists, which is useful *history* and cannot be a
+*cause* — a create does not explain a resource being gone. When the matched event
+can't account for the observed drift, the origin is `unknown` with a reason
+saying so, and the timeline still shows what was found. `unknown` rates MEDIUM,
+so an admitted gap outranks a falsely reassuring `authorized_deployment / low`.
+This fires on genuine ingestion lag (a change scanned before the Activity Log
+caught up) and on operation mismatches — the 2026-07-28 teardown carried four
+deleted resources reading *"Deployed by authorized pipeline identity"*.
+
+For the same reason a policy-tag claim does not inherit `changed_by`: a Modify
+effect has no actor of its own, it rewrites the value inside somebody else's
+write, and that writer may have been doing something unrelated. The identity is
+kept as `last_write_by` / `last_write_at` — the fact is useful, the field name
+was the lie.
+
 **A resolved attribution outranks the type heuristics.** The finding classifier
 otherwise reasons from resource type and drift type alone, which is right only
 while the origin is unknown. Once `change_origin.expected` is set — a policy
