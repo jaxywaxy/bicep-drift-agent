@@ -152,6 +152,18 @@ rule exists to prevent. Same reason tag claiming is per-property: a storage
 account with a policy-imposed tag *and* a manual `allowBlobPublicAccess` flip
 keeps its critical finding.
 
+**Declared implies managed.** `SYSTEM_MANAGED` is a claim about *provenance* —
+Azure created this as a dependent (a VM's NIC, a private endpoint's DNS zone
+group) — and exists so that churn isn't reported as drift. It therefore applies
+only to `extra_in_azure`. A drift type that means the template **declares** the
+resource (`missing_in_azure`, `property_drift`) contradicts it outright: the
+bicep asks for the resource, so it is ours. Two live rounds paid for this, both
+on the same disk — first a `networkAccessPolicy DenyAll → AllowAll` flip rated
+`ignore_system_managed`, then the disk being *deleted* out-of-band rated
+"informational, ignore", alongside a deleted action group (alerting silently
+going nowhere) and a deleted private DNS zone group (the finding issue #329
+existed to surface).
+
 ---
 
 # Governance Capabilities

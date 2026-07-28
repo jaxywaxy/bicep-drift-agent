@@ -116,6 +116,34 @@ class FindingSeverityTests(unittest.TestCase):
         self.assertEqual(finding.severity, DriftSeverity.CRITICAL)
         self.assertEqual(finding.recommended_action, RemediationAction.REDEPLOY_BICEP)
 
+    def test_system_managed_type_does_not_swallow_a_deletion(self):
+        # Second round of the same lesson, same resource. The property-drift
+        # carve-out above was not enough: missing_in_azure ALSO means the
+        # template declares the resource, so "Azure created this and we don't
+        # manage it" cannot be true of it. A declared disk deleted out-of-band
+        # is data loss, and it came back "informational, ignore".
+        finding = _classify("microsoft.compute/disks", drift_type="missing_in_azure")
+        self.assertNotEqual(finding.category, DriftCategory.SYSTEM_MANAGED)
+        self.assertNotEqual(finding.severity, DriftSeverity.INFORMATIONAL)
+        self.assertNotEqual(finding.recommended_action,
+                            RemediationAction.IGNORE_SYSTEM_MANAGED)
+
+    def test_a_deleted_zone_group_is_critical(self):
+        # This is the finding issue #329 existed to make visible. It reaches
+        # the report now, and was then rated "ignore" - private endpoint name
+        # resolution is broken and traffic falls back to public DNS.
+        finding = _classify("microsoft.network/privateendpoints/privateDnsZoneGroups",
+                            drift_type="missing_in_azure")
+        self.assertEqual(finding.category, DriftCategory.SECURITY_DRIFT)
+        self.assertEqual(finding.severity, DriftSeverity.CRITICAL)
+
+    def test_a_deleted_action_group_is_actionable(self):
+        # Alerting silently going nowhere is not informational.
+        finding = _classify("microsoft.insights/actionGroups",
+                            drift_type="missing_in_azure")
+        self.assertNotEqual(finding.severity, DriftSeverity.INFORMATIONAL)
+        self.assertEqual(finding.recommended_action, RemediationAction.REDEPLOY_BICEP)
+
     def test_missing_in_azure_unaffected(self):
         finding = _classify("microsoft.web/sites", drift_type="missing_in_azure")
         self.assertEqual(finding.severity, DriftSeverity.HIGH)
