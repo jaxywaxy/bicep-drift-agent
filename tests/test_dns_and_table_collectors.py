@@ -188,18 +188,6 @@ class SeverityTests(unittest.TestCase):
             {"type": rtype, "name": "n", "properties": live_props})
         return {d.property_path: d.severity for d in diffs}
 
-    def test_zone_group_config_change_is_critical(self):
-        # Repointing privateDnsZoneId sends Private Link traffic to the public
-        # endpoint with no error anywhere.
-        sev = self._sev(
-            "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
-            {"privateDnsZoneConfigs": [{"name": "vaultcore", "properties": {
-                "privateDnsZoneId": "/zones/right"}}]},
-            {"privateDnsZoneConfigs": [{"name": "vaultcore", "properties": {
-                "privateDnsZoneId": "/zones/WRONG"}}]})
-        self.assertTrue(sev, "a repointed zone must produce a diff")
-        self.assertTrue(all(v == "critical" for v in sev.values()), sev)
-
     def test_table_retention_cut_is_critical(self):
         sev = self._sev("Microsoft.OperationalInsights/workspaces/tables",
                         {"totalRetentionInDays": 30}, {"totalRetentionInDays": 7})
@@ -217,6 +205,81 @@ class SeverityTests(unittest.TestCase):
         sev = self._sev("Microsoft.OperationalInsights/workspaces",
                         {"retentionInDays": 30}, {"retentionInDays": 7})
         self.assertNotEqual(sev.get("properties.retentionInDays"), "critical")
+
+
+ZONE_GROUP_TYPE = "Microsoft.Network/privateEndpoints/privateDnsZoneGroups"
+ZONES = "/subscriptions/s/resourceGroups/rg/providers/Microsoft.Network/privateDnsZones"
+# The bicep side is what the normaliser ACTUALLY emits - an unresolved
+# resourceId() expression, not a resolved id. An earlier version of this test
+# used a resolved string on both sides and passed while the real path was
+# broken: the generic subset compare treats an unresolved expression as a
+# match, so a re-point produced zero diffs live. Compare what the pipeline
+# really hands the comparator, or the test proves nothing.
+DECLARED_ZONE_EXPR = ("resourceId('Microsoft.Network/privateDnsZones', "
+                      "'privatelink.vaultcore.azure.net')")
+
+
+def _declared_configs(expr=DECLARED_ZONE_EXPR):
+    return {"privateDnsZoneConfigs": [
+        {"name": "vaultcore", "properties": {"privateDnsZoneId": expr}}]}
+
+
+def _live_configs(*zones):
+    """Live shape as Azure returns it - full ARM id plus read-only siblings."""
+    return {"provisioningState": "Succeeded", "privateDnsZoneConfigs": [
+        {"name": name, "id": "/x", "etag": 'W/"e"',
+         "type": "Microsoft.Network/privateEndpoints/privateDnsZoneGroups/privateDnsZoneConfigs",
+         "properties": {"provisioningState": "Succeeded",
+                        "privateDnsZoneId": f"{ZONES}/{zone}",
+                        "recordSets": [{"recordType": "A", "ttl": 10}]}}
+        for name, zone in zones]}
+
+
+class ZoneGroupRepointTests(unittest.TestCase):
+    """A re-pointed zone is the dangerous case and the one the generic compare
+    cannot see. Clients resolve the private endpoint through the wrong zone,
+    fall back to public DNS, and the Private Link bypass succeeds - nothing
+    errors, nothing looks broken."""
+
+    def _diffs(self, live):
+        return PropertyComparator.compare_properties(
+            {"type": ZONE_GROUP_TYPE, "name": "pe/default", "properties": _declared_configs()},
+            {"type": ZONE_GROUP_TYPE, "name": "pe/default", "properties": live})
+
+    def test_the_matching_zone_is_not_drift(self):
+        # Guards the other direction: the two spellings of the same zone must
+        # collapse, or every clean estate reports a permanent false positive.
+        self.assertEqual(
+            self._diffs(_live_configs(("vaultcore", "privatelink.vaultcore.azure.net"))), [])
+
+    def test_a_repointed_zone_is_critical_drift(self):
+        d = self._diffs(_live_configs(("vaultcore", "drifttest.internal")))
+        self.assertEqual([x.property_path for x in d], ["properties.privateDnsZoneConfigs"])
+        self.assertEqual(d[0].severity, "critical")
+
+    def test_a_removed_config_is_drift(self):
+        self.assertTrue(self._diffs({"privateDnsZoneConfigs": []}))
+
+    def test_an_undeclared_config_added_live_is_drift(self):
+        # Exact-set: someone wiring extra DNS integration out of band is
+        # exactly what a drift report exists to surface.
+        self.assertTrue(self._diffs(_live_configs(
+            ("vaultcore", "privatelink.vaultcore.azure.net"),
+            ("sneaky", "drifttest.internal"))))
+
+    def test_an_opaque_declared_zone_still_checks_presence(self):
+        # A module output has no literal name to compare, so a re-point is
+        # invisible (same documented limit as monitoring linkages) - but the
+        # config vanishing entirely must still be caught.
+        opaque = _declared_configs("reference(resourceId('Microsoft.Resources/deployments','d')).outputs.z.value")
+        def diffs(live):
+            return PropertyComparator.compare_properties(
+                {"type": ZONE_GROUP_TYPE, "name": "pe/default", "properties": opaque},
+                {"type": ZONE_GROUP_TYPE, "name": "pe/default", "properties": live})
+        self.assertEqual(diffs(_live_configs(("vaultcore", "anything"))), [],
+                         "opaque ref cannot be compared - must not false-positive")
+        self.assertTrue(diffs({"privateDnsZoneConfigs": []}),
+                        "presence is still checkable when the ref is opaque")
 
 
 if __name__ == "__main__":

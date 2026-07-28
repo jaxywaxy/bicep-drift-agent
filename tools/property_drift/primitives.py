@@ -169,3 +169,31 @@ def has_unresolved_expressions(value: Any) -> bool:
     ]
 
     return any(marker in value_lower for marker in unresolved_markers)
+
+
+def ref_identity(ref: Any) -> str | None:
+    """Canonical trailing-name identity for a scope / action-group reference,
+    or None when the ref is OPAQUE (an unresolved cross-module expression
+    with no literal name to extract - e.g. reference(...).outputs.x.value).
+
+    Makes the two spellings of the same target comparable:
+      live   '/subscriptions/../actionGroups/ag-drift-test' -> 'ag-drift-test'
+      bicep  "resourceId('..','ag-drift-test')"             -> 'ag-drift-test'
+    """
+    if not isinstance(ref, str):
+        return None
+    s = ref.strip()
+    low = s.lower()
+    # A live ARM resource id: identity is the last path segment.
+    if low.startswith("/subscriptions/"):
+        return s.rstrip("/").rsplit("/", 1)[-1].lower()
+    # Bicep resourceId('type','name'[, ...]): last string literal is the name.
+    if low.startswith("resourceid("):
+        lits = _re.findall(r"'([^']*)'", s)
+        return lits[-1].lower() if lits else None
+    # Any other unresolved expression (reference()/parameters()/module .id)
+    # has no literal name - opaque.
+    if has_unresolved_expressions(s):
+        return None
+    # A bare literal id or name (already resolved): trailing segment.
+    return s.rstrip("/").rsplit("/", 1)[-1].lower()
