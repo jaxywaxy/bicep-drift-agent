@@ -56,6 +56,13 @@ class DriftClassifier:
         "microsoft.insights/actiongroups",
     )
 
+    # Drift types that only arise for a resource the BICEP DECLARES: it is
+    # missing from Azure, or it matched a live counterpart and a property
+    # differs. Provenance-based categories (SYSTEM_MANAGED) cannot apply to
+    # these - "Azure created this and we don't manage it" and "our template
+    # asks for this" are contradictory claims about the same record.
+    DECLARED_DRIFT_TYPES = ("missing", "modified", "property")
+
     HIGH_RISK_DETAIL_KEYS = (
         "publicNetworkAccess",
         "networkAcls",
@@ -188,15 +195,20 @@ class DriftClassifier:
         # SYSTEM_MANAGED is a statement about PROVENANCE - Azure created this
         # resource as a dependent (a VM's NIC, a private endpoint's DNS zone
         # group) - and it exists to stop that churn being reported as drift.
-        # It must not swallow a PROPERTY drift: a property drift means the
-        # comparator matched a resource DECLARED in the Bicep against its live
-        # counterpart, so the resource is template-managed by definition and
-        # its properties are the operator's to control. A live round proved the
-        # cost: disk-drift-data is declared in Bicep, was manually flipped
-        # networkAccessPolicy DenyAll -> AllowAll, and the type-based shortcut
-        # classified that security regression "ignore_system_managed".
-        if self._matches_any(resource_type, self.SYSTEM_MANAGED_RESOURCE_TYPES) and not (
-            "modified" in drift_type or "property" in drift_type
+        # It cannot survive a drift type that means the TEMPLATE DECLARES the
+        # resource, because then it is ours by definition. Two live rounds have
+        # now paid for that, both on disk-drift-data:
+        #   property_drift - networkAccessPolicy flipped DenyAll -> AllowAll,
+        #     and the type shortcut called that security regression
+        #     "ignore_system_managed".
+        #   missing_in_azure - the disk was DELETED out-of-band and the same
+        #     shortcut rated the data loss "informational, ignore". So did a
+        #     deleted action group (alerting silently going nowhere) and a
+        #     deleted privateDnsZoneGroup (private endpoint resolution broken,
+        #     traffic falling back to public DNS) - the very finding issue #329
+        #     existed to make visible.
+        if self._matches_any(resource_type, self.SYSTEM_MANAGED_RESOURCE_TYPES) and not any(
+            t in drift_type for t in self.DECLARED_DRIFT_TYPES
         ):
             return DriftCategory.SYSTEM_MANAGED
 
