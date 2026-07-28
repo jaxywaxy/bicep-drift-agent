@@ -23,6 +23,7 @@ from . import monitoring as _monitoring
 from . import security as _security
 from . import firewall as _firewall
 from . import primitives as _primitives
+from . import private_dns as _private_dns
 
 
 class PropertyComparator:
@@ -46,6 +47,7 @@ class PropertyComparator:
     _ref_identity = staticmethod(_monitoring.ref_identity)
     _linkage_refs = staticmethod(_monitoring.linkage_refs)
     _compare_monitoring_refs = staticmethod(_monitoring.compare_monitoring_refs)
+    _compare_zone_group_configs = staticmethod(_private_dns.compare_zone_group_configs)
     # security: extracted to security.py; aliases preserve call sites.
     _NETWORK_ACL_DEFAULT_TYPES = _security.NETWORK_ACL_DEFAULT_TYPES
     _DEFAULT_OPEN_NETWORK_ACLS = _security.DEFAULT_OPEN_NETWORK_ACLS
@@ -164,6 +166,19 @@ class PropertyComparator:
                 )
                 if mon is not None:
                     diffs.extend(mon)
+                    continue
+
+                # Private endpoint DNS zone configs: identical shape to the
+                # linkage paths above (bicep resourceId() vs a live ARM id), so
+                # the same exact-set treatment. Without this the generic compare
+                # matches the unresolved expression and a re-pointed zone - the
+                # one that silently sends traffic to the public endpoint - is
+                # invisible.
+                zone_cfg = PropertyComparator._compare_zone_group_configs(
+                    rtype, key, bicep_value, deployed_value
+                )
+                if zone_cfg is not None:
+                    diffs.extend(zone_cfg)
                     continue
 
                 # Security-list properties (KV access policies, networkAcls

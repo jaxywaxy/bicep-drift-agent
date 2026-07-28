@@ -377,6 +377,21 @@ carries at most a handful of groups, so the payload is small, and an
 **undeclared** group is worth seeing — something added the DNS integration out
 of band.
 
+`privateDnsZoneConfigs` is compared as an **exact set with resolved identities**,
+not by the generic subset compare. The bicep side is
+`resourceId('Microsoft.Network/privateDnsZones', '<zone>')` and the live side is
+a full ARM id; the generic compare treats the unresolved expression as a match,
+so it catches the config being *removed* but never a **re-point** — verified
+live on 2026-07-28, where swapping the zone produced zero diffs. Both spellings
+now collapse via `primitives.ref_identity`, so a re-point, a removal, and an
+undeclared config added live are each drift. Same treatment, and same
+`ref_identity` helper, as the monitoring alert linkages.
+
+> **Limit:** a config whose declared zone is an opaque expression (a module
+> output, with no literal name on either side) cannot be checked for a
+> re-point. Its presence is still checked. Identical to the documented limit on
+> monitoring linkages.
+
 ### Log Analytics workspace tables
 
 Not indexed by Resource Graph. Fetched **only for the tables the template
