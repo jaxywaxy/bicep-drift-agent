@@ -140,6 +140,76 @@ def fetch_resource_group_activity(
         return []
 
 
+def deployed_name_from_event_id(resource_type: str, event_resource_id: str) -> str:
+    """Extract the deployed name for resource_type from an activity-log id.
+
+    A deleted placeholder-named resource (log-[86c9cbf6]) has no live row to
+    read the real name from, but its activity-log event carries the true Azure
+    id (.../workspaces/log-3s7c7weddxr3s). Parse the provider section -
+    [namespace, type1, name1, type2, name2, ...] - verify the type chain
+    matches, and return the joined name segments ('parent/child' for children).
+    Returns "" when the id doesn't parse or is for a different type.
+    """
+    if not event_resource_id or not resource_type:
+        return ""
+    provider_tail = event_resource_id.split("/providers/")[-1].split("/")
+    type_segments = resource_type.split("/")  # [namespace, type1, type2, ...]
+    types_in_id = [s.lower() for s in provider_tail[1::2]]
+    names_in_id = provider_tail[2::2]
+    if (
+        len(provider_tail) < 3
+        or provider_tail[0].lower() != type_segments[0].lower()
+        or types_in_id != [s.lower() for s in type_segments[1:]]
+        or len(names_in_id) != len(types_in_id)
+    ):
+        return ""
+    return "/".join(names_in_id)
+
+
+def _shared_affix_len(declared: str, deployed: str) -> int:
+    """Longest common prefix or suffix between two names, case-insensitively.
+
+    A partially-resolved Bicep name keeps its literal lead ('func-drift-' in
+    'func-drift-[86c9cbf6]') or, for a child, its literal tail ('/kv-audit').
+    Either is enough to tell two same-type siblings apart. Mirrors the accept
+    rule in smart_matching._find_best_match rather than inventing a second one.
+    """
+    a, b = declared.lower(), deployed.lower()
+    prefix = 0
+    for ca, cb in zip(a, b):
+        if ca != cb:
+            break
+        prefix += 1
+    suffix = 0
+    for ca, cb in zip(reversed(a), reversed(b)):
+        if ca != cb:
+            break
+        suffix += 1
+    return max(prefix, suffix)
+
+
+def could_be_same_resource(declared_name: str, deployed_name: str) -> bool:
+    """Could these two names denote the same resource?
+
+    The type-substring fallback below collects EVERY event of a type, so two
+    same-type siblings are indistinguishable by type alone. Live (issue #350):
+    the function app 'func-drift-[86c9cbf6]' adopted the App Service
+    'app-test-drift' - its name, its deletion event, and its actor - because
+    both are Microsoft.Web/sites. The func app's own deletion vanished from the
+    report and 'app-test-drift' appeared deleted twice.
+    """
+    if not declared_name or not deployed_name:
+        return False
+    if declared_name.lower() == deployed_name.lower():
+        return True
+    return _shared_affix_len(declared_name, deployed_name) >= _MIN_SHARED_AFFIX
+
+
+# Three characters of shared literal name. Same threshold smart_matching accepts
+# a candidate on; below it the "match" is a coincidence of one or two letters.
+_MIN_SHARED_AFFIX = 3
+
+
 def match_activity_for_resource(
     rg_events: list[dict[str, Any]],
     resource_id: str,
@@ -150,7 +220,8 @@ def match_activity_for_resource(
 
     Matching:
       1. exact / prefix resource-ID match (case-insensitive) - live resources
-      2. resource-type substring - deleted resources whose exact ID can't be built
+      2. resource-type substring - deleted resources whose exact ID can't be
+         built - narrowed to events whose NAME could be this resource's
     """
     resource_id_lower = (resource_id or "").lower()
     resource_type_lower = (resource_type or "").lower()
@@ -172,7 +243,26 @@ def match_activity_for_resource(
     # Fallback ONLY for resources with no id match (e.g. deleted resources whose
     # exact id can't be resolved): match by resource type substring.
     if resource_type_lower:
-        return [e for e in rg_events if resource_type_lower in (e.get("resource_id") or "").lower()]
+        by_type = [
+            e for e in rg_events
+            if resource_type_lower in (e.get("resource_id") or "").lower()
+        ]
+        # The declared name is the tail of the id we constructed; keep only the
+        # events whose own name could belong to it. Returning nothing is the
+        # right failure mode - an unattributed drift reads "no event accounts
+        # for this change" (#337), whereas a sibling's event names the wrong
+        # actor AND renames the resource to the sibling.
+        declared_name = deployed_name_from_event_id(resource_type or "", resource_id)
+        if not declared_name:
+            return by_type
+        return [
+            e for e in by_type
+            if could_be_same_resource(
+                declared_name,
+                deployed_name_from_event_id(
+                    resource_type or "", e.get("resource_id") or ""),
+            )
+        ]
     return []
 
 
