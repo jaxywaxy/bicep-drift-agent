@@ -29,11 +29,11 @@ from tools.change_origin import (
     event_explains_drift,
 )
 
-PIPELINE = "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+PIPELINE = "11111111-1111-1111-1111-111111111111"
 DEPLOYERS = {PIPELINE}
 CREATE = {"operation": "create", "caller": PIPELINE, "timestamp": "2026-07-27T20:51:36Z"}
 WRITE = {"operation": "write", "caller": PIPELINE, "timestamp": "2026-07-27T20:51:36Z"}
-DELETE = {"operation": "delete", "caller": "jacqui.anker@gmail.com",
+DELETE = {"operation": "delete", "caller": "someone@example.com",
           "timestamp": "2026-07-27T23:47:25Z"}
 
 
@@ -70,7 +70,7 @@ class AnEventMustAccountForTheDriftTests(unittest.TestCase):
     def test_a_real_deletion_still_names_who_did_it(self):
         info = _classify(DELETE, "missing_in_azure")
         self.assertEqual(info.origin, ChangeOrigin.MANUAL_CHANGE)
-        self.assertEqual(info.changed_by, "jacqui.anker@gmail.com")
+        self.assertEqual(info.changed_by, "someone@example.com")
 
     def test_a_write_still_explains_property_drift(self):
         # The guard must not swallow the ordinary case it was built around.
@@ -161,15 +161,15 @@ class AClaimMustNotInheritAStaleActorTests(unittest.TestCase):
         return report["drifts"][0]["change_origin"]
 
     def test_the_actor_of_an_unrelated_write_is_not_kept_as_changed_by(self):
-        co = self._claimed("jacqui.anker@gmail.com", "2026-07-27T21:44:39+00:00")
+        co = self._claimed("someone@example.com", "2026-07-27T21:44:39+00:00")
         self.assertEqual(co["origin"], "policy_modify")
         self.assertIsNone(co["changed_by"],
                           "a Modify effect has no actor - it rides someone else's write")
 
     def test_the_last_write_is_kept_under_a_name_that_says_what_it_is(self):
         # Losing the history is not the goal; asserting it as the cause is.
-        co = self._claimed("jacqui.anker@gmail.com", "2026-07-27T21:44:39+00:00")
-        self.assertEqual(co["last_write_by"], "jacqui.anker@gmail.com")
+        co = self._claimed("someone@example.com", "2026-07-27T21:44:39+00:00")
+        self.assertEqual(co["last_write_by"], "someone@example.com")
         self.assertEqual(co["last_write_at"], "2026-07-27T21:44:39+00:00")
 
 

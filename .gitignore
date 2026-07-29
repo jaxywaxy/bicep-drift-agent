@@ -55,3 +55,13 @@ CLAUDE.md
 
 # code-review-graph evaluation artifacts (benchmark repos + results)
 evaluate/
+
+# Generated AI-assistant rule files. The code-review-graph installer writes the
+# SAME blurb into each one (all three were byte-identical); its other outputs
+# are already ignored above, so these belong with them.
+.kiro/
+.cursorrules
+.windsurfrules
+
+# Linter cache
+.ruff_cache/
