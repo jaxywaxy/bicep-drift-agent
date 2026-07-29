@@ -28,12 +28,12 @@ from tools.activity_log import could_be_same_resource, match_activity_for_resour
 RG = "/subscriptions/s/resourceGroups/rg-drift-test/providers"
 SITES = "Microsoft.Web/sites"
 APP_DELETE = {
-    "operation": "delete", "caller": "jacqui.anker@gmail.com",
+    "operation": "delete", "caller": "someone@example.com",
     "timestamp": datetime(2026, 7, 28, 9, 26, 30, tzinfo=timezone.utc),
     "resource_id": f"{RG}/{SITES}/app-test-drift",
 }
 FUNC_DELETE = {
-    "operation": "delete", "caller": "jacqui.anker@gmail.com",
+    "operation": "delete", "caller": "someone@example.com",
     "timestamp": datetime(2026, 7, 28, 9, 27, 1, tzinfo=timezone.utc),
     "resource_id": f"{RG}/{SITES}/func-drift-3s7c7weddxr3s",
 }
@@ -143,7 +143,7 @@ class ThroughThePipelineTests(unittest.TestCase):
         self.assertEqual(d["name"], "func-drift-3s7c7weddxr3s")
         self.assertEqual(d["bicep_name_expression"], "func-drift-[86c9cbf6]")
         self.assertEqual(d["change_origin"]["origin"], "manual_change")
-        self.assertEqual(d["change_origin"]["changed_by"], "jacqui.anker@gmail.com")
+        self.assertEqual(d["change_origin"]["changed_by"], "someone@example.com")
 
 
 if __name__ == "__main__":
