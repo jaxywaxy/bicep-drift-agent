@@ -144,6 +144,17 @@ This fires on genuine ingestion lag (a change scanned before the Activity Log
 caught up) and on operation mismatches — the 2026-07-28 teardown carried four
 deleted resources reading *"Deployed by authorized pipeline identity"*.
 
+**And it must be about the right resource.** A resource whose Bicep name is a
+runtime expression (`func-drift-[86c9cbf6]`) has no id to match on, so the search
+falls back to resource *type* — which cannot tell two siblings apart. Events are
+therefore narrowed to those whose own name shares at least three characters of
+literal prefix or suffix with the declared name; the same signal
+`smart_matching` accepts a candidate on. Without it the function app adopted the
+App Service's deletion **and its name**: `app-test-drift` appeared deleted twice
+and the function app's own deletion never reached the report. Note this is not
+the operation check above — a delete genuinely does explain a missing resource;
+it was the wrong resource's delete.
+
 For the same reason a policy-tag claim does not inherit `changed_by`: a Modify
 effect has no actor of its own, it rewrites the value inside somebody else's
 write, and that writer may have been doing something unrelated. The identity is

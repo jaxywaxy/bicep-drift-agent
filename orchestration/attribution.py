@@ -10,7 +10,7 @@ the actionable set. Runs BEFORE the Claude call so the analysis sees who/how.
 import os
 
 from orchestration.reconciliation import _find_deployed_resource
-from tools.activity_log import detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource
+from tools.activity_log import deployed_name_from_event_id, detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource
 from tools.change_origin import build_resource_lifecycle, classify_change_origin, event_explains_drift, select_relevant_activity
 from tools.config import AUTHORIZED_DEPLOYERS
 from tools.logger import get_logger
@@ -27,27 +27,12 @@ _MODIFY_EFFECT = "Modify"
 def _recover_deployed_name(resource_type: str, event_resource_id: str) -> str:
     """Extract the real deployed name for resource_type from an activity-log id.
 
-    A deleted placeholder-named resource (log-[86c9cbf6]) has no live row to
-    read the real name from, but its activity-log delete event carries the true
-    Azure id (.../workspaces/log-3s7c7weddxr3s). Parse the provider section -
-    [namespace, type1, name1, type2, name2, ...] - verify the type chain
-    matches, and return the joined name segments ('parent/child' for children).
-    Returns "" when the id doesn't parse or is for a different type.
+    Thin alias: the extractor lives beside the event matcher in
+    tools/activity_log.py because BOTH need it - the matcher to reject a
+    same-type sibling's events (#350), this path to rename the drift. Two copies
+    would let the rejection and the rename disagree about what a name is.
     """
-    if not event_resource_id or not resource_type:
-        return ""
-    provider_tail = event_resource_id.split("/providers/")[-1].split("/")
-    type_segments = resource_type.split("/")  # [namespace, type1, type2, ...]
-    types_in_id = [s.lower() for s in provider_tail[1::2]]
-    names_in_id = provider_tail[2::2]
-    if (
-        len(provider_tail) < 3
-        or provider_tail[0].lower() != type_segments[0].lower()
-        or types_in_id != [s.lower() for s in type_segments[1:]]
-        or len(names_in_id) != len(types_in_id)
-    ):
-        return ""
-    return "/".join(names_in_id)
+    return deployed_name_from_event_id(resource_type, event_resource_id)
 
 
 def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
