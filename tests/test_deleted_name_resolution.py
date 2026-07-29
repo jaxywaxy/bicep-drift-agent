@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import analyze_drift
 from analyze_drift import _recover_deployed_name
 
-SUB = "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-x"
+SUB = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-x"
 
 
 class RecoverDeployedNameTests(unittest.TestCase):
