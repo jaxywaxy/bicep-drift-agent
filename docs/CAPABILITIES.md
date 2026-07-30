@@ -103,6 +103,21 @@ Use this document to understand what the agent can detect, how findings are clas
 | Null vs Default Handling | Prevents false positives caused by Azure defaults |
 | Ignore Profiles | Supports platform and landing-zone specific exclusions |
 
+**Nested `format()` in a child name.** A child whose parent segment is itself a
+`format()` call — `format('{0}/{1}', format('st{0}drift{1}', …), 'default')`,
+which is what a storage module compiles to — resolves the inner call first, so
+the child's parent segment is byte-identical to the parent resource's own
+resolved name (`sttestdrift[86c9cbf6]/default`) and matching lines up on it
+rather than falling back to fuzzy recovery.
+
+The template's `{i}` slots are filled in a **single pass**. Substituting one
+argument at a time lets an already-inserted value be re-read by the next
+argument: where the inner call cannot be fully resolved it keeps its own slots,
+and the outer argument 1 overwrote the inner `{1}` — every storage child in the
+2026-07-28 teardown report was named `format('st{0}drift**default**', …)/default`,
+a name that matches nothing and has lost the `uniqueString()` slot needed to
+recover the resource.
+
 ---
 
 # Change Attribution
@@ -147,13 +162,43 @@ deleted resources reading *"Deployed by authorized pipeline identity"*.
 **And it must be about the right resource.** A resource whose Bicep name is a
 runtime expression (`func-drift-[86c9cbf6]`) has no id to match on, so the search
 falls back to resource *type* — which cannot tell two siblings apart. Events are
-therefore narrowed to those whose own name shares at least three characters of
-literal prefix or suffix with the declared name; the same signal
-`smart_matching` accepts a candidate on. Without it the function app adopted the
-App Service's deletion **and its name**: `app-test-drift` appeared deleted twice
-and the function app's own deletion never reached the report. Note this is not
-the operation check above — a delete genuinely does explain a missing resource;
-it was the wrong resource's delete.
+therefore narrowed to those whose own name fits the declared name's **shape**: a
+partially resolved name is a template of literal text around placeholder holes
+(`func-drift-[86c9cbf6]`, `kvdrift[86c9cbf6]/kv-audit`), compared segment by
+segment so a hole cannot swallow a `/` and match across the parent/child
+boundary. Aligned from the right, because an extension resource's event names
+only the extension (`kv-audit`) while the declared name qualifies it with its
+parent. A fully resolved name is a complete name and matches only itself.
+Without this the function app adopted the App Service's deletion **and its
+name**: `app-test-drift` appeared deleted twice and the function app's own
+deletion never reached the report. Note this is not the operation check above —
+a delete genuinely does explain a missing resource; it was the wrong resource's
+delete.
+
+Shape, not shared text. A threshold on shared prefix/suffix length accepted
+`asp-test-drift` as `asp-func-drift-test` on the four characters `asp-`, and
+both App Service Plans in the teardown adopted one event that way — Azure naming
+conventions mean every resource of a type shares a lead like that by design, so
+length discriminates nothing. A name still carrying raw expression text has no
+shape to anchor on and keeps the shared-affix fallback, so attribution degrades
+rather than disappearing.
+
+**And it must have taken effect.** A `status: Failed` operation changed nothing,
+so it neither explains a drift nor sets a lifecycle milestone — `deleted_at`
+from a failed delete asserts a deletion that never happened. Where Azure logs
+several records for one operation, the selector prefers the one that took effect
+over the most recent. Only `Failed` and `Canceled` are treated this way:
+`Started`/`Accepted`/`Unknown` against a resource that is demonstrably gone is
+ingestion lag, and rejecting those would drop attribution the report gets right.
+The failed record stays in the timeline as context.
+
+**Method comes from the operation's type, not its verb.** An ARM deployment is
+`Microsoft.Resources/deployments/*`, matched on whole type segments.
+Substring-matching the operation name reported every
+`Microsoft.Web/serverf`**arm**`s` operation as an ARM deployment — both plans in
+the teardown carried `method: "ARM Deployment"` for manual deletions. Same trap
+as `put` inside `Microsoft.Compute`; unknown stays `Unknown` rather than
+guessing.
 
 For the same reason a policy-tag claim does not inherit `changed_by`: a Modify
 effect has no actor of its own, it rewrites the value inside somebody else's

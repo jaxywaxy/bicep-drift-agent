@@ -14,6 +14,34 @@ import json
 import re
 
 _EMBEDDED_REF_RE = re.compile(r"\b(variables|parameters)\(\s*'([^']+)'\s*\)")
+_FORMAT_SLOT_RE = re.compile(r"\{(\d+)\}")
+
+
+def _apply_format_args(template: str, args: list) -> str:
+    """Fill an ARM format() template's {i} slots in a SINGLE pass.
+
+    Substituting one arg at a time with str.replace lets an already-inserted
+    value be re-read by the next arg. An unresolved nested format() keeps its
+    own {0}/{1} slots, so the outer call's arg 1 overwrote the inner template's
+    {1}: a storage child compiled to
+    format('{0}/{1}', format('st{0}drift{1}', ...), 'default') resolved to
+    "format('st{0}driftdefault', ...)/default" - a corrupted name that matches
+    nothing and destroys the uniqueString slot smart matching needs to recover
+    the resource. One regex pass never re-reads inserted text.
+
+    An index with no argument keeps its slot, as before, so a partially
+    resolvable call still degrades to something smart matching can work with.
+    """
+    if not template or "{" not in template:
+        return template
+    return _FORMAT_SLOT_RE.sub(
+        lambda m: (
+            str(args[int(m.group(1))])
+            if int(m.group(1)) < len(args)
+            else m.group(0)
+        ),
+        template,
+    )
 
 
 def _eval_embedded_formats(s: str, parameters: dict, variables: dict) -> str:
@@ -60,10 +88,7 @@ def _eval_embedded_formats(s: str, parameters: dict, variables: dict) -> str:
                 and not any(ch in str(a) for a in args for ch in "([")
             )
             if resolvable:
-                result = template
-                for i, arg in enumerate(args):
-                    result = result.replace(f"{{{i}}}", str(arg))
-                out = out[:idx] + result + out[end + 1:]
+                out = out[:idx] + _apply_format_args(template, args) + out[end + 1:]
                 changed = True
                 search_from = 0
             else:
@@ -310,10 +335,7 @@ def _resolve_resource_id(resource_id_expr: str, parameters: dict, variables: dic
         if name.startswith("format("):
             template, template_args = _parse_format_call(name, parameters, variables)
             if template is not None:
-                result = template
-                for i, arg in enumerate(template_args):
-                    result = result.replace(f"{{{i}}}", str(arg))
-                name = result
+                name = _apply_format_args(template, template_args)
         elif name.startswith("parameters("):
             param_match = re.match(r"parameters\s*\(\s*'([^']+)'\s*\)", name)
             if param_match:
@@ -359,6 +381,17 @@ def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     least extract the essence.
     """
     call = call.strip()
+
+    # format() — a nested call, usually the parent name inside a child's
+    # format('{0}/{1}', format(...), 'default'). Without this branch the inner
+    # call came back as its own source text, so the child name stayed an
+    # unresolvable expression and only fuzzy matching could rescue it. Recursive
+    # via _parse_format_call, which resolves each argument in turn.
+    if call.startswith("format("):
+        template, args = _parse_format_call(call, parameters, variables)
+        if template is not None:
+            return _apply_format_args(template, args)
+        return call
 
     # uniqueString() — can't resolve at compile time, generate a consistent placeholder
     if call.startswith("uniqueString"):
@@ -431,9 +464,7 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
             elif inner_expr.startswith("format"):
                 template, args = _parse_format_call(inner_expr, parameters, variables)
                 if template is not None:
-                    resolved = template
-                    for i, arg in enumerate(args):
-                        resolved = resolved.replace(f"{{{i}}}", str(arg))
+                    resolved = _apply_format_args(template, args)
                 else:
                     resolved = f"[{inner_expr}]"
             else:
@@ -474,10 +505,7 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     if inner.startswith("format"):
         template, args = _parse_format_call(inner, parameters, variables)
         if template is not None:
-            result = template
-            for i, arg in enumerate(args):
-                result = result.replace(f"{{{i}}}", str(arg))
-            return result
+            return _apply_format_args(template, args)
 
     if "deployment()" in inner and "location" in inner:
         return "deployment-location"
