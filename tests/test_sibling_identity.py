@@ -107,6 +107,69 @@ class EventMatchingTests(unittest.TestCase):
         self.assertEqual(matched, [APP_DELETE])
 
 
+class AConventionPrefixIsNotIdentityTests(unittest.TestCase):
+    """The 2026-07-30 rerun, one round on: both App Service Plans adopted a
+    single event because 'asp-test-drift' and 'asp-func-drift-test' share the
+    four characters 'asp-'. A shared-affix threshold cannot fix this - Azure
+    naming conventions mean every resource of a type shares a lead by design.
+    The test is now the declared name's own SHAPE.
+    """
+
+    def test_the_two_app_service_plans_are_not_compatible(self):
+        self.assertFalse(
+            could_be_same_resource("asp-test-drift", "asp-func-drift-test"))
+        self.assertFalse(
+            could_be_same_resource("asp-func-drift-test", "asp-test-drift"))
+
+    def test_a_fully_resolved_name_matches_only_itself(self):
+        self.assertTrue(could_be_same_resource("asp-test-drift", "asp-test-drift"))
+        self.assertFalse(could_be_same_resource("nsg-drift-test", "rt-drift-test"))
+
+    def test_a_placeholder_stands_for_one_segment_not_a_boundary(self):
+        # A hole must not swallow a '/' and match across parent and child.
+        self.assertTrue(could_be_same_resource(
+            "kvdrift[86c9cbf6]/kv-audit", "kvdrift3s7c7weddxr3s/kv-audit"))
+        self.assertFalse(could_be_same_resource(
+            "kvdrift[86c9cbf6]/kv-audit", "kvdrift3s/other/kv-audit"))
+
+    def test_siblings_differing_only_after_the_placeholder(self):
+        self.assertTrue(could_be_same_resource(
+            "eh-[86c9cbf6]/drift-hub", "eh-3s7c7weddxr3s/drift-hub"))
+        self.assertFalse(could_be_same_resource(
+            "eh-[86c9cbf6]/drift-hub", "eh-3s7c7weddxr3s/other-hub"))
+
+    def test_a_name_still_carrying_raw_expression_text_keeps_the_fallback(self):
+        # Nothing to anchor on, so attribution degrades rather than disappears.
+        self.assertTrue(could_be_same_resource(
+            "format('func-drift-{0}', uniqueString(x))/appsettings",
+            "func-drift-3s7c7weddxr3s/appsettings"))
+
+
+class BothPlansKeepTheirOwnEventTests(unittest.TestCase):
+    """Driven through match_activity_for_resource, the stage that owns the
+    type fallback."""
+
+    FARMS = "Microsoft.Web/serverfarms"
+
+    def setUp(self):
+        self.asp_delete = {
+            "operation": "microsoft.web/serverfarms/delete",
+            "caller": "someone@example.com", "status": "Succeeded",
+            "timestamp": datetime(2026, 7, 28, 9, 27, 37, tzinfo=timezone.utc),
+            "resource_id": f"{RG}/{self.FARMS}/asp-test-drift",
+        }
+
+    def _match(self, declared):
+        return match_activity_for_resource(
+            [self.asp_delete], f"{RG}/{self.FARMS}/{declared}", self.FARMS)
+
+    def test_the_plan_the_event_belongs_to_still_matches(self):
+        self.assertEqual(self._match("asp-test-drift"), [self.asp_delete])
+
+    def test_the_other_plan_does_not_adopt_it(self):
+        self.assertEqual(self._match("asp-func-drift-test"), [])
+
+
 class ThroughThePipelineTests(unittest.TestCase):
     """Enter the stage the pipeline enters - the unit tests above pass whether
     or not the filter is wired in. See the call-path lesson."""

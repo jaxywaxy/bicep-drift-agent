@@ -193,6 +193,11 @@ def select_relevant_activity(
                 or "remediat" in op) and not is_delete(entry)
 
     def latest(entries):
+        # Prefer an operation that took effect. Azure logs several records per
+        # operation, and picking purely by timestamp let a status="Failed"
+        # record outrank the Succeeded one that actually did the work.
+        effective = [e for e in entries if event_succeeded(e)]
+        entries = effective or entries
         return max(entries, key=lambda e: str(e.get("timestamp") or "")) if entries else None
 
     if is_missing:
@@ -221,9 +226,27 @@ def select_relevant_activity(
     if not candidates:
         return []
 
-    # Most recent first
-    candidates.sort(key=lambda e: str(e.get("timestamp") or ""), reverse=True)
+    # Most recent first, an effective operation ahead of a failed one
+    candidates.sort(
+        key=lambda e: (event_succeeded(e), str(e.get("timestamp") or "")),
+        reverse=True,
+    )
     return [candidates[0]]
+
+
+#: Activity Log statuses that mean the operation did not take effect. Anything
+#: else - Succeeded, Started, Accepted, Unknown - is treated as possibly
+#: effective: a delete logged only as "Started" against a resource that is
+#: demonstrably gone is ingestion lag, not a non-event, and rejecting it would
+#: drop attribution the report already gets right.
+_UNEFFECTIVE_STATUSES = frozenset({"failed", "failure", "canceled", "cancelled"})
+
+
+def event_succeeded(event: dict[str, Any] | None) -> bool:
+    """Did this Activity Log entry's operation actually take effect?"""
+    if not event:
+        return False
+    return (event.get("status") or "").strip().lower() not in _UNEFFECTIVE_STATUSES
 
 
 def event_explains_drift(event: dict[str, Any] | None, drift_type: str) -> bool:
@@ -239,6 +262,11 @@ def event_explains_drift(event: dict[str, Any] | None, drift_type: str) -> bool:
     reported an out-of-band edit as an authorized deployment (issue #337).
     """
     if not event:
+        return False
+    # An operation that did not succeed changed nothing. Both App Service Plans
+    # in the 2026-07-28 teardown were attributed to one status="Failed" delete -
+    # which also means at most one of them could have been its subject.
+    if not event_succeeded(event):
         return False
     op = (event.get("operation") or "").lower()
     if "missing" in (drift_type or "").lower():
@@ -554,6 +582,13 @@ def build_resource_lifecycle(
 
         lifecycle.events.append(event)
 
+        # A failed operation stays in the timeline as context but sets no
+        # milestone: deleted_at/deleted_by taken from a status="Failed" delete
+        # asserts a deletion that never happened, and contradicts the
+        # change_origin the same event is now rejected from explaining.
+        if not event_succeeded(entry):
+            continue
+
         # Track lifecycle milestones. created_at is only taken from the FIRST
         # create so a later event cannot move it.
         if event.operation == OperationType.CREATE:
@@ -713,8 +748,20 @@ def _classify_origin_context(
 
 
 def _extract_method(caller: str, operation_name: str, props: dict[str, Any]) -> str:
-    """Extract the method (Portal, CLI, SDK, ARM template, etc.)."""
+    """Extract the method (Portal, CLI, SDK, ARM template, etc.).
+
+    An ARM deployment is identified by the operation's resource TYPE
+    (Microsoft.Resources/deployments/write), never by its verb, so that test
+    matches whole type segments. Substring-matching the whole operation name
+    reported every Microsoft.Web/serverf(arm)s operation as an ARM deployment -
+    both App Service Plans in the 2026-07-28 teardown carried
+    method "ARM Deployment" for what were manual deletions. Same trap
+    _classify_operation_type documents for 'put' inside 'Microsoft.Compute';
+    the fix there is the same one - anchor on segments, not substrings.
+    """
     op_lower = operation_name.lower()
+    # Everything but the trailing verb is the type chain.
+    type_segments = [s for s in op_lower.split("/") if s][:-1]
 
     if "portal" in (props.get('method') or '').lower():
         return "Azure Portal"
@@ -726,7 +773,7 @@ def _extract_method(caller: str, operation_name: str, props: dict[str, Any]) -> 
         return "Azure SDK"
     elif "terraform" in caller.lower():
         return "Terraform"
-    elif "deployment" in op_lower or "arm" in op_lower:
+    elif "deployments" in type_segments:
         return "ARM Deployment"
     else:
         return props.get('method', 'Unknown')

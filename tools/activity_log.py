@@ -7,6 +7,7 @@ policy-enforced (DINE, Modify, Remediation) or manual.
 """
 
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -188,6 +189,39 @@ def _shared_affix_len(declared: str, deployed: str) -> int:
     return max(prefix, suffix)
 
 
+def _segment_pattern(declared_segment: str) -> str:
+    """One name segment as a regex, each placeholder hole standing for the
+    runtime string it will resolve to."""
+    return "".join(
+        "[^/]+" if part.startswith("[") else re.escape(part)
+        for part in _PLACEHOLDER_RE.split(declared_segment)
+        if part
+    )
+
+
+def _segments_match(declared_name: str, deployed_name: str) -> bool:
+    """Does the deployed name fit the declared name's resolved shape?
+
+    A partially resolved name is a template: literal text around placeholder
+    holes ('func-drift-[86c9cbf6]', 'kvdrift[86c9cbf6]/kv-audit'). Compared
+    segment by segment, so a hole cannot swallow a '/' and match across the
+    parent/child boundary, and each segment must match end to end - a name is
+    not "compatible" with one it merely shares a lead with.
+
+    Aligned from the RIGHT and only over the segments both names have: an
+    extension resource's event id names just the extension ('kv-audit') while
+    the declared name qualifies it with its parent
+    ('kvdrift[86c9cbf6]/kv-audit'), and the leaf is the part that identifies it.
+    """
+    declared = declared_name.split("/")
+    deployed = deployed_name.split("/")
+    depth = min(len(declared), len(deployed))
+    return all(
+        re.fullmatch(_segment_pattern(d), live, flags=re.IGNORECASE)
+        for d, live in zip(declared[-depth:], deployed[-depth:])
+    )
+
+
 def could_be_same_resource(declared_name: str, deployed_name: str) -> bool:
     """Could these two names denote the same resource?
 
@@ -197,13 +231,32 @@ def could_be_same_resource(declared_name: str, deployed_name: str) -> bool:
     'app-test-drift' - its name, its deletion event, and its actor - because
     both are Microsoft.Web/sites. The func app's own deletion vanished from the
     report and 'app-test-drift' appeared deleted twice.
+
+    The test is the declared name's own shape, not how much text two names
+    happen to share. A shared-affix threshold accepted 'asp-test-drift' as
+    'asp-func-drift-test' on the four characters 'asp-' - and Azure naming
+    conventions mean every resource of a type shares a lead like that by
+    design, so it discriminates nothing. Both App Service Plans in the
+    2026-07-28 teardown adopted one event this way.
     """
     if not declared_name or not deployed_name:
         return False
     if declared_name.lower() == deployed_name.lower():
         return True
-    return _shared_affix_len(declared_name, deployed_name) >= _MIN_SHARED_AFFIX
+    if _segments_match(declared_name, deployed_name):
+        return True
+    # A fully resolved name is a COMPLETE name, so anything it doesn't match is
+    # a different resource however much of a convention they share. A name still
+    # carrying raw expression text has no shape to anchor on, so it keeps the
+    # shared-affix heuristic rather than losing attribution outright.
+    if "(" in declared_name:
+        return _shared_affix_len(declared_name, deployed_name) >= _MIN_SHARED_AFFIX
+    return False
 
+
+#: A resolved runtime placeholder: uniqueString/guid render as '[8 hex chars]',
+#: copyIndex and friends keep their bracketed call.
+_PLACEHOLDER_RE = re.compile(r"(\[[^\]]*\])")
 
 # Three characters of shared literal name. Same threshold smart_matching accepts
 # a candidate on; below it the "match" is a coincidence of one or two letters.
