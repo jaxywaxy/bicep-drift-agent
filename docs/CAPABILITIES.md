@@ -103,6 +103,21 @@ Use this document to understand what the agent can detect, how findings are clas
 | Null vs Default Handling | Prevents false positives caused by Azure defaults |
 | Ignore Profiles | Supports platform and landing-zone specific exclusions |
 
+**Nested `format()` in a child name.** A child whose parent segment is itself a
+`format()` call — `format('{0}/{1}', format('st{0}drift{1}', …), 'default')`,
+which is what a storage module compiles to — resolves the inner call first, so
+the child's parent segment is byte-identical to the parent resource's own
+resolved name (`sttestdrift[86c9cbf6]/default`) and matching lines up on it
+rather than falling back to fuzzy recovery.
+
+The template's `{i}` slots are filled in a **single pass**. Substituting one
+argument at a time lets an already-inserted value be re-read by the next
+argument: where the inner call cannot be fully resolved it keeps its own slots,
+and the outer argument 1 overwrote the inner `{1}` — every storage child in the
+2026-07-28 teardown report was named `format('st{0}drift**default**', …)/default`,
+a name that matches nothing and has lost the `uniqueString()` slot needed to
+recover the resource.
+
 ---
 
 # Change Attribution
