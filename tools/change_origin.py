@@ -210,7 +210,10 @@ def select_relevant_activity(
         # so a resource deleted and later re-created shares the same name and both
         # events show up. If a create/write is NEWER than the delete, the resource
         # was recreated and is NOT actually gone - don't report it as deleted.
-        if latest_delete and latest_write:
+        # A recreate that FAILED recreated nothing, so it does not clear the
+        # delete: taking it suppressed the real deletion and left the drift
+        # reading "unknown" instead of naming who removed the resource.
+        if latest_delete and latest_write and event_succeeded(latest_write):
             if str(latest_write.get("timestamp") or "") > str(latest_delete.get("timestamp") or ""):
                 return [latest_write]
         if latest_delete:

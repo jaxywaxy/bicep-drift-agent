@@ -138,6 +138,22 @@ class AConventionPrefixIsNotIdentityTests(unittest.TestCase):
         self.assertFalse(could_be_same_resource(
             "eh-[86c9cbf6]/drift-hub", "eh-3s7c7weddxr3s/other-hub"))
 
+    def test_a_name_that_is_nothing_but_holes_is_not_a_wildcard(self):
+        """Caught reviewing the shape rule: a segment compiled from an
+        all-placeholder name is a bare '[^/]+', which matches every sibling of
+        its type - readmitting the adoption #350 fixed. Reachable: a resource
+        named format('{0}', uniqueString(...)) resolves to '[86c9cbf6]'.
+        """
+        self.assertFalse(could_be_same_resource("[86c9cbf6]", "app-test-drift"))
+        self.assertFalse(could_be_same_resource("[86c9cbf6]", "literally-anything"))
+
+    def test_one_literal_character_anywhere_is_still_enough(self):
+        # The evidence can sit in any compared segment, including the leaf.
+        self.assertTrue(could_be_same_resource(
+            "[86c9cbf6]/kv-audit", "kvdrift3s7c7weddxr3s/kv-audit"))
+        self.assertFalse(could_be_same_resource(
+            "[86c9cbf6]/kv-audit", "kvdrift3s7c7weddxr3s/other"))
+
     def test_a_name_still_carrying_raw_expression_text_keeps_the_fallback(self):
         # Nothing to anchor on, so attribution degrades rather than disappears.
         self.assertTrue(could_be_same_resource(

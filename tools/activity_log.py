@@ -172,8 +172,15 @@ def _shared_affix_len(declared: str, deployed: str) -> int:
 
     A partially-resolved Bicep name keeps its literal lead ('func-drift-' in
     'func-drift-[86c9cbf6]') or, for a child, its literal tail ('/kv-audit').
-    Either is enough to tell two same-type siblings apart. Mirrors the accept
-    rule in smart_matching._find_best_match rather than inventing a second one.
+
+    Residual rule, kept only for a name still carrying raw expression text,
+    which has no placeholder shape to anchor on. It is deliberately NOT the
+    primary test any more: shared length cannot separate two names built to the
+    same convention ('asp-test-drift' vs 'asp-func-drift-test' share 'asp-').
+    smart_matching._find_best_match still selects on this signal, and that
+    asymmetry is intended - it pairs a declared resource to a live one and can
+    fall back to pairing in order, whereas a wrong event here asserts that a
+    named person did something they did not.
     """
     a, b = declared.lower(), deployed.lower()
     prefix = 0
@@ -216,9 +223,20 @@ def _segments_match(declared_name: str, deployed_name: str) -> bool:
     declared = declared_name.split("/")
     deployed = deployed_name.split("/")
     depth = min(len(declared), len(deployed))
+    compared = declared[-depth:]
+    # The literal text IS the evidence. A name resolving to nothing but holes
+    # ('[86c9cbf6]', from a resource named `format('{0}', uniqueString(...))`)
+    # would otherwise compile to a bare '[^/]+' and match every sibling of its
+    # type - the wildcard readmitting exactly the adoption #350 fixed.
+    if not any(
+        part and not part.startswith("[")
+        for segment in compared
+        for part in _PLACEHOLDER_RE.split(segment)
+    ):
+        return False
     return all(
         re.fullmatch(_segment_pattern(d), live, flags=re.IGNORECASE)
-        for d, live in zip(declared[-depth:], deployed[-depth:])
+        for d, live in zip(compared, deployed[-depth:])
     )
 
 
