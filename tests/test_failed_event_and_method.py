@@ -105,6 +105,27 @@ class AFailedOperationIsNotACauseTests(unittest.TestCase):
             [succeeded],
         )
 
+    def test_a_recreate_that_failed_does_not_clear_the_deletion(self):
+        """Caught reviewing the status work: the stale-delete guard reads a
+        write NEWER than the delete as 'the resource came back', without
+        checking the write succeeded. A failed recreate recreated nothing, and
+        taking it suppressed the real deletion.
+        """
+        deleted = _event("Succeeded", 0)
+        failed_recreate = _event("Failed", 30, operation=f"{FARMS}/write".lower())
+        self.assertEqual(
+            select_relevant_activity([deleted, failed_recreate], "missing_in_azure"),
+            [deleted],
+        )
+
+    def test_a_recreate_that_succeeded_still_clears_it(self):
+        deleted = _event("Succeeded", 0)
+        recreate = _event("Succeeded", 30, operation=f"{FARMS}/write".lower())
+        self.assertEqual(
+            select_relevant_activity([deleted, recreate], "missing_in_azure"),
+            [recreate],
+        )
+
     def test_a_failure_is_still_returned_when_it_is_all_there_is(self):
         # The timeline keeps its context; event_explains_drift is what stops it
         # being named as the cause.
