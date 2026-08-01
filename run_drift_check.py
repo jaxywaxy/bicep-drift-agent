@@ -42,6 +42,8 @@ from tools.get_live_state import (
     fetch_declared_workspace_tables,
     get_live_state,
     qualify_extension_resource_names,
+    resource_group_exists,
+    ScopeNotFoundError,
 )
 from tools.ignore_patterns import IgnorePatternList
 from tools.logger import get_logger, setup_logging
@@ -206,6 +208,39 @@ def _compile_and_extract(bicep_file: str, param_overrides: dict,
     return arm_resources, deployment_scope
 
 
+def _guard_unverifiable_scope(resource_group: str) -> None:
+    """Refuse to report an empty live set we cannot attribute to an empty scope.
+
+    Zero live resources has two causes that look identical here: the resource
+    group exists and is empty (real, and every declared resource genuinely is
+    missing), or it does not exist at all (a decommissioned/renamed RG, a stale
+    lz-index entry, the wrong subscription). Resource Graph returns success with
+    zero rows for BOTH, so only an explicit ARM read separates them.
+
+    The check runs only on the empty result - the ambiguous case - so a normal
+    scan pays nothing for it. An inconclusive answer aborts too: we cannot prove
+    the scope exists, and 'unverified' must not render as one deletion per
+    declared resource.
+    """
+    exists = resource_group_exists(resource_group, os.environ.get("AZURE_SUBSCRIPTION_ID"))
+    if exists is True:
+        logger.warning(
+            f"Resource group '{resource_group}' exists but is empty - every declared "
+            f"resource will be reported missing."
+        )
+        return
+    detail = (
+        "does not exist" if exists is False
+        else "could not be confirmed to exist (the existence check itself failed)"
+    )
+    raise ScopeNotFoundError(
+        f"Resource group '{resource_group}' {detail}. Refusing to report the "
+        f"template's resources as deleted: an unreadable scope is a targeting "
+        f"problem, not drift. Check the RG name, the subscription, and whether "
+        f"the environment has been decommissioned."
+    )
+
+
 def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources: list[dict],
                       gaps=None) -> list[dict]:
     """Query Resource Graph, then augment with cross-sub resources and Defender pricings.
@@ -234,6 +269,9 @@ def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources:
         logger.error(f"Failed to query Azure: {e}", exc_info=True)
         logger.info("Ensure you're logged in: az login")
         raise
+
+    if not live_resources and deployment_scope != "subscription":
+        _guard_unverifiable_scope(resource_group)
 
     logger.info(f"✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
 
@@ -602,6 +640,12 @@ def main():
 
     try:
         run(bicep_file, resource_group)
+    except ScopeNotFoundError as e:
+        # Exit 2, not 1: a scope that cannot be read is a targeting/config
+        # failure, and CI should be able to tell it apart from both a real
+        # error (1) and a clean scan (0) without parsing logs.
+        logger.error(f"Scope not found: {e}")
+        sys.exit(2)
     except FileNotFoundError as e:
         logger.error(f"File error: {e}")
         sys.exit(1)

@@ -74,7 +74,9 @@ from .common import (  # noqa: F401
     _qualify_child_resource_names,
     _rg_of,
     arm_urlopen,
+    resource_group_exists,
     retry_with_backoff,
+    ScopeNotFoundError,
 )
 from .resource_graph import (  # noqa: F401
     HAS_RESOURCE_GRAPH,
@@ -94,4 +96,6 @@ __all__ = [
     "qualify_extension_resource_names",
     "qualify_diagnostic_setting_names",
     "retry_with_backoff",
+    "resource_group_exists",
+    "ScopeNotFoundError",
 ]
