@@ -138,7 +138,9 @@ _GRANDCHILD_EXPANSION_SPECS = [
 ]
 
 
-def _expand_data_plane_children(resources: list[dict], token: str | None = None) -> list[dict]:
+def _expand_data_plane_children(
+    resources: list[dict], token: str | None = None, gaps=None,
+) -> list[dict]:
     """Expand ARM-REST-only children per _CHILD_EXPANSION_SPECS (see above)."""
     parent_types = {s[0] for s in _CHILD_EXPANSION_SPECS + _RECORDSET_SPECS}
     if not any((r.get("type") or "").lower() in parent_types for r in resources):
@@ -149,6 +151,11 @@ def _expand_data_plane_children(resources: list[dict], token: str | None = None)
             token = DefaultAzureCredential().get_token("https://management.azure.com/.default").token
     except Exception as e:
         logger.warning(f"Could not acquire token for child expansion: {e}")
+        if gaps is not None:
+            gaps.record_all(
+                {spec[3] for spec in _CHILD_EXPANSION_SPECS + _RECORDSET_SPECS if spec[3]},
+                f"no ARM token for child expansion: {e}",
+            )
         return []
 
     def _list(parent_id: str, path: str, api: str) -> list[dict]:
@@ -187,6 +194,8 @@ def _expand_data_plane_children(resources: list[dict], token: str | None = None)
                             f"Could not list {path} for {pname} after retry: {e} - "
                             f"declared {child_type or path} children may false-flag as missing"
                         )
+                        if gaps is not None:
+                            gaps.record(child_type, f"listing {path} failed: {e}")
                         continue
                 for item in items:
                     if skip and skip(item):

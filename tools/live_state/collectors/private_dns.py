@@ -43,7 +43,7 @@ def _shape_zone_group(pe_name: str, rg: str | None, payload: dict) -> dict:
 
 
 def query_private_dns_zone_groups(
-    resources: list[dict], sub_id: str, token: str | None = None
+    resources: list[dict], sub_id: str, token: str | None = None, gaps=None,
 ) -> list[dict]:
     """Fetch the DNS zone groups of every private endpoint already found."""
     endpoints = [
@@ -69,6 +69,9 @@ def query_private_dns_zone_groups(
                 data = _json.load(resp)
         except Exception as e:
             logger.warning(f"Could not query DNS zone groups for endpoint {pe_name}: {e}")
+            if gaps is not None:
+                gaps.record("Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+                            f"zone groups for {pe_name} could not be read: {e}")
             continue
         for group in data.get("value", []):
             out.append(_shape_zone_group(pe_name, rg, group))

@@ -63,6 +63,7 @@ from .collectors.locks import _query_locks  # noqa: F401
 from .collectors.peerings import _expand_vnet_peerings  # noqa: F401
 from .common import (  # noqa: F401
     _ALL_RG_SELECTORS,
+    CollectionGaps,
     _RG_NAME_RE,
     _dedupe_resources_by_id,
     _extract_resource_group_from_id,
@@ -85,6 +86,7 @@ from .resource_graph import (  # noqa: F401
 __all__ = [
     # Primary entry points
     "get_live_state",
+    "CollectionGaps",
     "fetch_cross_subscription_resources",
     "fetch_declared_defender_pricings",
     "query_private_dns_zone_groups",

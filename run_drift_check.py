@@ -35,6 +35,7 @@ from tools.deployment_stacks import (
 )
 from tools.diff_states import ResourceDrift, diff_states, format_drift_report
 from tools.get_live_state import (
+    CollectionGaps,
     fetch_cross_subscription_resources,
     fetch_declared_defender_pricings,
     fetch_declared_workspace_tables,
@@ -171,7 +172,8 @@ def _compile_and_extract(bicep_file: str, param_overrides: dict) -> tuple[list[d
     return arm_resources, deployment_scope
 
 
-def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources: list[dict]) -> list[dict]:
+def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources: list[dict],
+                      gaps=None) -> list[dict]:
     """Query Resource Graph, then augment with cross-sub resources and Defender pricings.
 
     Cross-sub: a vending template may deploy resources into ANOTHER subscription
@@ -190,7 +192,7 @@ def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources:
         scope = "subscription" if deployment_scope == "subscription" else "resource_group"
         if scope == "subscription":
             logger.debug("Querying at subscription scope...")
-        live_resources = get_live_state(resource_group=resource_group, scope=scope)
+        live_resources = get_live_state(resource_group=resource_group, scope=scope, gaps=gaps)
     except ValueError as e:
         logger.error(f"Missing subscription ID: {e}")
         raise
@@ -372,7 +374,8 @@ def _run_stack_sidecar(live_resources: list[dict], resource_group: str,
 def _save_phase1_report(bicep_file: str, resource_group: str,
                         arm_resources: list[dict], live_resources: list[dict],
                         drifts: list[ResourceDrift],
-                        policy_required_tags: dict | None = None) -> None:
+                        policy_required_tags: dict | None = None,
+                        collection_gaps: dict | None = None) -> None:
     """Persist the raw Phase 1 report.
 
     A subscription-scope scan may use '*' or a glob selector (e.g. 'prefix-*');
@@ -394,6 +397,10 @@ def _save_phase1_report(bicep_file: str, resource_group: str,
                 # What in-scope policy MANDATES, not what it changed - Phase 3
                 # matches drifted tag values against this.
                 "policy_required_tags": policy_required_tags or {},
+                # Types the collectors could not read this run. Any
+                # missing_in_azure row of one of these types is unverified, not
+                # confirmed gone - see _mark_unverified_missing.
+                "collection_gaps": collection_gaps or {},
                 "drifts": [
                     {
                         "type": d.resource_type,
@@ -415,9 +422,13 @@ def run(bicep_file: str, resource_group: str):
 
     param_overrides = _resolve_parameter_overrides(bicep_file, resource_group)
     arm_resources, deployment_scope = _compile_and_extract(bicep_file, param_overrides)
-    live_resources = _fetch_live_state(resource_group, deployment_scope, arm_resources)
+    gaps = CollectionGaps()
+    live_resources = _fetch_live_state(resource_group, deployment_scope, arm_resources, gaps=gaps)
     ignore_patterns = _load_ignore_patterns(bicep_file)
     drifts = _diff_states(arm_resources, live_resources, ignore_patterns)
+    # Before the sidecars and the summary: a row the collectors never looked at
+    # must not reach either of them claiming the resource is gone.
+    _mark_unverified_missing(drifts, gaps)
 
     _run_rbac_sidecar(arm_resources, live_resources, resource_group, deployment_scope,
                       ignore_patterns, drifts)
@@ -429,7 +440,42 @@ def run(bicep_file: str, resource_group: str):
     logger.info("Drift Report Summary")
     logger.info(format_drift_report(drifts, resource_group))
     _save_phase1_report(bicep_file, resource_group, arm_resources, live_resources, drifts,
-                        policy_required_tags)
+                        policy_required_tags, collection_gaps=gaps.as_dict())
+
+
+def _mark_unverified_missing(drifts, gaps) -> int:
+    """A resource of a type we could not READ is not evidence of a deletion.
+
+    Every collector logs-and-skips, so a failed listing yields no live rows and
+    the declared resources of that type fall straight through to
+    `missing_in_azure` - identical in the report to a real deletion. This run
+    knows which types went ungathered, so those rows say so instead.
+
+    The row is NOT dropped. Suppressing it would hide a genuine deletion behind
+    a transient ARM error, which is the same silent-swallow that left the backup
+    comparators dead for a month (#330). Report it, and say it is unverified.
+    """
+    if not gaps:
+        return 0
+    marked = 0
+    for drift in drifts:
+        if drift.drift_type != "missing_in_azure" or not gaps.covers(drift.resource_type):
+            continue
+        drift.details["collection_unverified"] = True
+        drift.details["collection_gap_reason"] = gaps.reason_for(drift.resource_type)
+        drift.details["note"] = (
+            "Live state for this type could not be collected on this run, so its "
+            "absence is NOT evidence of deletion - the resource may exist. "
+            f"Reason: {gaps.reason_for(drift.resource_type)}"
+        )
+        marked += 1
+    if marked:
+        logger.warning(
+            f"{marked} missing_in_azure finding(s) could not be verified: "
+            f"{len(gaps)} resource type(s) went ungathered this run "
+            f"({', '.join(sorted(gaps.as_dict()))})"
+        )
+    return marked
 
 
 def main():

@@ -90,6 +90,27 @@ Use this document to understand what the agent can detect, how findings are clas
 | Azure Normalisation | Handles casing, defaults and Azure-generated values |
 | Subset Comparison | Ignores Azure-added read-only metadata |
 | Write-Only Protection | Secrets and write-only values not compared or exposed |
+| Unverified Absence | A type the collectors could not read is reported as unverified, never as deleted |
+
+**Cannot collect is not the same as is not there.** Every collector
+logs-and-skips so one ARM outage never sinks a scan — the documented sidecar
+contract. The cost used to be silent: a declared child with no collected
+counterpart is *indistinguishable* from a deleted one, so a failed listing fell
+straight through to `missing_in_azure`. A local run on 2026-08-01 produced 27
+such rows on an estate where all 27 resources existed, and the data-plane
+expander records an earlier one — a transient `agentPools` failure reporting a
+healthy declared pool as deleted.
+
+Collectors now record the types they could not read. Rows of those types carry
+`details.collection_unverified`, the run's `collection_gaps` map names every
+ungathered type with the reason, and the CI summary prints `[UNVERIFIED]`
+instead of `[MISSING]`.
+
+The row is **not dropped**. Suppressing it would hide a genuine deletion behind
+a transient error — the same silent-swallow that left the backup comparators
+dead for a month (issue #330). It is reported, and labelled. Only the affected
+types are marked: a real deletion of a type that *was* collected still reads as
+a deletion.
 
 ---
 

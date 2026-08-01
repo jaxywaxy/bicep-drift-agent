@@ -32,7 +32,9 @@ def _shape_backup_config(vault_name: str, rg: str | None, payload: dict) -> dict
     }
 
 
-def _query_backup_children(resources: list[dict], sub_id: str, token: str | None = None) -> list[dict]:
+def _query_backup_children(
+    resources: list[dict], sub_id: str, token: str | None = None, gaps=None,
+) -> list[dict]:
     """Query Recovery Services vault backup config via the ARM REST API.
 
     Resource Graph does NOT index vaults/backupconfig (confirmed: a graph query
@@ -63,6 +65,9 @@ def _query_backup_children(resources: list[dict], sub_id: str, token: str | None
                 payload = _json.load(resp)
         except Exception as e:
             logger.warning(f"Could not query backupconfig for vault {vault_name}: {e}")
+            if gaps is not None:
+                gaps.record("Microsoft.RecoveryServices/vaults/backupconfig",
+                            f"backupconfig for {vault_name} could not be read: {e}")
             continue
         out.append(_shape_backup_config(vault_name, rg, payload))
 
@@ -87,7 +92,9 @@ def _shape_backup_policy(vault_name: str, rg: str | None, payload: dict) -> dict
     }
 
 
-def _query_backup_policies(resources: list[dict], sub_id: str, token: str | None = None) -> list[dict]:
+def _query_backup_policies(
+    resources: list[dict], sub_id: str, token: str | None = None, gaps=None,
+) -> list[dict]:
     """Query Recovery Services vault backup POLICIES via the ARM REST API.
 
     Not indexed by Resource Graph (confirmed). Every vault also ships built-in
@@ -118,6 +125,9 @@ def _query_backup_policies(resources: list[dict], sub_id: str, token: str | None
                 data = _json.load(resp)
         except Exception as e:
             logger.warning(f"Could not query backup policies for vault {vault_name}: {e}")
+            if gaps is not None:
+                gaps.record("Microsoft.RecoveryServices/vaults/backupPolicies",
+                            f"backup policies for {vault_name} could not be read: {e}")
             continue
         for pol in data.get("value", []):
             out.append(_shape_backup_policy(vault_name, rg, pol))
