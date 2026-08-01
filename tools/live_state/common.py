@@ -46,7 +46,7 @@ def _kql_rg_filter(resource_group: str) -> str:
 
 
 def _is_rg_glob(selector: str | None) -> bool:
-    """True if the selector is a glob (e.g. 'jacquidev-*') needing multi-RG match."""
+    """True if the selector is a glob (e.g. 'contosodev-*') needing multi-RG match."""
     return bool(selector) and any(c in selector for c in "*?[")
 
 
@@ -79,7 +79,7 @@ def _filter_by_rg_selector(resources: list[dict], selector: str | None) -> list[
     """Keep only resources whose RG matches a glob selector (case-insensitive).
 
     Used for a subscription-scoped scan restricted to a set of RGs (e.g. one
-    landing-zone instance, 'jacquidev-*'). A None/'*'/exact selector is handled
+    landing-zone instance, 'contosodev-*'). A None/'*'/exact selector is handled
     by the KQL query itself, so this is a no-op for those.
     """
     if not _is_rg_glob(selector):

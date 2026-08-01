@@ -96,7 +96,7 @@ class LifecycleRenameTests(unittest.TestCase):
         events = [{
             "timestamp": "2026-07-13T21:58:34+00:00",
             "operation": "Microsoft.OperationalInsights/workspaces/delete",
-            "caller": "jacqui@example.com",
+            "caller": "alice@example.com",
             "status": "Succeeded",
             "resource_id": f"{SUB}/providers/Microsoft.OperationalInsights/workspaces/log-3s7c7weddxr3s",
         }]
@@ -109,7 +109,7 @@ class LifecycleRenameTests(unittest.TestCase):
         events = [{
             "timestamp": "2026-07-13T21:58:34+00:00",
             "operation": "Microsoft.OperationalInsights/workspaces/delete",
-            "caller": "jacqui@example.com",
+            "caller": "alice@example.com",
             "status": "Succeeded",
             "resource_id": f"{SUB}/providers/Microsoft.OperationalInsights/workspaces/log-literal",
         }]

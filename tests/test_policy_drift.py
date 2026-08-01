@@ -147,13 +147,13 @@ class CompareTests(unittest.TestCase):
 
     def test_out_of_band_assignment_is_extra_with_provenance(self):
         drifts = compare_policy_resources(
-            [], [live_assignment(assigned_by="jacqui", created_by="70afebf7")], []
+            [], [live_assignment(assigned_by="alice", created_by="70afebf7")], []
         )
         self.assertEqual(len(drifts), 1)
         d = drifts[0]
         self.assertEqual(d["drift_type"], "extra_in_azure")
         self.assertEqual(d["type"], "Microsoft.Authorization/policyAssignments")
-        self.assertEqual(d["details"]["assigned_by"], "jacqui")
+        self.assertEqual(d["details"]["assigned_by"], "alice")
         self.assertEqual(d["details"]["definition_ref"], TDE_GUID)
 
     def test_bicep_assignment_not_deployed_is_missing(self):
@@ -204,11 +204,11 @@ class NotificationTests(unittest.TestCase):
             "drift_type": "extra_in_azure",
             "details": {"policy_display_name": "Deploy TDE",
                         "scope": f"/subscriptions/{SUB}/resourceGroups/rg",
-                        "assigned_by": "jacqui", "created_on": "2026-07-06T10:00:00Z"},
+                        "assigned_by": "alice", "created_on": "2026-07-06T10:00:00Z"},
         }
         ev = _event_from_drift(drift)
         self.assertIn("policy assignment 'Deploy TDE'", ev.details)
-        self.assertIn("by jacqui", ev.details)
+        self.assertIn("by alice", ev.details)
 
     def test_exemption_event_is_flagged(self):
         from tools.send_notifications import _event_from_drift

@@ -149,9 +149,9 @@ class DetectScanningIdentityTests(unittest.TestCase):
         self.assertIn("bcfc3973-f472-4b19-b850-749af958b7a9", aliases)
 
     def test_user_login_aliases_include_upn(self):
-        cred = _FakeCredential({"oid": "abc-123", "upn": "Jacqui@Example.com"})
+        cred = _FakeCredential({"oid": "abc-123", "upn": "Alice@Example.com"})
         aliases = detect_scanning_identity(credential=cred)
-        self.assertIn("jacqui@example.com", aliases)
+        self.assertIn("alice@example.com", aliases)
 
     def test_failure_returns_empty_set_never_raises(self):
         class _Broken:

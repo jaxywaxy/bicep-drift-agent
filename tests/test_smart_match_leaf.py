@@ -72,9 +72,9 @@ class SmartMatchLeafTests(unittest.TestCase):
     def test_top_level_prefix_matching_preserved(self):
         # Literal lead distinguishes 'general' storage from 'logging' storage.
         self.assertEqual(
-            _match("jacquidevstgtake(uniqueString(resourceGroup().id), 6)",
-                   "jacquidevstl0001", "jacquidevstg0002"),
-            "jacquidevstg0002",
+            _match("contosodevstgtake(uniqueString(resourceGroup().id), 6)",
+                   "contosodevstl0001", "contosodevstg0002"),
+            "contosodevstg0002",
         )
 
     def test_signal_free_name_still_pairs_in_order(self):
@@ -82,8 +82,8 @@ class SmartMatchLeafTests(unittest.TestCase):
         # match on, so pairing in order is correct (each match consumes its
         # candidate). This fallback is load-bearing - do not remove it.
         expr = "toLower(format('{0}st{1}', parameters('prefix'), take(uniqueString(x),6)))"
-        self.assertEqual(_match(expr, "jacquidevstgm4fg23", "jacquidevstla7m6et"),
-                         "jacquidevstgm4fg23")
+        self.assertEqual(_match(expr, "contosodevstgm4fg23", "contosodevstla7m6et"),
+                         "contosodevstgm4fg23")
 
     def test_single_candidate_is_credible(self):
         self.assertEqual(_match(FUNC_CFG, "func-drift-3s7c7weddxr3s/appsettings"),

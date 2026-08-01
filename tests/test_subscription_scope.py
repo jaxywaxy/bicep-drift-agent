@@ -16,16 +16,16 @@ from tools.get_live_state import _filter_by_rg_selector, _is_rg_glob, _rg_of
 from tools.rg_selector import rg_label
 
 RESOURCES = [
-    {"resource_group": "jacquidev-rg-networking", "name": "vnet-dev"},
-    {"resource_group": "jacquidev-rg-apps", "name": "app-dev"},
-    {"resource_group": "jacquitest-rg-networking", "name": "vnet-test"},
+    {"resource_group": "contosodev-rg-networking", "name": "vnet-dev"},
+    {"resource_group": "contosodev-rg-apps", "name": "app-dev"},
+    {"resource_group": "contosotest-rg-networking", "name": "vnet-test"},
     {"id": "/subscriptions/s/resourceGroups/NetworkWatcherRG/providers/x/y/nw", "name": "nw"},
 ]
 
 
 class IsRgGlobTests(unittest.TestCase):
     def test_glob_detection(self):
-        self.assertTrue(_is_rg_glob("jacquidev-*"))
+        self.assertTrue(_is_rg_glob("contosodev-*"))
         self.assertTrue(_is_rg_glob("*"))
         self.assertFalse(_is_rg_glob("rg-exact"))
         self.assertFalse(_is_rg_glob(None))
@@ -43,11 +43,11 @@ class RgOfTests(unittest.TestCase):
 
 class FilterByRgSelectorTests(unittest.TestCase):
     def test_glob_keeps_matching_instance_only(self):
-        kept = _filter_by_rg_selector(RESOURCES, "jacquidev-*")
+        kept = _filter_by_rg_selector(RESOURCES, "contosodev-*")
         self.assertEqual({r["name"] for r in kept}, {"vnet-dev", "app-dev"})
 
     def test_glob_is_case_insensitive(self):
-        kept = _filter_by_rg_selector(RESOURCES, "JACQUIDEV-*")
+        kept = _filter_by_rg_selector(RESOURCES, "CONTOSODEV-*")
         self.assertEqual({r["name"] for r in kept}, {"vnet-dev", "app-dev"})
 
     def test_non_glob_selector_is_noop(self):
@@ -66,11 +66,11 @@ class RgLabelTests(unittest.TestCase):
         self.assertEqual(rg_label("*"), "subscription")
         self.assertEqual(rg_label(None), "subscription")
         self.assertEqual(rg_label(""), "subscription")
-        self.assertEqual(rg_label("jacquidev-*"), "jacquidev-all")
+        self.assertEqual(rg_label("contosodev-*"), "contosodev-all")
         self.assertEqual(rg_label("rg-networking"), "rg-networking")
 
     def test_label_is_filesystem_safe(self):
-        for sel in ["*", "jacquidev-*", "a/b*c", "x?y"]:
+        for sel in ["*", "contosodev-*", "a/b*c", "x?y"]:
             self.assertNotIn("*", rg_label(sel))
             self.assertNotIn("/", rg_label(sel))
             self.assertNotIn("?", rg_label(sel))
