@@ -159,7 +159,57 @@ def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
                 'reason': f"Could not query activity log: {str(e)[:50]}",
             }
 
+    _inherit_recovered_parent_names(report_data.get("drifts", []))
     logger.info("Resource lifecycle detection completed")
+
+
+def _inherit_recovered_parent_names(drifts: list[dict]) -> int:
+    """Give a child the real parent name its own parent row already recovered.
+
+    A parent is rescued above because its Activity Log event carries the true
+    Azure id. A CHILD normally has no event of its own - Azure logs the parent's
+    delete, not each child's - so nothing rescues it and it keeps the
+    placeholder. The last teardown report shows both halves at once: 15 parents
+    resolved to real names while 18 children still read `sqldrift[86c9cbf6]/
+    driftdb`, with `sqldrift3s7c7weddxr3s` sitting in the same report.
+
+    The cost is not only legibility. The placeholder is embedded in the child's
+    synthetic resource_id, so the id is not a real ARM id, and the unresolved
+    name keeps the row off the id-match path and into the type fallback - the
+    one narrowed by shape matching in #358.
+
+    Runs as a pass AFTER the loop because drift order is arbitrary: a child can
+    be attributed before the parent that rescues its name.
+    """
+    recovered = {
+        drift["bicep_name_expression"]: drift["name"]
+        for drift in drifts
+        if drift.get("bicep_name_expression") and drift.get("name")
+    }
+    if not recovered:
+        return 0
+
+    inherited = 0
+    for drift in drifts:
+        name = drift.get("name") or ""
+        if drift.get("bicep_name_expression") or "/" not in name:
+            continue  # already rescued on its own evidence, or not a child
+        parent, _, tail = name.partition("/")
+        real_parent = recovered.get(parent)
+        if not real_parent:
+            continue
+        drift["bicep_name_expression"] = name
+        drift["name"] = f"{real_parent}/{tail}"
+        # The placeholder appears verbatim in the synthetic id built from the
+        # declared name, so replacing it there yields the real ARM id.
+        lifecycle = drift.get("lifecycle") or {}
+        if isinstance(lifecycle.get("resource_id"), str):
+            lifecycle["resource_id"] = lifecycle["resource_id"].replace(parent, real_parent)
+        inherited += 1
+
+    if inherited:
+        logger.info(f"  Inherited {inherited} child name(s) from a recovered parent")
+    return inherited
 
 
 def _policy_imposed(path: str, desired, actual, required: dict) -> dict | None:
