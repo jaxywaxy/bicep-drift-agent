@@ -1,4 +1,10 @@
 anthropic==0.117.0
+# CA bundle for the ARM REST path (tools/http_util). Already present
+# transitively via azure-core -> requests, but declared because http_util
+# imports it directly and a scan's correctness depends on it: without a usable
+# trust store every ARM REST call fails and declared children false-flag as
+# missing_in_azure.
+certifi==2026.6.17
 azure-identity==1.25.3
 azure-mgmt-resource==26.0.0
 azure-mgmt-resourcegraph==8.0.1

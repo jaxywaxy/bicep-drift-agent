@@ -27,8 +27,14 @@ def _resource(rtype, name, rid):
 
 
 def _fake_urlopen(responses):
-    """urlopen replacement serving canned {url-substring: value-list} JSON."""
-    def opener(req, timeout=0):
+    """urlopen replacement serving canned {url-substring: value-list} JSON.
+
+    Takes **_ because it stands in for urllib.request.urlopen, which accepts
+    more than (req, timeout) - http_util also passes the TLS `context`. A fake
+    that rejects a kwarg the real function takes fails inside the collector's
+    log-and-skip, which turns into an empty expansion and reads as absent data.
+    """
+    def opener(req, timeout=0, **_):
         url = req.full_url
         for frag, value in responses.items():
             if frag in url:
