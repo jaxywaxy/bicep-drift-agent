@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from orchestration.targeting import _find_repo_ignore
 from tools.compile_bicep import (
     compile_bicep,
     detect_deployment_scope,
@@ -44,12 +45,13 @@ from tools.get_live_state import (
 )
 from tools.ignore_patterns import IgnorePatternList
 from tools.logger import get_logger, setup_logging
+from tools.normalizer.flatten import SkippedDeclarations
 from tools.policy import (
     compare_policy_resources,
     fetch_policy_resources,
     fetch_resource_group_tags,
-    resolve_policy_required_tags,
     policy_drift_enabled,
+    resolve_policy_required_tags,
 )
 from tools.rbac import (
     collect_managed_identity_principals,
@@ -77,13 +79,43 @@ def _load_arm_parameters_env() -> dict:
         return {}
 
 
+def _coerce_bicepparam_value(raw: str):
+    """Give a .bicepparam value its Bicep type instead of leaving it a string.
+
+    A quoted value is a string; `true`/`false` are booleans and bare numerals
+    are numbers, exactly as Bicep reads them. Returning everything as a string
+    is wrong the moment a parameter feeds a resource PROPERTY: a declared
+    `capacity` of '3' never equals the 3 Azure returns, so the scan invents
+    property drift. Condition gates survived it by luck - the resolver happens
+    to accept the string 'false' as well as False.
+
+    Anything unrecognised (an expression, an array, an object) stays the raw
+    string, which is what this line-parser could offer before.
+    """
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in ("'", '"'):
+        return raw[1:-1]
+    lowered = raw.lower()
+    if lowered == "true":
+        return True
+    if lowered == "false":
+        return False
+    try:
+        return int(raw)
+    except ValueError:
+        pass
+    try:
+        return float(raw)
+    except ValueError:
+        return raw.strip("'\"")
+
+
 def _load_bicepparam_file(bicep_file: str, resource_group: str) -> dict:
     """Read parameters/<env>.bicepparam next to the bicep file (env = last RG segment).
 
     Simple line-by-line parser: `param name = 'value'` -> {name: "value"}. Strips
-    // comments and surrounding quotes. Non-string types come out as strings -
-    fine for condition gates, imperfect for numeric/boolean resource properties
-    (see docs/CONFIGURATION_REFERENCE.md).
+    // comments and surrounding quotes, and gives booleans and numbers their
+    Bicep type (see _coerce_bicepparam_value) so a parameter feeding a numeric
+    or boolean resource property compares against what Azure returns.
     """
     environment = resource_group.split('-')[-1]  # rg-prod → prod
     bicepparam_file = Path(bicep_file).parent / "parameters" / f"{environment}.bicepparam"
@@ -106,8 +138,9 @@ def _load_bicepparam_file(bicep_file: str, resource_group: str) -> dict:
         if len(parts) != 2:
             continue
         key = parts[0].strip()
-        value = parts[1].strip().strip("'\"")
-        if value:  # skip empty values
+        raw = parts[1].strip()
+        value = _coerce_bicepparam_value(raw)
+        if value != "":  # skip empty values, but keep False and 0
             params[key] = value
     if params:
         logger.debug(f"Parameters loaded from {bicepparam_file.name}: {params}")
@@ -149,7 +182,8 @@ def _resolve_parameter_overrides(bicep_file: str, resource_group: str) -> dict:
     return _load_arm_parameters_json(bicep_file)
 
 
-def _compile_and_extract(bicep_file: str, param_overrides: dict) -> tuple[list[dict], str]:
+def _compile_and_extract(bicep_file: str, param_overrides: dict,
+                         skipped=None) -> tuple[list[dict], str]:
     """Compile Bicep → ARM and extract resources. Returns (arm_resources, deployment_scope)."""
     logger.info("Step 1: Compiling Bicep template...")
     try:
@@ -163,7 +197,7 @@ def _compile_and_extract(bicep_file: str, param_overrides: dict) -> tuple[list[d
         logger.info("Detected subscription-scoped template (Landing Zone)")
 
     try:
-        arm_resources = extract_resources_from_arm(arm_template, param_overrides)
+        arm_resources = extract_resources_from_arm(arm_template, param_overrides, skipped=skipped)
     except Exception as e:
         logger.error(f"Failed to extract resources: {e}", exc_info=True)
         raise
@@ -216,18 +250,33 @@ def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources:
 
 
 def _load_ignore_patterns(bicep_file: str) -> IgnorePatternList:
-    """Find and load .drift-ignore from the bicep repo root, cwd, or parent dir."""
+    """Load the agent's baseline .drift-ignore LAYERED with the bicep repo's.
+
+    This used to return the FIRST file it found, so a landing zone that ships
+    its own .drift-ignore silently replaced the agent's baseline instead of
+    adding to it - the baseline holds the overwhelming majority of the patterns
+    (Azure-created children Bicep never declares), so every one of them came
+    back as drift in the Phase-1 artifact. Phase 2 layers them correctly via
+    `from_files`; Phase 1 disagreeing with Phase 2 about what is ignorable is
+    the bug, and `run_drift_check.py` is a supported entry point in its own
+    right.
+
+    Same two sources and the same order as
+    orchestration.reconciliation._annotate_and_filter, and the same walk-up
+    finder, so the two cannot drift apart again.
+    """
     logger.info("Step 3: Loading ignore patterns...")
-    bicep_dir = Path(bicep_file).parent.parent  # bicep/main.bicep → repo root
-    for path in (bicep_dir / ".drift-ignore", Path(".drift-ignore"), Path("../.drift-ignore")):
-        if path.exists():
-            logger.debug(f"Found .drift-ignore at: {path.resolve()}")
-            ignore_patterns = IgnorePatternList.from_file(path)
-            if ignore_patterns.patterns:
-                ignore_patterns.log_summary()
-            return ignore_patterns
-    logger.debug("No ignore patterns found")
-    return IgnorePatternList([])
+    ignore_paths = [Path(".drift-ignore")]
+    repo_ignore = _find_repo_ignore(bicep_file)
+    if repo_ignore:
+        ignore_paths.append(repo_ignore)
+        logger.info(f"Merged per-LZ ignore profile from {repo_ignore}")
+    ignore_patterns = IgnorePatternList.from_files(*ignore_paths)
+    if ignore_patterns.patterns:
+        ignore_patterns.log_summary()
+    else:
+        logger.debug("No ignore patterns found")
+    return ignore_patterns
 
 
 def _diff_states(arm_resources: list[dict], live_resources: list[dict],
@@ -375,7 +424,8 @@ def _save_phase1_report(bicep_file: str, resource_group: str,
                         arm_resources: list[dict], live_resources: list[dict],
                         drifts: list[ResourceDrift],
                         policy_required_tags: dict | None = None,
-                        collection_gaps: dict | None = None) -> None:
+                        collection_gaps: dict | None = None,
+                        condition_skipped: list | None = None) -> None:
     """Persist the raw Phase 1 report.
 
     A subscription-scope scan may use '*' or a glob selector (e.g. 'prefix-*');
@@ -401,6 +451,10 @@ def _save_phase1_report(bicep_file: str, resource_group: str,
                 # missing_in_azure row of one of these types is unverified, not
                 # confirmed gone - see _mark_unverified_missing.
                 "collection_gaps": collection_gaps or {},
+                # Declarations this scan's parameters gated off. An extra_in_azure
+                # of one of these types is a parameter mismatch, not an unmanaged
+                # resource - see _annotate_condition_skipped.
+                "condition_skipped": condition_skipped or [],
                 "drifts": [
                     {
                         "type": d.resource_type,
@@ -421,7 +475,9 @@ def run(bicep_file: str, resource_group: str):
     logger.info(f"Bicep Drift Check — {bicep_file} (resource group: {resource_group})")
 
     param_overrides = _resolve_parameter_overrides(bicep_file, resource_group)
-    arm_resources, deployment_scope = _compile_and_extract(bicep_file, param_overrides)
+    skipped = SkippedDeclarations()
+    arm_resources, deployment_scope = _compile_and_extract(bicep_file, param_overrides,
+                                                           skipped=skipped)
     gaps = CollectionGaps()
     live_resources = _fetch_live_state(resource_group, deployment_scope, arm_resources, gaps=gaps)
     ignore_patterns = _load_ignore_patterns(bicep_file)
@@ -429,6 +485,7 @@ def run(bicep_file: str, resource_group: str):
     # Before the sidecars and the summary: a row the collectors never looked at
     # must not reach either of them claiming the resource is gone.
     _mark_unverified_missing(drifts, gaps)
+    _annotate_condition_skipped(drifts, skipped)
 
     _run_rbac_sidecar(arm_resources, live_resources, resource_group, deployment_scope,
                       ignore_patterns, drifts)
@@ -440,7 +497,8 @@ def run(bicep_file: str, resource_group: str):
     logger.info("Drift Report Summary")
     logger.info(format_drift_report(drifts, resource_group))
     _save_phase1_report(bicep_file, resource_group, arm_resources, live_resources, drifts,
-                        policy_required_tags, collection_gaps=gaps.as_dict())
+                        policy_required_tags, collection_gaps=gaps.as_dict(),
+                        condition_skipped=skipped.as_list())
 
 
 def _mark_unverified_missing(drifts, gaps) -> int:
@@ -476,6 +534,48 @@ def _mark_unverified_missing(drifts, gaps) -> int:
             f"({', '.join(sorted(gaps.as_dict()))})"
         )
     return marked
+
+
+def _annotate_condition_skipped(drifts, skipped) -> int:
+    """A resource whose declaration this scan gated OFF is not unmanaged.
+
+    `flatten_resources` drops a declaration whose `condition` resolves false, so
+    the deployed resource has nothing to match and comes back `extra_in_azure` -
+    which reads as "unmanaged resource, consider deleting". That is the tool
+    recommending you delete something you deploy on purpose, and it cost a live
+    round on 2026-07-21: a scan run with default params (deployAks=false)
+    reported the real AKS cluster as unmanaged. The analysis declined to delete
+    it, but only by INFERRING a contradiction from the attribution - the fact was
+    known at compile time and thrown away.
+
+    The condition evaluated false against THIS scan's parameters. That is a
+    parameter mismatch between the scan and the deployment, not a verdict about
+    the resource.
+    """
+    if not skipped:
+        return 0
+    annotated = 0
+    for drift in drifts:
+        if drift.drift_type != "extra_in_azure" or not skipped.covers(drift.resource_type):
+            continue
+        entry = skipped.entry_for(drift.resource_type)
+        drivers = ", ".join(f"{k}={v!r}" for k, v in (entry.get("parameters") or {}).items())
+        drift.details["condition_skipped"] = True
+        drift.details["skipped_condition"] = entry.get("condition")
+        drift.details["skipped_parameters"] = entry.get("parameters")
+        drift.details["note"] = (
+            "Declared in the template but condition-skipped for this scan"
+            + (f" ({drivers})" if drivers else "")
+            + " - a parameter mismatch between the scan and the deployment, "
+            "NOT an unmanaged resource. Do not delete it on this evidence."
+        )
+        annotated += 1
+    if annotated:
+        logger.warning(
+            f"{annotated} extra_in_azure finding(s) match a declaration this scan "
+            f"gated off - check the scan's parameters before treating them as unmanaged"
+        )
+    return annotated
 
 
 def main():

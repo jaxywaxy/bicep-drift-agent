@@ -127,8 +127,10 @@ class ThePipelineActuallyCallsItTests(unittest.TestCase):
                 gaps.record(gapped_type, "collector down")
             return []
 
+        # **_ deliberately: a fake narrower than what it replaces breaks the
+        # moment the real signature grows, which says nothing about this test.
         def fake_save(bicep_file, resource_group, arm, live, drifts,
-                      policy_required_tags=None, collection_gaps=None):
+                      policy_required_tags=None, collection_gaps=None, **_):
             captured["drifts"] = drifts
             captured["collection_gaps"] = collection_gaps
 

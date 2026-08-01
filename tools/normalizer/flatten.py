@@ -7,6 +7,7 @@ parameter defaults respected and cross-scope module targets stamped).
 Also normalises live Azure resources into the same shape.
 """
 
+import re
 from typing import Any
 
 from .expressions import (
@@ -18,6 +19,75 @@ from .template import (
     extract_parameters,
     extract_variables,
 )
+
+_PARAM_REF_RE = re.compile(r"parameters\(\s*'([^']+)'\s*\)")
+
+
+def _declared_types(resource: dict) -> set[str]:
+    """Every resource TYPE this declaration would deploy.
+
+    A gated MODULE is a Microsoft.Resources/deployments resource, so recording
+    its own type tells you nothing about what went undeclared - the types that
+    matter are inside its nested template. Descends so a skipped
+    `if (deployAks)` module reports Microsoft.ContainerService/managedClusters,
+    which is what a live cluster's `extra_in_azure` row can be matched against.
+    """
+    resource_type = resource.get("type", "")
+    if resource_type != "Microsoft.Resources/deployments":
+        return {resource_type} if resource_type else set()
+
+    nested = (resource.get("properties", {}) or {}).get("template", {}) or {}
+    inner = nested.get("resources", [])
+    inner = list(inner.values()) if isinstance(inner, dict) else (inner or [])
+    types: set[str] = set()
+    for child in inner:
+        if isinstance(child, dict):
+            types |= _declared_types(child)
+    return types
+
+
+class SkippedDeclarations:
+    """Declarations dropped because their `condition` resolved false.
+
+    Discarding them outright loses the one fact that explains the resulting
+    report: a deployed resource whose declaration was gated off comes back as
+    `extra_in_azure` -> "unmanaged resource, consider deleting". That is the
+    tool recommending you delete something you deploy on purpose. It cost a live
+    round on 2026-07-21, when a scan run with default params (deployAks=false)
+    reported the real cluster as unmanaged.
+
+    The condition evaluated false against THIS scan's parameters, which is not
+    the same as the resource being undeclared - it usually means the scan and
+    the deployment were given different parameters.
+    """
+
+    def __init__(self) -> None:
+        self._by_type: dict[str, dict] = {}
+
+    def record(self, resource: dict, condition: Any, parameters: dict) -> None:
+        drivers = sorted(set(_PARAM_REF_RE.findall(str(condition))))
+        for resource_type in _declared_types(resource):
+            self._by_type.setdefault(resource_type.lower(), {
+                "type": resource_type,
+                "condition": str(condition),
+                "parameters": {p: parameters.get(p) for p in drivers},
+            })
+
+    def covers(self, resource_type: str | None) -> bool:
+        return bool(resource_type) and str(resource_type).lower() in self._by_type
+
+    def entry_for(self, resource_type: str | None) -> dict | None:
+        return self._by_type.get(str(resource_type or "").lower())
+
+    def as_list(self) -> list[dict]:
+        """Sorted so a report artifact is byte-stable across runs."""
+        return [self._by_type[k] for k in sorted(self._by_type)]
+
+    def __bool__(self) -> bool:
+        return bool(self._by_type)
+
+    def __len__(self) -> int:
+        return len(self._by_type)
 
 
 def _resolve_value(value: Any, parameters: dict, variables: dict) -> Any:
@@ -70,13 +140,16 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
     return normalized
 
 
-def flatten_resources(arm_template: dict, parameters: dict = None, variables: dict = None) -> list[dict]:
+def flatten_resources(arm_template: dict, parameters: dict = None, variables: dict = None,
+                      skipped: SkippedDeclarations | None = None) -> list[dict]:
     """Flatten ARM template resources, handling nested deployments and copy loops.
 
     - Extract top-level resources.
     - Recursively flatten nested deployments.
     - Resolve expression-based names using parameters and variables.
-    - Skip resources whose `condition` resolves to a definitive false.
+    - Skip resources whose `condition` resolves to a definitive false, recording
+      them in `skipped` so a gated-off declaration can still explain a live
+      resource that would otherwise read as unmanaged.
     """
     if parameters is None:
         parameters = extract_parameters(arm_template)
@@ -113,6 +186,8 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
         if condition is not None:
             resolved = _resolve_value(condition, parameters, variables)
             if resolved is False or (isinstance(resolved, str) and resolved.lower() == "false"):
+                if skipped is not None:
+                    skipped.record(resource, condition, parameters)
                 continue
 
         if resource_type == "Microsoft.Resources/deployments":
@@ -142,7 +217,8 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
                 # because the resolver can't evaluate toLower and left them
                 # unresolvable; this makes the bare-format case behave the same.
                 nested_vars = extract_variables(nested_template, nested_params)
-                nested_resources = flatten_resources(nested_template, nested_params, nested_vars)
+                nested_resources = flatten_resources(
+                    nested_template, nested_params, nested_vars, skipped=skipped)
                 # Cross-scope module (scope: resourceGroup(otherSub, rg)): stamp the
                 # target so the scan can verify these resources in THEIR subscription
                 # instead of flagging them missing in the scanned one.
