@@ -55,7 +55,7 @@ def _has_unresolvable_expression(name_str: str) -> bool:
 
     The analyzer partially resolves names, so an unresolvable name may keep its
     bracket form ([format(...)]) OR appear as a bare call
-    (jacquidevstgtake(uniqueString(resourceGroup().id), 6)). Detect either: a
+    (contosodevstgtake(uniqueString(resourceGroup().id), 6)). Detect either: a
     known function immediately followed by '(' is unresolvable.
     """
     if not isinstance(name_str, str):
@@ -163,9 +163,9 @@ def _find_best_match(bicep_resource: dict, candidates: list[dict]) -> dict:
         return None
 
     # Prefer the candidate sharing the longest name prefix with the Bicep name.
-    # The Bicep name is partially resolved (e.g. 'jacquidevstgtake(uniqueString(
-    # ...))'); its literal lead ('jacquidevstg') still distinguishes a 'general'
-    # storage from a 'logging' one ('jacquidevstl') when several of the same type
+    # The Bicep name is partially resolved (e.g. 'contosodevstgtake(uniqueString(
+    # ...))'); its literal lead ('contosodevstg') still distinguishes a 'general'
+    # storage from a 'logging' one ('contosodevstl') when several of the same type
     # exist. Longest-common-prefix is robust to the glued-on function tokens.
     bicep_name = (bicep_resource.get('name') or '').lower()
 

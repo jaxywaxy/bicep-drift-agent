@@ -32,9 +32,9 @@ def rg_label(selector) -> str:
     """A filesystem-safe label for an RG selector, used in report filenames.
 
     A subscription-scoped scan may be driven by '*' (whole subscription) or a
-    glob ('jacquidev-*'), neither of which is a valid filename. Map:
+    glob ('contosodev-*'), neither of which is a valid filename. Map:
       None/''/'*'  -> 'subscription'
-      'jacquidev-*'-> 'jacquidev-all'
+      'contosodev-*'-> 'contosodev-all'
       exact name   -> unchanged
     """
     if selector in (None, "", WILDCARD):

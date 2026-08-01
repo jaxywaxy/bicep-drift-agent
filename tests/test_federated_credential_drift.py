@@ -3,8 +3,9 @@ Federated identity credential trust-boundary drift is CRITICAL.
 
 Repointing a federated credential's subject or issuer lets a different external
 repo/branch/IdP mint tokens as the managed identity - a persistence / supply-
-chain escalation. Live round: the subject repoint (jaxywaxy -> evil-fork) was
-detected correctly but rated only 'warning'; subject/issuer are now critical.
+chain escalation. Live round: the subject repoint (declared repo -> an attacker
+fork) was detected correctly but rated only 'warning'; subject/issuer are now
+critical.
 """
 
 import os
@@ -32,7 +33,7 @@ def _cred(subject, issuer="https://token.actions.githubusercontent.com"):
 
 class FederatedCredentialDriftTests(unittest.TestCase):
     def test_subject_repoint_is_critical(self):
-        bicep = _cred("repo:jaxywaxy/drift-test-resources:ref:refs/heads/main")
+        bicep = _cred("repo:contoso/platform-iac:ref:refs/heads/main")
         live = _cred("repo:evil-fork/drift-test-resources:ref:refs/heads/main")
         diffs = [d for d in PropertyComparator.compare_properties(bicep, live)
                  if d.property_path == "properties.subject"]
@@ -40,8 +41,8 @@ class FederatedCredentialDriftTests(unittest.TestCase):
         self.assertEqual(diffs[0].severity, "critical")
 
     def test_issuer_change_is_critical(self):
-        bicep = _cred("repo:jaxywaxy/drift-test-resources:ref:refs/heads/main")
-        live = _cred("repo:jaxywaxy/drift-test-resources:ref:refs/heads/main",
+        bicep = _cred("repo:contoso/platform-iac:ref:refs/heads/main")
+        live = _cred("repo:contoso/platform-iac:ref:refs/heads/main",
                      issuer="https://evil-idp.example.com")
         diffs = [d for d in PropertyComparator.compare_properties(bicep, live)
                  if d.property_path == "properties.issuer"]
@@ -49,7 +50,7 @@ class FederatedCredentialDriftTests(unittest.TestCase):
         self.assertEqual(diffs[0].severity, "critical")
 
     def test_identical_credential_no_drift(self):
-        cred = _cred("repo:jaxywaxy/drift-test-resources:ref:refs/heads/main")
+        cred = _cred("repo:contoso/platform-iac:ref:refs/heads/main")
         paths = [d.property_path for d in PropertyComparator.compare_properties(cred, cred)]
         self.assertNotIn("properties.subject", paths)
         self.assertNotIn("properties.issuer", paths)

@@ -64,7 +64,7 @@ def _resolve_target_resource_groups(bicep_file: str, resource_group: str) -> lis
     """Resolve which resource group(s) this invocation should scan.
 
     A subscription-scoped landing zone spans several RGs from ONE template and is
-    scanned as a SINGLE pass (optionally filtered to an RG glob like 'jacquidev-*').
+    scanned as a SINGLE pass (optionally filtered to an RG glob like 'contosodev-*').
     Only an RG-scoped template treats '*' as "discover and scan each RG separately".
     """
     try:

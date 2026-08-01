@@ -291,7 +291,7 @@ jobs:
           # Resolve resource-group selectors.
           #   - subscription_scoped check: the template is subscription-scoped
           #     (a landing zone spanning several RGs). Pass the selector ('*' or a
-          #     glob like 'jacquidev-*') STRAIGHT THROUGH - the agent scans the LZ
+          #     glob like 'contosodev-*') STRAIGHT THROUGH - the agent scans the LZ
           #     in one sub-wide pass filtered to matching RGs. Do NOT expand, or
           #     each RG would be compared to the whole template (false 'missing').
           #   - otherwise (RG-scoped template): a '*'/glob is expanded against the

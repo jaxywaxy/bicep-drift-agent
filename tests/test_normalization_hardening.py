@@ -97,12 +97,12 @@ class UnresolvableDetectionTests(unittest.TestCase):
     def test_detects_bare_function_call_without_brackets(self):
         # The analyzer strips [] leaving a bare call - still unresolvable.
         self.assertTrue(_has_unresolvable_expression(
-            "jacquidevstgtake(uniqueString(resourceGroup().id), 6)"))
+            "contosodevstgtake(uniqueString(resourceGroup().id), 6)"))
         self.assertTrue(_has_unresolvable_expression(
             "toLower(format('{0}st', parameters('prefix')))"))
 
     def test_plain_name_is_resolvable(self):
-        self.assertFalse(_has_unresolvable_expression("jacquidev-vnet-hub"))
+        self.assertFalse(_has_unresolvable_expression("contosodev-vnet-hub"))
 
 
 class SmartMatchCaseInsensitiveTests(unittest.TestCase):
@@ -110,14 +110,14 @@ class SmartMatchCaseInsensitiveTests(unittest.TestCase):
         # Bicep PascalCase type + uniqueString name; live lowercase type + real name.
         bicep = [{"type": "Microsoft.Storage/storageAccounts",
                   "name": "toLower(format('{0}stg{1}', parameters('prefix'), take(uniqueString(x),6)))"}]
-        live = [{"type": "microsoft.storage/storageaccounts", "name": "jacquidevstgm4fg23"}]
+        live = [{"type": "microsoft.storage/storageaccounts", "name": "contosodevstgm4fg23"}]
         matched, _, _ = smart_match_resources(bicep, live, {})
         self.assertEqual(len(matched), 1)
-        self.assertEqual(matched[0]["matched_to"], "jacquidevstgm4fg23")
+        self.assertEqual(matched[0]["matched_to"], "contosodevstgm4fg23")
 
         # The extra_in_azure drift (lowercase type) is annotated away.
         drifts = [{"type": "microsoft.storage/storageaccounts",
-                   "name": "jacquidevstgm4fg23", "drift_type": "extra_in_azure"}]
+                   "name": "contosodevstgm4fg23", "drift_type": "extra_in_azure"}]
         annotated = annotate_drifts_with_matches(drifts, matched)
         self.assertEqual(annotated[0]["drift_type"], "matched_unresolvable")
         self.assertTrue(annotated[0]["is_matched"])
@@ -126,18 +126,20 @@ class SmartMatchCaseInsensitiveTests(unittest.TestCase):
         # Two storage accounts; general (stg) vs logging (stl) must pair correctly.
         bicep = [
             {"type": "Microsoft.Storage/storageAccounts",
-             "name": "jacquidevstgtake(uniqueString(x),6)"},
+             "name": "contosodevstgtake(uniqueString(x),6)"},
             {"type": "Microsoft.Storage/storageAccounts",
-             "name": "jacquidevstltake(uniqueString(x),6)"},
+             "name": "contosodevstltake(uniqueString(x),6)"},
         ]
         live = [
-            {"type": "microsoft.storage/storageaccounts", "name": "jacquidevstla7m6et"},
-            {"type": "microsoft.storage/storageaccounts", "name": "jacquidevstgm4fg23"},
+            {"type": "microsoft.storage/storageaccounts", "name": "contosodevstla7m6et"},
+            {"type": "microsoft.storage/storageaccounts", "name": "contosodevstgm4fg23"},
         ]
         matched, _, _ = smart_match_resources(bicep, live, {})
-        pairs = {m["name"][:12]: m["matched_to"] for m in matched}
-        self.assertEqual(pairs["jacquidevstg"], "jacquidevstgm4fg23")
-        self.assertEqual(pairs["jacquidevstl"], "jacquidevstla7m6et")
+        # Key on the discriminating lead: prefix + the stg/stl role segment
+        # (len("contosodev") + 3). Slicing shorter collapses both into one key.
+        pairs = {m["name"][:13]: m["matched_to"] for m in matched}
+        self.assertEqual(pairs["contosodevstg"], "contosodevstgm4fg23")
+        self.assertEqual(pairs["contosodevstl"], "contosodevstla7m6et")
 
 
 class UniqueStringPropertyDriftTests(unittest.TestCase):
@@ -151,11 +153,11 @@ class UniqueStringPropertyDriftTests(unittest.TestCase):
     def test_sku_change_on_uniquestring_storage_is_detected(self):
         arm = [self._storage(
             "toLower(format('{0}stg{1}', parameters('prefix'), take(uniqueString(x),6)))", "Standard_LRS")]
-        live = [{"type": "microsoft.storage/storageaccounts", "name": "jacquidevstgm4fg23",
+        live = [{"type": "microsoft.storage/storageaccounts", "name": "contosodevstgm4fg23",
                  "sku": {"name": "Standard_GRS"}, "properties": {}}]
         comparison = _build_comparison_set(arm, live)
         # The remapped resource now carries the live name.
-        self.assertEqual(comparison[-1]["name"], "jacquidevstgm4fg23")
+        self.assertEqual(comparison[-1]["name"], "contosodevstgm4fg23")
         drifts = DriftDetector.detect_drift(comparison, live)
         modified = [d for d in drifts if d.drift_type == "modified"]
         self.assertTrue(any(
@@ -168,14 +170,14 @@ class UniqueStringPropertyDriftTests(unittest.TestCase):
         expr = "toLower(format('{0}st{1}', parameters('prefix'), take(uniqueString(x),6)))"
         arm = [self._storage(expr, "Standard_LRS"), self._storage(expr, "Standard_LRS")]
         live = [
-            {"type": "microsoft.storage/storageaccounts", "name": "jacquidevstgm4fg23",
+            {"type": "microsoft.storage/storageaccounts", "name": "contosodevstgm4fg23",
              "sku": {"name": "Standard_GRS"}, "properties": {}},
-            {"type": "microsoft.storage/storageaccounts", "name": "jacquidevstla7m6et",
+            {"type": "microsoft.storage/storageaccounts", "name": "contosodevstla7m6et",
              "sku": {"name": "Standard_LRS"}, "properties": {}},
         ]
         comparison = _build_comparison_set(arm, live)
         names = sorted(c["name"] for c in comparison)
-        self.assertEqual(names, ["jacquidevstgm4fg23", "jacquidevstla7m6et"])  # both, no collision
+        self.assertEqual(names, ["contosodevstgm4fg23", "contosodevstla7m6et"])  # both, no collision
         drifts = DriftDetector.detect_drift(comparison, live)
         modified = [d for d in drifts if d.drift_type == "modified"]
         # Exactly the GRS account drifts (the other matches LRS==LRS).

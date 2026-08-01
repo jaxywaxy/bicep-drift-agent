@@ -93,12 +93,12 @@ class LifecycleMilestoneTests(unittest.TestCase):
         """The live failure: created_at was set from the delete, deleted_at null."""
         logs = [
             _entry("Microsoft.Compute/availabilitySets/write", 0, caller="pipeline"),
-            _entry("Microsoft.Compute/availabilitySets/delete", 30, caller="jacqui"),
+            _entry("Microsoft.Compute/availabilitySets/delete", 30, caller="alice"),
         ]
 
         lc = build_resource_lifecycle(RESOURCE_ID, logs)
 
-        self.assertEqual(lc.deleted_by, "jacqui")
+        self.assertEqual(lc.deleted_by, "alice")
         self.assertEqual(lc.deleted_at, T0 + timedelta(minutes=30))
         self.assertEqual(lc.created_by, "pipeline")
         self.assertEqual(lc.created_at, T0)
@@ -110,7 +110,7 @@ class LifecycleMilestoneTests(unittest.TestCase):
     def test_first_write_creates_and_later_writes_modify(self):
         logs = [
             _entry("Microsoft.Storage/storageAccounts/write", 0, caller="pipeline"),
-            _entry("Microsoft.Storage/storageAccounts/write", 20, caller="jacqui"),
+            _entry("Microsoft.Storage/storageAccounts/write", 20, caller="alice"),
             _entry("Microsoft.Storage/storageAccounts/write", 40, caller="someone-else"),
         ]
 
@@ -130,8 +130,8 @@ class LifecycleMilestoneTests(unittest.TestCase):
         """Previously every create overwrote created_at, so the NEWEST won."""
         logs = [
             _entry("Microsoft.Compute/disks/write", 0, caller="pipeline"),
-            _entry("Microsoft.Compute/disks/delete", 10, caller="jacqui"),
-            _entry("Microsoft.Compute/disks/write", 20, caller="jacqui"),
+            _entry("Microsoft.Compute/disks/delete", 10, caller="alice"),
+            _entry("Microsoft.Compute/disks/write", 20, caller="alice"),
         ]
 
         lc = build_resource_lifecycle("/subscriptions/S/.../disks/d", logs)
@@ -165,38 +165,38 @@ class PipelineShapeTests(unittest.TestCase):
     def test_property_drift_on_an_existing_resource_is_a_modification(self):
         logs = [
             _entry("Microsoft.Storage/storageAccounts/write", 0, caller="pipeline"),
-            _entry("Microsoft.Storage/storageAccounts/write", 30, caller="jacqui"),
+            _entry("Microsoft.Storage/storageAccounts/write", 30, caller="alice"),
         ]
 
         relevant, lc = self._lifecycle(logs, "property_drift")
 
         self.assertEqual(len(relevant), 1, "production narrows to one event")
         self.assertEqual([e.operation for e in lc.events], [OperationType.MODIFY])
-        self.assertEqual(lc.last_modified_by, "jacqui")
+        self.assertEqual(lc.last_modified_by, "alice")
         self.assertEqual(lc.last_modified_at, T0 + timedelta(minutes=30))
         # The write did not create this resource, so created_* must stay empty.
         self.assertIsNone(lc.created_at)
         self.assertIsNone(lc.created_by)
 
     def test_extra_in_azure_write_really_is_a_creation(self):
-        logs = [_entry("Microsoft.Network/networkSecurityGroups/write", 0, caller="jacqui")]
+        logs = [_entry("Microsoft.Network/networkSecurityGroups/write", 0, caller="alice")]
 
         _, lc = self._lifecycle(logs, "extra_in_azure")
 
         self.assertEqual([e.operation for e in lc.events], [OperationType.CREATE])
-        self.assertEqual(lc.created_by, "jacqui")
+        self.assertEqual(lc.created_by, "alice")
         self.assertIsNone(lc.last_modified_at)
 
     def test_missing_in_azure_still_reports_the_deletion(self):
         logs = [
             _entry("Microsoft.Compute/availabilitySets/write", 0, caller="pipeline"),
-            _entry("Microsoft.Compute/availabilitySets/delete", 30, caller="jacqui"),
+            _entry("Microsoft.Compute/availabilitySets/delete", 30, caller="alice"),
         ]
 
         _, lc = self._lifecycle(logs, "missing_in_azure")
 
         self.assertEqual([e.operation for e in lc.events], [OperationType.DELETE])
-        self.assertEqual(lc.deleted_by, "jacqui")
+        self.assertEqual(lc.deleted_by, "alice")
         self.assertEqual(lc.deleted_at, T0 + timedelta(minutes=30))
 
     def test_no_drift_context_falls_back_to_ordering(self):
