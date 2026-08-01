@@ -27,6 +27,7 @@ from .collectors.locks import _query_locks
 from .collectors.peerings import _expand_vnet_peerings
 from .common import (
     _ALL_RG_SELECTORS,
+    CollectionGaps,
     _dedupe_resources_by_id,
     _extract_resource_group_from_id,
     _filter_by_rg_selector,
@@ -59,6 +60,7 @@ def get_live_state(
     resource_group: str = None,
     subscription_id: str | None = None,
     scope: str = "resource_group",
+    gaps: CollectionGaps | None = None,
 ) -> list[dict]:
     """Query resources using Azure Resource Graph (fast and efficient).
 
@@ -73,6 +75,9 @@ def get_live_state(
         resource_group: Name of the Azure resource group (required for RG scope).
         subscription_id: Azure subscription ID. Falls back to AZURE_SUBSCRIPTION_ID env var.
         scope: "resource_group" (default) or "subscription"
+        gaps: optional CollectionGaps the collectors record into when a type
+            cannot be read. Without it a failed collector is indistinguishable
+            from an empty one, and its declared resources false-flag missing.
 
     Returns:
         List of resource dicts with type, name, location, and properties.
@@ -85,7 +90,7 @@ def get_live_state(
 
     if not HAS_RESOURCE_GRAPH:
         logger.warning("Resource Graph not available, falling back to ResourceManagementClient")
-        return _get_live_state_fallback(resource_group, sub_id, scope)
+        return _get_live_state_fallback(resource_group, sub_id, scope, gaps=gaps)
 
     credential = DefaultAzureCredential()
     client = ResourceGraphClient(credential)
@@ -117,7 +122,7 @@ def get_live_state(
         response = _run_resource_graph_query(client, request)
     except Exception as e:
         logger.error(f"Resource Graph query failed: {e}, falling back to ResourceManagementClient")
-        return _get_live_state_fallback(resource_group, sub_id, scope)
+        return _get_live_state_fallback(resource_group, sub_id, scope, gaps=gaps)
 
     elapsed = time.time() - start_time
     logger.info(f"Resource Graph query completed in {elapsed:.2f}s")
@@ -141,14 +146,16 @@ def get_live_state(
                 "resource_group": item.get("resourceGroup"),
             })
 
-    _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential)
+    _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential, gaps=gaps)
     if scope == "subscription":
         resources = _filter_by_rg_selector(resources, resource_group)
     logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
     return resources
 
 
-def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> list[dict]:
+def _get_live_state_fallback(
+    resource_group: str, sub_id: str, scope: str, gaps: CollectionGaps | None = None,
+) -> list[dict]:
     """Fallback: query resources using ResourceManagementClient when Resource Graph is unavailable."""
     logger.warning("Using ResourceManagementClient fallback (slower than Resource Graph)")
     from azure.mgmt.resource.resources import ResourceManagementClient
@@ -190,12 +197,39 @@ def _get_live_state_fallback(resource_group: str, sub_id: str, scope: str) -> li
             "resource_group": _extract_resource_group_from_id(resource.id),
         })
 
-    _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential)
+    _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential, gaps=gaps)
     if scope == "subscription":
         resources = _filter_by_rg_selector(resources, resource_group)
     elapsed = time.time() - start_time
     logger.info(f"ResourceManagementClient query completed in {elapsed:.2f}s (slower than Resource Graph)")
     return resources
+
+
+#: Types whose ONLY source is an ARM REST collector below - if the shared token
+#: cannot be acquired, none of them are gathered and every declared instance
+#: would otherwise read as deleted.
+_COSMOS_CHILD_TYPES = (
+    "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+    "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+)
+_COGNITIVE_CHILD_TYPES = (
+    "Microsoft.CognitiveServices/accounts/deployments",
+    "Microsoft.CognitiveServices/accounts/raiPolicies",
+)
+_EXTENSION_TYPES = (
+    "Microsoft.Insights/diagnosticSettings",
+    "Microsoft.Insights/dataCollectionRuleAssociations",
+)
+_AUGMENTED_TYPES = (
+    "Microsoft.Authorization/locks",
+    "Microsoft.RecoveryServices/vaults/backupconfig",
+    "Microsoft.RecoveryServices/vaults/backupPolicies",
+    "Microsoft.Network/privateEndpoints/privateDnsZoneGroups",
+    "Microsoft.Web/sites/config",
+    *_COSMOS_CHILD_TYPES,
+    *_COGNITIVE_CHILD_TYPES,
+    *_EXTENSION_TYPES,
+)
 
 
 def _augment_untracked_resources(
@@ -204,6 +238,7 @@ def _augment_untracked_resources(
     sub_id: str,
     scope: str,
     credential: Any | None = None,
+    gaps: CollectionGaps | None = None,
 ) -> None:
     """Add resources not indexed by Resource Graph / the resource list API, and
     normalise known false-positive properties. Mutates `resources` in place.
@@ -231,26 +266,37 @@ def _augment_untracked_resources(
         logger.warning(f"Could not acquire token for untracked-resource queries: {e}")
         token = None
 
+    # A token we could not acquire fails EVERY collector below, so the whole
+    # augmented set is unverified rather than absent.
+    if token is None and gaps is not None:
+        gaps.record_all(_AUGMENTED_TYPES, "no ARM token could be acquired for this run")
+
     # Each collector logs-and-skips on failure so a single ARM outage never
-    # sinks the whole scan; that's the documented "sidecar" contract.
+    # sinks the whole scan; that's the documented "sidecar" contract. `types=`
+    # is what it costs: the failure is recorded against the types that collector
+    # owns, so their declared resources read "could not verify" instead of
+    # "missing". Fan-out collectors pass no types and record their own, per
+    # listing - marking all twenty of the data-plane types because one failed
+    # would bury real deletions.
     _extend_swallowing(resources, lambda: _query_locks(resource_group, sub_id, scope, token=token),
-                       "locks")
+                       "locks", gaps, ("Microsoft.Authorization/locks",))
     _extend_swallowing(resources, lambda: _query_cosmos_children(resources, sub_id, token=token),
-                       "Cosmos child resources")
-    _extend_swallowing(resources, lambda: _query_backup_children(resources, sub_id, token=token),
-                       "vault backup config")
-    _extend_swallowing(resources, lambda: _query_backup_policies(resources, sub_id, token=token),
-                       "vault backup policies")
-    _extend_swallowing(resources, lambda: query_private_dns_zone_groups(resources, sub_id, token=token),
-                       "private DNS zone groups")
+                       "Cosmos child resources", gaps, _COSMOS_CHILD_TYPES)
+    _extend_swallowing(resources, lambda: _query_backup_children(resources, sub_id, token=token, gaps=gaps),
+                       "vault backup config", gaps, ("Microsoft.RecoveryServices/vaults/backupconfig",))
+    _extend_swallowing(resources, lambda: _query_backup_policies(resources, sub_id, token=token, gaps=gaps),
+                       "vault backup policies", gaps, ("Microsoft.RecoveryServices/vaults/backupPolicies",))
+    _extend_swallowing(resources, lambda: query_private_dns_zone_groups(resources, sub_id, token=token, gaps=gaps),
+                       "private DNS zone groups", gaps,
+                       ("Microsoft.Network/privateEndpoints/privateDnsZoneGroups",))
     _extend_swallowing(resources, lambda: _query_cognitive_deployments(resources, token=token),
-                       "Cognitive Services deployments")
-    _extend_swallowing(resources, lambda: _expand_data_plane_children(resources, token=token),
-                       "data-plane children")
+                       "Cognitive Services deployments", gaps, _COGNITIVE_CHILD_TYPES)
+    _extend_swallowing(resources, lambda: _expand_data_plane_children(resources, token=token, gaps=gaps),
+                       "data-plane children", gaps)
     _extend_swallowing(resources, lambda: _expand_appservice_config(resources, token=token),
-                       "App Service config")
+                       "App Service config", gaps, ("Microsoft.Web/sites/config",))
     _extend_swallowing(resources, lambda: _expand_extension_resources(resources, token=token),
-                       "extension resources")
+                       "extension resources", gaps, _EXTENSION_TYPES)
 
     _normalize_cosmos_account_locations(resources)
     _normalize_aci_container_groups(resources)
@@ -259,13 +305,23 @@ def _augment_untracked_resources(
     _dedupe_resources_by_id(resources)
 
 
-def _extend_swallowing(resources: list[dict], call, label: str) -> None:
+def _extend_swallowing(
+    resources: list[dict],
+    call,
+    label: str,
+    gaps: CollectionGaps | None = None,
+    types: tuple[str, ...] = (),
+) -> None:
     """Extend `resources` with the collector's output, swallowing exceptions.
 
     Matches the prior behaviour: a single collector failure logs a warning
-    ("Failed to query ${label}: ...") and the scan continues.
+    ("Failed to query ${label}: ...") and the scan continues - but the types it
+    owns are recorded as ungathered, so the diff cannot read their absence as
+    deletion.
     """
     try:
         resources.extend(call())
     except Exception as e:
         logger.warning(f"Failed to query {label}: {e}")
+        if gaps is not None:
+            gaps.record_all(types, f"{label} could not be collected: {e}")

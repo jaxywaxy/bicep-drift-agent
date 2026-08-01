@@ -32,6 +32,12 @@ def _print_drift_summary(drifts):
         resource_type = drift.get("type", "")
         resource_name = drift.get("name", "")
         if drift_type == "missing_in_azure":
+            # An ungathered type cannot support "not deployed" - say what is
+            # actually known, or the CI log asserts a deletion nobody verified.
+            if drift.get("details", {}).get("collection_unverified"):
+                print(f"[UNVERIFIED] {resource_type}/{resource_name} is in Bicep and its live "
+                      "state could not be read - absence is NOT evidence of deletion")
+                continue
             print(f"[MISSING] {resource_type}/{resource_name} is in Bicep but not deployed")
         elif drift_type == "extra_in_azure":
             print(f"[EXTRA]   {resource_type}/{resource_name} is deployed but not in Bicep")

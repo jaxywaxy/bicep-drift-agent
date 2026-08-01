@@ -207,10 +207,59 @@ def _qualify_child_resource_names(resources: list[dict]) -> None:
             r["name"] = "/".join(names)
 
 
+class CollectionGaps:
+    """Resource types the collectors could not read on this run.
+
+    Every collector logs-and-skips so one ARM outage never sinks a scan - the
+    documented sidecar contract. The cost is silent: a declared child with no
+    collected counterpart is INDISTINGUISHABLE from a deleted one, so a failed
+    listing turns straight into `missing_in_azure`. A local run on 2026-08-01
+    produced 27 such rows for resources that all existed, and the data-plane
+    expander's own comment records an earlier one (a transient agentPools
+    failure reporting a healthy declared pool as deleted).
+
+    Recording the failure lets the diff say "could not verify" instead of
+    "gone". Cannot collect is not the same as is not there.
+    """
+
+    def __init__(self) -> None:
+        self._reasons: dict[str, str] = {}
+
+    def record(self, resource_type: str | None, reason: str) -> None:
+        """Note that `resource_type` could not be collected. First reason wins -
+        a per-parent loop can fail many times for one type and the first failure
+        is the informative one."""
+        if not resource_type:
+            return
+        self._reasons.setdefault(str(resource_type).lower(), str(reason))
+
+    def record_all(self, resource_types, reason: str) -> None:
+        """Record one reason against every type a failed collector owns."""
+        for resource_type in resource_types or ():
+            self.record(resource_type, reason)
+
+    def covers(self, resource_type: str | None) -> bool:
+        return bool(resource_type) and str(resource_type).lower() in self._reasons
+
+    def reason_for(self, resource_type: str | None) -> str | None:
+        return self._reasons.get(str(resource_type or "").lower())
+
+    def as_dict(self) -> dict[str, str]:
+        """Sorted so a report artifact is byte-stable across runs."""
+        return dict(sorted(self._reasons.items()))
+
+    def __bool__(self) -> bool:
+        return bool(self._reasons)
+
+    def __len__(self) -> int:
+        return len(self._reasons)
+
+
 # Re-exports for the package-internal typing marker.
 __all__ = [
     "_ALL_RG_SELECTORS",
     "_RG_NAME_RE",
+    "CollectionGaps",
     "_dedupe_resources_by_id",
     "_extract_resource_group_from_id",
     "_filter_by_rg_selector",

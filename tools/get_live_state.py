@@ -14,7 +14,8 @@ from .live_state import *  # noqa: F401,F403
 # `from tools.live_state import *` only exports the __all__ list. The test suite
 # reaches for several private names via `from tools.get_live_state import _foo`,
 # so re-bind them explicitly.
-from .live_state import (  # noqa: F401
+from .live_state import (
+    CollectionGaps,  # noqa: F401
     _ALL_RG_SELECTORS,
     _augment_untracked_resources,
     _CHILD_EXPANSION_SPECS,
