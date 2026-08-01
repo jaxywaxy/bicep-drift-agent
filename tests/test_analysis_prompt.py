@@ -277,6 +277,34 @@ class InteractingDriftTests(unittest.TestCase):
         self.assertIn("Co-location on one resource is not interaction", sp)
         self.assertIn("state the mechanism", sp)
 
+    def test_prompt_guards_against_over_unifying_across_time(self):
+        """The mirror failure, seen live on 2026-08-01: an analysis called
+        deletions spanning 00:34-01:44 "a coherent single event" when they were
+        two operations ~40 minutes apart. Merging them conceals that someone
+        acted more than once."""
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("Do NOT over-unify across TIME", sp)
+        self.assertIn("read the timestamps for a GAP", sp)
+        self.assertIn("distinct operations", sp)
+
+
+class InternalConsistencyTests(unittest.TestCase):
+    """A live analysis called the same 34 tag findings "the same benign
+    policy-driven tag change" in its TL;DR and "none are benign" in its body.
+    A reader acting on the summary and a reader acting on the detail reached
+    opposite conclusions from one document."""
+
+    def test_prompt_requires_the_tldr_to_agree_with_the_body(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("ONE document and must agree", sp)
+
+    def test_prompt_names_the_softening_words_that_get_acted_on(self):
+        # The failure is asymmetric: a softening adjective in the TL;DR is what
+        # a busy reader acts on without scrolling to the contradiction.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("delete any characterisation the body contradicts", sp)
+        self.assertIn("benign", sp)
+
 
 class PlanConsistencyTests(unittest.TestCase):
     """A live plan's step 2 redeployed the disk module to revert
