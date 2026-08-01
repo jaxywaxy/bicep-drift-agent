@@ -97,7 +97,7 @@ class DefenderPricingFilterTests(unittest.TestCase):
             {"name": "KeyVaults", "id": "p3", "properties": {"pricingTier": "Free"}},
         ]}
 
-        def fake_urlopen(req, timeout=0):
+        def fake_urlopen(req, timeout=0, **_):
             return io.BytesIO(_json.dumps(all_plans).encode())
 
         with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):

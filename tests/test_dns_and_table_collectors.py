@@ -51,7 +51,7 @@ class _FakeResponse:
 
 def _urlopen_returning(by_url):
     """Fake arm_urlopen: dict of url-substring -> payload, or an HTTPError."""
-    def _fake(req, timeout=30):
+    def _fake(req, timeout=30, **_):
         url = req.full_url
         for frag, payload in by_url.items():
             if frag in url:
@@ -121,7 +121,7 @@ class DeclaredTableSelectionTests(unittest.TestCase):
     def test_only_the_declared_table_is_requested(self):
         seen = []
 
-        def _fake(req, timeout=30):
+        def _fake(req, timeout=30, **_):
             seen.append(req.full_url)
             return _FakeResponse({"name": "CustomLog_CL", "id": "/t",
                                   "properties": {"totalRetentionInDays": 30}})
