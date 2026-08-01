@@ -154,7 +154,8 @@ def detect_deployment_scope(arm_template: dict) -> str:
     return "resource_group"
 
 
-def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None) -> list[dict]:
+def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = None,
+                               skipped=None) -> list[dict]:
     """
     Extract and normalize resources from an ARM template.
 
@@ -177,7 +178,7 @@ def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = N
     if parameter_overrides:
         parameters.update(parameter_overrides)
 
-    normalized = flatten_resources(arm_template, parameters)
+    normalized = flatten_resources(arm_template, parameters, skipped=skipped)
     return normalized
 
 

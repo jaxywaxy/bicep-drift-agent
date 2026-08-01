@@ -91,6 +91,34 @@ Use this document to understand what the agent can detect, how findings are clas
 | Subset Comparison | Ignores Azure-added read-only metadata |
 | Write-Only Protection | Secrets and write-only values not compared or exposed |
 | Unverified Absence | A type the collectors could not read is reported as unverified, never as deleted |
+| Condition-Skipped Declarations | A resource this scan gated off is a parameter mismatch, not an unmanaged resource |
+
+**A declaration this scan gated off is not unmanaged.** `flatten_resources`
+drops a resource whose `condition` resolves false — correct, since a gated-off
+module is not deployed and comparing it would false-flag `missing_in_azure`. The
+cost was that a *deployed* resource whose declaration was gated off had nothing
+to match and came back `extra_in_azure`, which reads as "unmanaged resource,
+consider deleting". That is the tool recommending you delete something you
+deploy on purpose, and it cost a live round on 2026-07-21: a scan run with
+default parameters (`deployAks=false`) reported the real AKS cluster as
+unmanaged.
+
+Skipped declarations are now retained. Because a gated **module** is a
+`Microsoft.Resources/deployments` resource, the recorder descends into its
+nested template — a skipped `if (deployAks)` module reports
+`Microsoft.ContainerService/managedClusters`, which is what the live cluster's
+row can be matched against. Matching extras carry
+`details.condition_skipped`, the driving parameter and its value, and the run
+persists a `condition_skipped` list. Only matching types are annotated: a
+genuinely undeclared resource still reads as unmanaged.
+
+Two defects in the same area went with it. `.bicepparam` values are now read
+with their Bicep type — all-strings meant a numeric parameter feeding a resource
+property could never equal what Azure returns, and `if value:` silently dropped
+`false` and `0`, the two values a condition gate most needs. And Phase 1 now
+**layers** the agent's baseline `.drift-ignore` with the landing zone's rather
+than returning the first file it finds, which is what Phase 2 already did — the
+two phases disagreeing about what is ignorable was the bug.
 
 **Cannot collect is not the same as is not there.** Every collector
 logs-and-skips so one ARM outage never sinks a scan — the documented sidecar
