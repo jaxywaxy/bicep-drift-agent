@@ -91,7 +91,32 @@ Use this document to understand what the agent can detect, how findings are clas
 | Subset Comparison | Ignores Azure-added read-only metadata |
 | Write-Only Protection | Secrets and write-only values not compared or exposed |
 | Unverified Absence | A type the collectors could not read is reported as unverified, never as deleted |
+| Unreadable Scope | A resource group that does not exist aborts the scan; it is never reported as every declared resource being deleted |
 | Condition-Skipped Declarations | A resource this scan gated off is a parameter mismatch, not an unmanaged resource |
+
+**An unreadable scope is not mass deletion.** Resource Graph answers a query for
+a resource group that does not exist with a *successful, empty* result set —
+indistinguishable from a resource group that exists and holds nothing. Read
+naively that is "every declared resource was deleted": one maximum-severity
+finding per resource, routed to whoever owns the landing zone, from a single
+config error (a decommissioned or renamed RG, a stale `lz-index.yml` entry, the
+wrong subscription).
+
+So an empty live set triggers an explicit ARM read of the resource group, and
+only then:
+
+- **absent, or unconfirmable** → the scan aborts with exit code **2** and writes
+  no report. Exit 2 is distinct from a real error (1) and a clean scan (0), so
+  CI can tell a targeting failure from drift without parsing logs. An
+  inconclusive check (403, network failure) aborts too — an unverifiable scope
+  is exactly as unsafe to report on as an absent one.
+- **present but empty** → the scan proceeds and every declared resource *is*
+  reported missing. That case is real drift and stays loud.
+
+The check runs only on the empty result, so a normal scan pays nothing for it.
+In a multi-RG (subscription) pass an unreadable RG is skipped with a warning and
+named in the summary rather than sinking the whole pass — the other landing
+zones still have real answers, and a skipped RG is never reported as clean.
 
 **A declaration this scan gated off is not unmanaged.** `flatten_resources`
 drops a resource whose `condition` resolves false — correct, since a gated-off

@@ -13,6 +13,7 @@ import logging
 import re
 import time
 import urllib.error
+import urllib.request
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar
@@ -142,6 +143,59 @@ def retry_with_backoff(max_retries: int = 3, initial_delay: float = 1.0) -> Call
 
         return wrapper
     return decorator
+
+
+class ScopeNotFoundError(Exception):
+    """The scan scope itself could not be confirmed to exist.
+
+    Distinct from "the scope is empty". Resource Graph answers a query for a
+    resource group that does not exist with a SUCCESSFUL, empty result set -
+    byte-identical to a resource group that exists and holds nothing. Treating
+    the first as drift turns one configuration error (a decommissioned or
+    renamed RG, a stale lz-index entry, the wrong subscription) into one
+    'deleted' finding per declared resource, at maximum severity, routed to
+    whoever owns the landing zone. That is the loudest possible alarm carrying
+    the least real signal.
+
+    Same principle as the per-type CollectionGaps one level up: a thing we
+    could not read is unverified, never deleted.
+    """
+
+
+def resource_group_exists(
+    resource_group: str, sub_id: str, token: str | None = None
+) -> bool | None:
+    """Does the resource group exist? None when the question cannot be settled.
+
+    Deliberately tri-state. False is a definitive 404 from ARM; None means the
+    check itself failed (403, network, no credential) and the caller must not
+    read it as either answer. Callers treat None the same as False for the
+    purpose of *not* reporting mass deletion, because an unverifiable scope is
+    exactly as unsafe to report on as an absent one.
+    """
+    if not resource_group or not sub_id:
+        return None
+    try:
+        if token is None:
+            from azure.identity import DefaultAzureCredential
+            token = DefaultAzureCredential().get_token(
+                "https://management.azure.com/.default"
+            ).token
+        url = (
+            f"https://management.azure.com/subscriptions/{sub_id}"
+            f"/resourcegroups/{resource_group}?api-version=2021-04-01"
+        )
+        req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with arm_urlopen(req, timeout=30) as resp:
+            return 200 <= resp.status < 300
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False
+        logger.warning(f"Could not confirm resource group '{resource_group}' exists: HTTP {e.code}")
+        return None
+    except Exception as e:
+        logger.warning(f"Could not confirm resource group '{resource_group}' exists: {e}")
+        return None
 
 
 @retry_with_backoff()

@@ -11,6 +11,7 @@ import sys
 
 from pathlib import Path
 from run_drift_check import run as run_phase1
+from tools.live_state import ScopeNotFoundError
 from tools.logger import get_logger
 
 logger = get_logger(__name__)
@@ -23,13 +24,33 @@ def _run_phase1(bicep_file: str, resource_groups_to_test: list) -> None:
     it reflects the ignore-filtered, policy-split drift set rather than raw output.
     """
     logger.info("Phase 1: Detecting drift...")
+    multi_rg = len(resource_groups_to_test) > 1
+    skipped: list[str] = []
     try:
         for rg in resource_groups_to_test:
             logger.info(f"Running drift check for resource group: {rg}")
-            run_phase1(bicep_file, rg)
+            try:
+                run_phase1(bicep_file, rg)
+            except ScopeNotFoundError as e:
+                # One unreadable RG must not sink a whole subscription pass: the
+                # other landing zones in the index still have real answers. A
+                # single-RG scan has no remainder to salvage, so it still exits.
+                if not multi_rg:
+                    raise
+                logger.warning(f"Skipping '{rg}': {e}")
+                skipped.append(rg)
+    except ScopeNotFoundError as e:
+        logger.error(f"Scope not found: {e}")
+        sys.exit(2)
     except Exception as e:
         logger.error(f"Error in Phase 1: {e}", exc_info=True)
         sys.exit(1)
+
+    if skipped:
+        logger.warning(
+            f"{len(skipped)} resource group(s) skipped as unreadable: {', '.join(skipped)}. "
+            f"They are absent from this run's results - not reported as clean."
+        )
 
 
 def _consolidate_wildcard_results(resource_groups_to_test: list) -> None:
