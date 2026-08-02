@@ -122,7 +122,7 @@ class ThePipelineActuallyCallsItTests(unittest.TestCase):
     def _run(self, gapped_type):
         captured = {}
 
-        def fake_fetch(resource_group, scope, arm_resources, gaps=None):
+        def fake_fetch(resource_group, scope, arm_resources, gaps=None, bicep_file=""):
             if gapped_type and gaps is not None:
                 gaps.record(gapped_type, "collector down")
             return []
