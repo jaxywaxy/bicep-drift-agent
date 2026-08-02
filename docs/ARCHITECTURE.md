@@ -195,6 +195,12 @@ The agent gathers live Azure state from:
 
 Additional ARM queries are used for resources not fully represented in Resource Graph.
 
+Collection is **fail-soft and self-declaring**. A collector that cannot read its
+type records a collection gap rather than returning an empty list, and the
+declared resources of a gapped type are reported as *unverified* rather than
+deleted. The same principle applies to the scan scope itself (below). An
+absence the agent cannot substantiate is never reported as a deletion.
+
 ### 3. Normalisation
 
 Resource data is normalised to reduce false positives.
@@ -277,6 +283,57 @@ Results are transformed into:
 - Slack notifications
 - Teams notifications
 - Landing-zone GitHub issues
+
+---
+
+## Scope Semantics
+
+A resource group is a different kind of object depending on the deployment scope,
+and the agent treats it accordingly. Enterprise estates run both shapes.
+
+| Scope | A resource group is… | Missing → |
+|-------|----------------------|-----------|
+| Resource group | the **frame** of the scan — an RG-scoped template cannot declare one | Scan aborts (exit 2): a targeting failure, not drift |
+| Subscription | a **declared resource** the template owns, as in a CAF platform landing zone | Reported as drift on the resource group, with its orphaned contents attributed to it |
+
+The abort exists because Resource Graph answers a query for a non-existent
+resource group with a *successful, empty* result set — indistinguishable from an
+empty one. Read naively that is "every declared resource was deleted": the
+loudest possible alarm from a single configuration error, routed to whoever owns
+the landing zone. An unreadable — or merely unconfirmable — scope therefore
+produces no drift conclusion at all.
+
+At subscription scope the equivalent abort is an empty *subscription*: one
+resource group missing out of many is drift, none of them present is a wrong
+subscription, a credential without read access, or an environment never deployed.
+
+See [RESOURCE_GROUP_TARGETING.md](RESOURCE_GROUP_TARGETING.md) for selector
+resolution and [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) for triage.
+
+---
+
+## Code Structure
+
+The logical stages map onto packages as follows. Each package is split by
+responsibility rather than by resource type, except the collectors, which are
+deliberately one module per resource family.
+
+| Stage | Package | Notes |
+|-------|---------|-------|
+| Orchestration | `orchestration/` | Targeting, detection, reconciliation, attribution, analysis, reporting. `analyze_drift.main()` is the sole ordering authority |
+| Desired state | `tools/compile_bicep.py`, `tools/normalizer/` | Compile, flatten, resolve expressions |
+| Live state | `tools/live_state/` | Resource Graph plus `tools/live_state/collectors/`, one module per family |
+| Comparison | `tools/property_drift/` | Comparator, matcher, severity, and per-domain modules (security, firewall, monitoring, private DNS) |
+| Sidecars | `tools/rbac.py`, `tools/policy.py`, `tools/deployment_stacks.py` | Identity-matched, fail-soft |
+| Attribution | `tools/activity_log.py`, `tools/change_origin.py` | Who, when, how |
+| Output | `tools/html_report.py`, `tools/send_notifications.py`, `tools/publish_lz_issue.py` | |
+| Agent | `agent/` | Claude analysis, prompts as a mixin |
+
+**`tools/live_state/collectors/` is load-bearing.** A structural test derives the
+set of collected types from that directory and fails if any of them is discarded
+by a type-only ignore rule — the failure mode that once left two comparators
+running but silently ineffective. A collector placed elsewhere sits outside that
+guard.
 
 ---
 
@@ -367,14 +424,20 @@ Landing zones can be added through configuration rather than platform code chang
 | Owner-based routing | Sends findings to the correct team |
 | OIDC authentication | Eliminates Azure secret management |
 | Read-only operation | Safe use in enterprise environments |
+| Unsubstantiated absence is never a deletion | A type or scope the agent could not read is reported as unverified. The alternative — treating "we saw nothing" as "it is gone" — produces the loudest possible alarm from a configuration error |
+| Scope-dependent resource-group semantics | A resource group is the frame of an RG-scoped scan and a declared resource of a subscription-scoped one, so its absence is a pipeline failure in the first case and drift in the second |
+| Collectors split by resource family | Keeps a structural test able to derive collected types from the directory, so a comparator cannot be silently discarded by an ignore rule |
 
 ---
 
 ## Related Documentation
 
 - [README.md](../README.md)
-- [ARCHITECTURE.md](ARCHITECTURE.md)
-- [CAPABILITIES.md](CAPABILITIES.md) 
+- [CAPABILITIES.md](CAPABILITIES.md) — What the agent detects
+- [VALIDATION_STATUS.md](VALIDATION_STATUS.md) — What each capability has been proven to detect
+- [TEST_ESTATE.md](TEST_ESTATE.md) — The verification estate and round procedure
+- [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) — Configuration schema
+- [RESOURCE_GROUP_TARGETING.md](RESOURCE_GROUP_TARGETING.md) — Selector resolution and scope semantics
 - [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) - Teams and Slack Notification configuration
 - [LANDING_ZONES_OPERATIONS.md](LANDING_ZONES_OPERATIONS.md) — Landing Zone configuration
 - [AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md) - Azure authentication configuration

@@ -91,6 +91,26 @@ checks:
 
 ---
 
+## What a resource group *is*, per scope
+
+Enterprise estates run both shapes, and a resource group means something
+different in each. This is not a detail — it decides whether a missing RG is a
+pipeline failure or a finding.
+
+| Scope | A resource group is… | Missing → |
+|---|---|---|
+| Resource group | the **frame** of the scan. An RG-scoped template cannot declare one | Scan aborts, **exit 2** — a targeting failure, not drift |
+| Subscription | a **declared resource** the template owns (CAF platform landing zones declare theirs) | Reported as **drift** on the resource group, with its orphaned contents attributed to it |
+
+At subscription scope the empty case is the abort case instead: a scan that
+returns **no resources at all** is a wrong subscription, a credential without read
+access, or an environment never deployed — not a landing zone that was deleted
+wholesale. One RG missing out of many is drift; none of them present aborts.
+
+The reasoning behind the abort, and why an *unconfirmable* scope aborts as well as
+an absent one, is in [CAPABILITIES.md](CAPABILITIES.md). Triage steps are in
+[OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md).
+
 ## Caveats
 
 - **`'*'` with an RG-scoped template compares the template against *every* RG in the subscription** → pure false-`missing` noise for RGs that never held it. (Local `'*'` mode skips the Claude analysis; workflow expansion runs the full pipeline — and cost — per RG. The estate-wipe guard makes all-missing RGs cheap to process, but the reports are still wrong-headed.) Prefer an explicit glob.

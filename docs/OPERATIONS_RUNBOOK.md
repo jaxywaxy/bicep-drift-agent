@@ -94,6 +94,46 @@ Then decide one of the following outcomes:
 
 ---
 
+## Scan Aborted — Exit Codes
+
+Not every failed run is a broken pipeline. The scan distinguishes three outcomes:
+
+| Exit | Meaning | Action |
+|---|---|---|
+| `0` | Scan completed. Drift may or may not have been found — read the report | Normal triage |
+| `1` | Error — compile failure, auth failure, unhandled exception | Fix the error; the run produced no conclusion |
+| `2` | **Scope not found.** The scan could not read what it was pointed at | Targeting/config triage, below |
+
+### Exit 2: scope not found
+
+The run writes a report carrying `scope_status: "not_found"` and a reason, and
+`count_drifts` fails naming the resource group rather than reporting zero
+findings. **This is not drift** — it means no drift conclusion is possible.
+
+Triage, in order:
+
+1. **Does the resource group exist?** `az group show -n <rg>`. A decommissioned or
+   renamed RG is the most common cause.
+2. **Right subscription?** Check `AZURE_SUBSCRIPTION_ID` against the landing
+   zone's intended subscription. Resource Graph answers a query for a
+   non-existent RG with a *successful, empty* result — the wrong subscription
+   looks exactly like a deleted estate.
+3. **Can the scanning identity read it?** An inconclusive permissions check (403)
+   also aborts, deliberately: an unverifiable scope is as unsafe to report on as
+   an absent one.
+4. **Is the entry stale?** If the environment is genuinely gone, remove it from
+   `.github/lz-index.yml` — otherwise every scheduled run fails.
+
+At subscription scope the same exit means the scan returned **no resources at
+all** (empty or wrong subscription, or no read access). One resource group
+missing out of many is *drift*, not an abort — see `CAPABILITIES.md`.
+
+In a multi-RG pass a single unreadable RG is skipped with a warning and named in
+the summary; the other landing zones still produce results, and the skipped one
+is never reported as clean.
+
+---
+
 ## Responding to Finding Types
 
 ## DRIFT Findings

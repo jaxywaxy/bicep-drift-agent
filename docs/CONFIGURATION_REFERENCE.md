@@ -138,7 +138,7 @@ checks:
 | Property | Required | Description |
 |----------|----------|-------------|
 | `name` | Yes | Friendly landing zone name |
-| `subscription_id` | Recommended | Azure subscription ID being scanned |
+| `subscription_id` | **Required in practice** | Azure subscription ID being scanned. The reusable workflow passes it through as `AZURE_SUBSCRIPTION_ID`, and the scan fails at live-state collection without it. It defaults to empty rather than erroring at config-validation time, so an omission surfaces as a failed scan rather than a clear config error. A `workflow_dispatch` run can override it |
 | `notifications` | No | Notification destinations and routing rules |
 | `checks` | Yes | List of Bicep scans to perform |
 
@@ -522,13 +522,43 @@ ignore:
 
 The following environment variables are recognised.
 
+## Required
+
 | Variable | Purpose |
 |-----------|---------|
-| `ARM_PARAMETERS` | Override parameter values |
-| `INCLUDE_ROLE_ASSIGNMENTS` | Enable RBAC drift detection |
-| `INCLUDE_POLICY_ASSIGNMENTS` | Enable policy drift detection |
-| `ANTHROPIC_API_KEY` | Optional AI analysis |
-| `DRIFT_AUTHORIZED_DEPLOYERS` | Additional deployer identities (see below) |
+| `AZURE_SUBSCRIPTION_ID` | Subscription to query. **The scan fails at live-state collection without it** — an `az login` session is not enough, because the Resource Graph client reads this variable rather than the CLI's active subscription. The reusable workflow sets it from the landing zone's configuration |
+
+## Optional
+
+| Variable | Default | Purpose |
+|-----------|---------|---------|
+| `ANTHROPIC_API_KEY` | — | Enables the Claude analysis. When absent, every deterministic stage still runs and the run logs the skip; only the narrative is lost |
+| `ARM_PARAMETERS` | — | JSON blob of parameter overrides. Takes precedence over `.bicepparam` and `parameters.json` |
+| `DRIFT_AUTHORIZED_DEPLOYERS` | — | Additional deployer identities (see below) |
+| `INCLUDE_ROLE_ASSIGNMENTS` | `true` | Set `false` to disable the RBAC sidecar |
+| `INCLUDE_POLICY_ASSIGNMENTS` | `true` | Set `false` to disable the policy sidecar |
+| `DRIFT_DEPLOYMENT_STACK` | — | Deployment-stack name. Stack comparison is opt-in and stays off unless set |
+| `DRIFT_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `DRIFT_BICEP_TIMEOUT` | `120` | Seconds allowed for `az bicep build`. Raise for very large templates |
+| `DRIFT_WEBHOOK_TIMEOUT` | `10` | Seconds allowed per webhook POST |
+| `DRIFT_AGENT_MODEL` | `claude-opus-4-8` | Claude model used for the analysis |
+
+## Notification variables
+
+| Variable | Purpose |
+|-----------|---------|
+| `DRIFT_NOTIFICATIONS` | JSON team-routing configuration (owners, channels, filters) — see [Notifications](#notifications) |
+| `WEBHOOK_SECRETS` | JSON blob of secrets that webhook placeholders resolve against. CI injects `toJSON(secrets)`; a direct environment variable of the same name wins over the blob |
+| `DRIFT_ISSUE_URL` | Landing-zone issue URL, included in the notification payload |
+| `DRIFT_ISSUE_TOKEN` | Token for publishing issues to a landing-zone repository. Falls back to `GITHUB_TOKEN` |
+| `SLACK_WEBHOOK_URL` | **Legacy** single-channel fallback, used only when no team routing is configured |
+| `TEAMS_WEBHOOK_URL` | **Legacy** single-channel fallback, as above |
+
+Webhook URLs are bearer secrets — anyone holding one can post to the channel — so
+they are never committed in plaintext. See [Secret-Backed Webhooks](#secret-backed-webhooks).
+
+`GITHUB_TOKEN`, `GITHUB_API_URL` and `GITHUB_OUTPUT` are supplied by GitHub
+Actions and need no configuration.
 
 ## Authorized Deployers
 
