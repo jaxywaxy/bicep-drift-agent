@@ -76,5 +76,73 @@ class SelectRelevantActivityTests(unittest.TestCase):
         self.assertEqual(result[0]["caller"], "new@x.com")
 
 
+class PlatformTelemetryIsNotAConfigWriteTests(unittest.TestCase):
+    """
+    Regression: the 2026-08-02 live round scaled a VMSS 0 -> 1 and the report
+    named NO actor, because `"update" in op` matched
+    'Microsoft.Resourcehealth/healthevent/Updated/action' - platform telemetry
+    with caller=None that every VM and scale-set instance emits continuously.
+    It was newer than the user's own write, so it won the latest-first sort and
+    the drift read "manual change by <nobody>" while the real actor sat in the
+    same event list. Operation names must match on PATH SEGMENTS, not substrings.
+    """
+
+    def test_health_telemetry_does_not_outrank_the_real_write(self):
+        logs = [
+            ev("2026-08-02T20:37:14.288Z", "Microsoft.Compute/virtualMachineScaleSets/write",
+               caller="user@example.com"),
+            ev("2026-08-02T20:37:19.608Z", "Microsoft.Resourcehealth/healthevent/Updated/action",
+               caller=None),
+        ]
+        result = select_relevant_activity(logs, "property_drift")
+        self.assertEqual(len(result), 1)
+        self.assertTrue(
+            result[0]["operation"].endswith("/write"),
+            f"health telemetry was selected over the real write: {result[0]['operation']}",
+        )
+        self.assertEqual(result[0]["caller"], "user@example.com")
+
+    def test_health_telemetry_alone_is_not_promoted_to_a_write(self):
+        # Only telemetry present: the non-read fallback may still return it, but
+        # it must never be chosen while a genuine write exists (above). Here we
+        # simply assert we do not crash and do not invent an actor.
+        logs = [
+            ev("2026-08-02T20:37:19.608Z", "Microsoft.Resourcehealth/healthevent/Updated/action",
+               caller=None),
+        ]
+        result = select_relevant_activity(logs, "property_drift")
+        self.assertTrue(len(result) <= 1)
+        if result:
+            self.assertIsNone(result[0]["caller"])
+
+    def test_genuine_update_action_still_matches(self):
+        # 'update' as a real path segment must keep working - the fix narrows
+        # substring matching, it must not narrow legitimate operations.
+        logs = [
+            ev("2026-08-02T01:00:00Z", "microsoft.sql/servers/read"),
+            ev("2026-08-02T02:00:00Z", "microsoft.sql/servers/databases/update/action"),
+        ]
+        result = select_relevant_activity(logs, "property_drift")
+        self.assertEqual(len(result), 1)
+        self.assertIn("update", result[0]["operation"])
+
+    def test_actor_bearing_event_preferred_over_actorless_at_same_recency(self):
+        # Defence in depth: "manual change by nobody" is never useful. Even if
+        # some future telemetry verb slips the segment filter, an event that
+        # names someone should outrank one that names no one.
+        # The actorless event is listed FIRST on purpose: Python's sort is
+        # stable, so asserting on input order would pass without the fix and
+        # prove nothing.
+        logs = [
+            ev("2026-08-02T03:00:00Z", "microsoft.compute/virtualmachinescalesets/write",
+               caller=None),
+            ev("2026-08-02T03:00:00Z", "microsoft.compute/virtualmachinescalesets/write",
+               caller="user@example.com"),
+        ]
+        result = select_relevant_activity(logs, "property_drift")
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["caller"], "user@example.com")
+
+
 if __name__ == "__main__":
     unittest.main()

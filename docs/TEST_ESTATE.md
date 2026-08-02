@@ -133,15 +133,34 @@ deploying identity's own writes are misclassified as manual changes.
 The current backlog, highest value first. Each corresponds to a *live-clean* or
 *unit-tested* row in `VALIDATION_STATUS.md`.
 
-| # | Injection | Proves |
-|---|---|---|
-| 1 | Shorten `drift-vm-daily` retention 30 → 7 days | Backup **policy** detection — the capability that was silently dead |
-| 2 | Disable vault soft delete | Backup **config** detection. Expect Azure to *reject* this on a hardened vault (`BMSUserErrorDisablingSoftDeleteStateNotAllowed`) — confirm the rejection rather than assuming coverage |
-| 3 | Delete a rule from `rcg-network`, or drop its priority | Firewall rule collection group detection |
-| 4 | VMSS `sku.capacity` 0 → 1, or remove a zone | Compute detection, incl. the zones-subset trap |
-| 5 | Grant a role to `id-drift-test` out of band | RBAC detection + grantor provenance |
-| 6 | Delete one RG from a **subscription-scoped** LZ | One RG finding with attributed orphans, not N loose deletions (#369) |
-| 7 | Leave both policy remediation grants unresolved | Colliding role-assignment rows render distinctly (#370) |
+Items 1–5 were **run on 2026-08-02**; results in `VALIDATION_STATUS.md`. Only 6
+and 7 remain.
+
+| # | Injection | Proves | Status |
+|---|---|---|---|
+| 1 | Shorten `drift-vm-daily` retention 30 → 7 days | Backup **policy** detection — the capability that was silently dead | ✅ **live-proven** 2026-08-02 |
+| 2 | Disable vault soft delete | Backup **config** detection | ⛔ **unreachable** — Azure rejected (`BMSUserErrorDisablingSoftDeleteStateNotAllowed`), as predicted. Needs a non-hardened vault to ever prove |
+| 3 | Delete a rule from `rcg-network`, or drop its priority | Firewall rule collection group detection | ✅ **live-proven** 2026-08-02 |
+| 4 | VMSS `sku.capacity` 0 → 1, or remove a zone | Compute detection, incl. the zones-subset trap | ⚠️ detection proven (zones correctly silent); **attribution defect** found |
+| 5 | Grant a role to `id-drift-test` out of band | RBAC detection + grantor provenance | ❌ **failed** — false negative + false positive; `privileged` and `created_by` do work |
+| 6 | Delete one RG from a **subscription-scoped** LZ | One RG finding with attributed orphans, not N loose deletions (#369) | pending |
+| 7 | Leave both policy remediation grants unresolved | Colliding role-assignment rows render distinctly (#370) | pending |
 
 Items 6 and 7 need a subscription-scoped landing zone (`azure-landingzone-bicep`,
 `envs/dev`), not `rg-drift-test`.
+
+Note on 4: a live VMSS's `zones` are immutable, so "remove a zone" is not
+performable in-place — capacity is the only usable compute injection here.
+
+### Two estate gotchas found running this round
+
+- **The tag fixture is time-dependent.** The inherit-tag Modify only imposes
+  `environment=production` at write time, and a freshly recreated policy
+  assignment's identity needs its remediation role to propagate first. Straight
+  after a deploy, 29 of 44 resources still read `environment=test` and the
+  policy-vs-Bicep conflict simply had not been imposed yet. The
+  policy-enforced count is therefore **not a stable number** to assert a baseline
+  against — gate the baseline on *actionable* drift only.
+- **Runtime identities change across deploys.** A redeploy recreated
+  `id-drift-test` with a new `principalId`. Any snapshot or fixture keyed on a
+  principal ID goes stale; re-read it at injection time.
