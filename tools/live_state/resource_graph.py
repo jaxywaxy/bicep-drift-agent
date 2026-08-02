@@ -25,6 +25,7 @@ from .collectors.data_plane import _expand_data_plane_children
 from .collectors.extensions import _expand_extension_resources
 from .collectors.locks import _query_locks
 from .collectors.peerings import _expand_vnet_peerings
+from .collectors.resource_groups import query_resource_groups
 from .common import (
     _ALL_RG_SELECTORS,
     CollectionGaps,
@@ -148,6 +149,10 @@ def get_live_state(
 
     _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential, gaps=gaps)
     if scope == "subscription":
+        resources.extend(query_resource_groups(
+            lambda kql: _run_resource_graph_query(
+                client, QueryRequest(subscriptions=[sub_id], query=kql)),
+            sub_id, gaps=gaps))
         resources = _filter_by_rg_selector(resources, resource_group)
     logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
     return resources

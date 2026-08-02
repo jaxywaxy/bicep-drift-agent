@@ -180,9 +180,15 @@ gh workflow run drift-lz-platform.yml
 Confirm:
 
 - Azure authentication succeeds
+- **The scan read its scope** — a first run that exits **2** means the resource
+  group or subscription is wrong, not that the estate has drifted. This is the
+  most common onboarding failure: a typo in `subscription_id` or a resource-group
+  name produces the same empty Resource Graph result as a deleted estate. See
+  [When the Scope Is Wrong](#when-the-scope-is-wrong)
 - Bicep is discovered
 - Drift analysis completes
-- Notifications are delivered
+- Notifications are delivered — and note that a scope failure notifies **nobody**,
+  so a silent channel on the first run is a reason to check the workflow
 
 ## Step 6 – Enable Scheduling
 
@@ -237,6 +243,73 @@ The template is compared against the entire landing zone in a single pass.
 - CAF-aligned environments
 - Platform subscriptions
 - Enterprise networking deployments
+
+---
+
+# When the Scope Is Wrong
+
+**A landing zone pointed at a resource group or subscription that cannot be read
+fails the pipeline. It does not report drift.**
+
+This is deliberate, and it is the behaviour to understand before onboarding or
+retiring a landing zone. Azure Resource Graph answers a query for a resource
+group that does not exist with a **successful, empty result set** —
+indistinguishable from a resource group that exists and holds nothing. Read
+naively, "we saw nothing" becomes "everything was deleted": one maximum-severity
+finding per declared resource, routed to whoever owns the landing zone, from a
+single typo. So the agent refuses to draw a drift conclusion it cannot support.
+
+## What happens, per scope
+
+| Situation | Result |
+|-----------|--------|
+| **RG scope** — the target RG does not exist | Scan aborts, **exit 2** |
+| **RG scope** — the RG exists but is empty | Scan proceeds; every declared resource *is* reported missing. Real drift, stays loud |
+| **RG scope** — existence cannot be confirmed (403, network failure) | Scan aborts, **exit 2** — an unverifiable scope is as unsafe to report on as an absent one |
+| **Subscription scope** — one RG of many is missing | **Drift** on the resource group, with its orphaned contents attributed to it |
+| **Subscription scope** — no resources at all | Scan aborts, **exit 2** — wrong subscription, no read access, or never deployed |
+| **Multi-RG pass** — one RG unreadable | That RG is skipped with a warning and named in the summary; the others scan normally. The counting step still fails, naming the skipped RG |
+
+The asymmetry is not arbitrary. At resource-group scope the RG is the **frame**
+of the scan — an RG-scoped template cannot declare one, so its absence is a
+targeting failure. At subscription scope the RG is a **declared resource** the
+template owns, so its absence is drift like any other resource's. See
+[RESOURCE_GROUP_TARGETING.md](RESOURCE_GROUP_TARGETING.md).
+
+## Nuances worth knowing before they bite
+
+- **A wrong subscription looks exactly like a deleted estate.** Both produce an
+  empty result. Only the explicit existence check separates them, which is why
+  `subscription_id` in the landing-zone config is required in practice.
+- **Exit 2 is not exit 1.** `0` = scan completed (drift may or may not exist),
+  `1` = error, `2` = scope not found. CI can distinguish a targeting failure from
+  drift without parsing logs.
+- **The run still writes a report**, carrying `scope_status: "not_found"` and the
+  reason. It is deliberately kept out of the drift tallies: "no report" and
+  "zero drift" must never be confused, and the counting step fails naming the
+  resource group rather than reporting a clean estate.
+- **Nobody is notified.** The report has no findings, so no events are generated
+  and no channel is messaged. **Channel silence does not mean "no drift"** for a
+  landing zone whose scheduled run is failing — check the workflow, not the
+  channel.
+- **A skipped RG in a multi-RG pass is never reported as clean.** The other
+  landing zones still produce real answers; the skipped one produces none, and
+  says so.
+- **A `workflow_dispatch` run can override the subscription and resource group**,
+  which is the quickest way to test whether a failing scheduled scan is a config
+  problem or a real one.
+
+## Triage
+
+1. `az group show -n <rg>` — decommissioned or renamed is the most common cause.
+2. Check `subscription_id` in the landing-zone config against the subscription
+   the estate actually lives in.
+3. Confirm the scanning identity has Reader on that scope.
+4. If the environment is genuinely gone, **remove the landing zone from
+   `lz-index.yml`** — otherwise every scheduled run fails from here on.
+
+Full triage steps are in [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md),
+"Scan aborted".
 
 ---
 
@@ -390,7 +463,7 @@ notifications:
 
 Modify:
 
-``yaml
+```yaml
 checks:
 ```
 
@@ -414,10 +487,24 @@ Changes take effect during the next scan.
 
 ## Retire a Landing Zone
 
+**Order matters.** De-register the landing zone *before* the Azure environment is
+torn down. A registered landing zone whose resource group no longer exists fails
+every scheduled run with exit 2 — correctly, since a scan of a scope that cannot
+be read has no valid result, but it produces a recurring red build that says
+nothing useful.
+
 1. Remove the landing zone from `lz-index.yml`.
 2. Disable associated workflows.
-3. Archive historical reports if required.
-4. Remove notification routing.
+3. **Then** decommission the Azure environment.
+4. Archive historical reports if required.
+5. Remove notification routing.
+
+If the environment was torn down first, the fix is the same — remove it from
+`lz-index.yml` — and the failing runs in between are expected, not a defect.
+
+The same applies to a **temporarily** torn-down environment (a test estate
+between rounds): either de-register it or accept failing scheduled runs until it
+is redeployed.
 
 ----
 # Scheduling Recommendations
@@ -438,11 +525,30 @@ Large environments should avoid scheduling all landing zones simultaneously.
 
 # Troubleshooting
 
+## Scan Aborted (Exit 2)
+
+The scan could not read the resource group or subscription it was pointed at, so
+it produced no drift conclusion. **This is a targeting or permissions problem,
+not drift.**
+
+| Symptom | Likely cause |
+|---------|--------------|
+| Exit 2 on a newly onboarded LZ | Wrong `subscription_id`, or a mistyped resource-group name |
+| Exit 2 on a previously working LZ | The resource group was renamed, decommissioned, or the estate was torn down |
+| Exit 2 across every landing zone | Scanning identity lost Reader, or the federated credential broke |
+| `Scope not found: <rg>` in the counting step | The named RG is unreadable; other RGs in the same pass still reported normally |
+
+Run `az group show -n <rg>`, check `subscription_id`, confirm the identity has
+Reader, and if the environment is genuinely gone remove it from `lz-index.yml`.
+Full detail in [When the Scope Is Wrong](#when-the-scope-is-wrong).
+
+---
+
 ## Landing Zone Not Found
 
 Verify:
 
-``yaml
+```yaml
 landing_zones:
 ```
 
@@ -458,10 +564,11 @@ contains the expected entry in:
 
 Verify:
 
-``text
-.github/drift-lz-config.yml```
+```text
+.github/drift-lz-config.yml
+```
 
-exists in the target reposito*y.
+exists in the target repository.
 
 ---
 

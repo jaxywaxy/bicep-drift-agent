@@ -42,6 +42,26 @@ Use this document to understand what the agent can detect, how findings are clas
 
 # Desired State Analysis
 
+## Which Bicep is supported
+
+The agent aims to work against as broad a range of Bicep codebases as possible —
+hand-rolled resource-group templates, subscription-scoped landing zones, mixed
+styles, older parameter conventions, and repositories that only partially follow
+CAF/ALZ patterns. Coverage degrades gracefully on unfamiliar shapes (log and
+continue) rather than failing the scan.
+
+**The highest-value target is module-based Bicep** — templates composed of
+reusable modules (AVM, in-house libraries, `br/` registry references, or plain
+`module` blocks). Name resolution, parameter/default handling and ownership
+tagging are optimised for that case first, because module boundaries usually
+mirror the platform-versus-workload split in a real estate. Where a design choice
+trades "works on any Bicep" against "works better on module-based Bicep", the
+trade-off is documented and leans toward the module case.
+
+**Hand-authored ARM JSON is out of scope.** The pipeline compiles Bicep to ARM as
+an intermediate; it does not accept `.json` ARM templates as input. Convert with
+`az bicep decompile` first.
+
 | Capability | Details |
 |------------|---------|
 | Bicep Compilation | Converts Bicep to ARM templates |
@@ -105,7 +125,34 @@ nothing.
 | Write-Only Protection | Secrets and write-only values not compared or exposed |
 | Unverified Absence | A type the collectors could not read is reported as unverified, never as deleted |
 | Unreadable Scope | A resource group that does not exist aborts the scan; it is never reported as every declared resource being deleted |
+| Declared Resource Groups | At subscription scope a missing resource group is drift on the group itself, with its orphaned contents attributed to it |
 | Condition-Skipped Declarations | A resource this scan gated off is a parameter mismatch, not an unmanaged resource |
+
+**A resource group is a frame at one scope and a resource at the other.**
+Enterprise estates run both shapes, and the rule differs by design:
+
+| Scope | A resource group is… | Missing → |
+|---|---|---|
+| Resource group | the **frame** of the scan (an RG-scoped template cannot declare one) | scan aborts, exit 2 — a targeting failure |
+| Subscription | a **declared resource** the template owns (CAF platform LZs declare theirs) | reported as drift on the resource group |
+
+At subscription scope `Microsoft.Resources/resourceGroups` is compared like any
+other type. It is collected from Resource Graph's **`ResourceContainers`** table
+— the `Resources` table contains no resource groups at all, so the collector
+(`tools/live_state/collectors/resource_groups.py`) has to exist before the
+comparator can mean anything.
+
+A deleted resource group produces **one** finding for the group plus its
+contents **attributed** to it (`details.orphaned_by_missing_resource_group`),
+not N unrelated deletions. The contents are annotated rather than suppressed:
+they genuinely are gone, the deletion cost guard needs to see them, and anyone
+restoring the group needs the inventory.
+
+**An empty subscription is not a deleted landing zone.** One resource group
+missing out of many is drift; *none of them* present is a user or configuration
+error — the wrong subscription, a credential without read access, or an
+environment never deployed — and aborts the same way an unreadable resource
+group does.
 
 **An unreadable scope is not mass deletion.** Resource Graph answers a query for
 a resource group that does not exist with a *successful, empty* result set —
@@ -339,6 +386,18 @@ existed to surface).
 | Privileged Role Detection | Flags Owner, Contributor, UAA and RBAC Administrator roles |
 | Grant Attribution | Records who granted access and when |
 | Scope Awareness | Supports RG and subscription scope |
+| Distinct Identity | Two declarations never collapse into one row, even when the principal cannot be resolved |
+
+Rows are named `<Role> -> <principal>`. When a declared `principalId` is a
+runtime expression the principal reads `unresolved-principal`, which two
+different declarations can share — two policy remediation grants, both
+`Contributor -> unresolved-principal`, with the same synthetic id and both
+privileged. Colliding rows are therefore suffixed with the literal that
+distinguishes them in the template, taken from the `guid()` arguments:
+`Contributor -> unresolved-principal (via drift-inherit-costcentre)`. Rows that
+are already unique are untouched, and `details.declared_as` carries the raw
+declaration. Nothing about detection or severity changes — this is identity, not
+scoring.
 
 ## Policy Drift
 

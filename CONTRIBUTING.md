@@ -7,10 +7,10 @@ This example demonstrates drift detection for enterprise Azure environments and 
 Before contributing, please review the project documentation:
 
 - `README.md`
-- `ARCHITECTURE.md`
-- `CAPABILITIES.md`
-- `SECURITY_MODEL.md`
-- `LANDING_ZONE_OPERATIONS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/CAPABILITIES.md`
+- `docs/SECURITY.md`
+- `docs/LANDING_ZONES_OPERATIONS.md`
 
 ---
 
@@ -118,6 +118,14 @@ Run the test suite before submitting a pull request.
 python -m unittest discover -s tests
 ```
 
+**Tests use the standard library `unittest` — do not add a test dependency.**
+The suite runs on every pull request and is expected to stay fast (~1,000 tests
+in a couple of seconds), which is what makes it usable as a pre-commit check.
+
+A test must enter through the stage above the one it exercises. A test that calls
+a helper directly can pass while the pipeline never reaches that helper — that
+has happened twice, and both times the bug shipped behind a green suite.
+
 ## Expected Behaviour
 
 Changes should:
@@ -147,11 +155,12 @@ Typical documentation updates include:
 
 | Change | Documentation |
 |----------|--------------|
-| New capability | `CAPABILITIES.md` |
-| New architecture component | `ARCHITECTURE.md` |
-| Security change | `SECURITY_MODEL.md` |
-| New configuration option | `CONFIG_REFERENCE.md` |
-| New operating procedure | `OPERATIONS_RUNBOOK.md` |
+| New capability | `docs/CAPABILITIES.md`, plus a tier in `docs/VALIDATION_STATUS.md` |
+| New architecture component | `docs/ARCHITECTURE.md` |
+| Security change | `docs/SECURITY.md` |
+| New configuration option | `docs/CONFIGURATION_REFERENCE.md` |
+| New operating procedure | `docs/OPERATIONS_RUNBOOK.md` |
+| New environment variable | `docs/CONFIGURATION_REFERENCE.md` — every `os.environ` read belongs there |
 
 ---
 
@@ -240,7 +249,7 @@ Changes that increase permissions should be reviewed carefully.
 See:
 
 ```text
-SECURITY_MODEL.md
+docs/SECURITY.md
 ```
 
 ---
@@ -251,11 +260,19 @@ When introducing support for a new Azure resource type:
 
 ## Requirements
 
-1. Live state collection implemented.
+1. Live state collection implemented — **the collector belongs in
+   `tools/live_state/collectors/`**. A structural test derives the collected type
+   set from that directory and fails if any of those types is discarded by a
+   type-only `.drift-ignore` rule. A collector placed elsewhere escapes that
+   guard, and its comparator can then run and produce nothing: that is exactly
+   how the backup comparators shipped silently ineffective for about a month.
 2. Property comparison implemented.
 3. False-positive behaviour considered.
-4. Unit tests added.
-5. Documentation updated.
+4. **A new `drift_type` registered in `tools/count_drifts.COUNTED_TYPES`** (or
+   explicitly reconciled, as `matched_unresolvable` is). Otherwise it is detected,
+   reported in the JSON, and silently absent from every count.
+5. Unit tests added.
+6. Documentation updated, including a tier in `docs/VALIDATION_STATUS.md`.
 
 ## Recommended Process
 

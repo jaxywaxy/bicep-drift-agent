@@ -23,7 +23,7 @@ Everything below follows from that one distinction.
 
 The template already names its resource groups, so the agent runs **one subscription-wide pass** and matches resources across all of them.
 
-`resource_groups` in the config is a **filter, not a target list** — a glob like `jacquidev-*` narrows the pass to matching RGs. The reusable workflow (`drift-check-lz-hybrid.yml`) deliberately passes the selector through **unexpanded** for this case: expanding it into individual RGs would compare each RG against the *whole* template and manufacture false `missing_in_azure`.
+`resource_groups` in the config is a **filter, not a target list** — a glob like `contosodev-*` narrows the pass to matching RGs. The reusable workflow (`drift-check-lz-hybrid.yml`) deliberately passes the selector through **unexpanded** for this case: expanding it into individual RGs would compare each RG against the *whole* template and manufacture false `missing_in_azure`.
 
 ---
 
@@ -63,18 +63,18 @@ For RG-scoped templates the selectors *are* expanded (unlike the subscription-sc
 
 ## Worked example — the vHub check
 
-`bicep/vhub.bicep` in `drift-test-resources` is **RG-scoped**, so its resource groups must be configured. It also uses **static resource names** (no `uniqueString`), so it can live in a dedicated RG safely.
+`bicep/vhub.bicep` in `myorg/platform-bicep` is **RG-scoped**, so its resource groups must be configured. It also uses **static resource names** (no `uniqueString`), so it can live in a dedicated RG safely.
 
 `lz-index.yml`:
 
 ```yaml
 vhub-test:
-  repo: jaxywaxy/drift-test-resources
+  repo: myorg/platform-bicep
   config_path: .github/drift-lz-vhub-config.yml
   workflow: drift-lz-test.yml
 ```
 
-`drift-test-resources/.github/drift-lz-vhub-config.yml`:
+`platform-bicep/.github/drift-lz-vhub-config.yml`:
 
 ```yaml
 checks:
@@ -84,10 +84,10 @@ checks:
       deployVirtualHub: true
       deployHubFirewall: true
     resource_groups:
-      - rg-drift-vhub        # dedicated RG — NOT the shared rg-drift-test
+      - rg-hub-routing       # dedicated RG — NOT the shared platform RG
 ```
 
-`vhub.bicep` is a **subset** template. Pointing it at the shared `rg-drift-test` (which holds the full `main.bicep` estate) makes every non-vHub resource surface as `extra_in_azure` — a scope mismatch, not drift. Giving it its own resource group is the fix.
+`vhub.bicep` is a **subset** template. Pointing it at the shared `rg-platform` (which holds the full `main.bicep` estate) makes every non-vHub resource surface as `extra_in_azure` — a scope mismatch, not drift. Giving it its own resource group is the fix.
 
 ---
 
@@ -115,7 +115,7 @@ an absent one, is in [CAPABILITIES.md](CAPABILITIES.md). Triage steps are in
 
 - **`'*'` with an RG-scoped template compares the template against *every* RG in the subscription** → pure false-`missing` noise for RGs that never held it. (Local `'*'` mode skips the Claude analysis; workflow expansion runs the full pipeline — and cost — per RG. The estate-wipe guard makes all-missing RGs cheap to process, but the reports are still wrong-headed.) Prefer an explicit glob.
 - **N resource groups listed for one RG-scoped template = N independent full pipelines.** Correct **only** when each RG is a full instance of the template (e.g. per-environment copies), not when they collectively make up one landing zone.
-- **Deploy/scan name mismatch is a live footgun.** If the deploy targets `drift-test-resources-<environment>` but the config says `rg-drift-test`, every resource reads as `missing_in_azure`. Keep the config selector in step with where the deploy actually lands — a glob such as `resource_groups: ['drift-test-resources-*']` is more robust than a hard-coded name.
+- **Deploy/scan name mismatch is a live footgun.** If the deploy targets `platform-<environment>` but the config says `rg-platform`, every resource reads as `missing_in_azure`. Keep the config selector in step with where the deploy actually lands — a glob such as `resource_groups: ['platform-*']` is more robust than a hard-coded name.
 - **`uniqueString(resourceGroup().id)` changes with the RG name.** Moving an RG-scoped template to a different RG renames every `uniqueString`-seeded resource, which the agent reads as a full delete-and-recreate. Expected and harmless *if intentional* — but check whether a template uses `uniqueString` before relocating it. (`vhub.bicep` does not, so its move is name-safe.)
 
 ---
