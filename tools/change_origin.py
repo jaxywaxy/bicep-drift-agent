@@ -188,9 +188,21 @@ def select_relevant_activity(
 
     def is_write(entry: dict[str, Any]) -> bool:
         op = op_of(entry)
-        # writes/updates that mutate config; exclude reads, lists, and deletes
-        return (op.endswith("/write") or "modify" in op or "update" in op
-                or "remediat" in op) and not is_delete(entry)
+        # Writes/updates that mutate config; exclude reads, lists, and deletes.
+        #
+        # Match on PATH SEGMENTS, not substrings. A substring test for "update"
+        # also matches 'Microsoft.Resourcehealth/healthevent/Updated/action' -
+        # platform health telemetry that every VM and scale-set instance emits
+        # continuously, carrying caller=None. Being newer than the user's own
+        # write, it won the latest-first sort and a real out-of-band change was
+        # reported with NO actor (live, 2026-08-02, VMSS capacity 0->1).
+        segments = op.split("/")
+        return (
+            op.endswith("/write")
+            or "update" in segments
+            or "modify" in segments
+            or any(s.startswith("remediat") for s in segments)
+        ) and not is_delete(entry)
 
     def latest(entries):
         # Prefer an operation that took effect. Azure logs several records per
@@ -229,9 +241,20 @@ def select_relevant_activity(
     if not candidates:
         return []
 
-    # Most recent first, an effective operation ahead of a failed one
+    # Most recent first, an effective operation ahead of a failed one, and - only
+    # to break an exact tie - an event that NAMES SOMEONE ahead of one that names
+    # no one, since "manual change by <nobody>" is not an attribution.
+    #
+    # Caller-presence is deliberately the LAST key, not the first. Ranking it
+    # above recency would let an older named event outrank the newer one that
+    # actually set current state - the #337 failure mode (good history, false
+    # cause). Excluding platform telemetry is is_write's job, not the sort's.
     candidates.sort(
-        key=lambda e: (event_succeeded(e), str(e.get("timestamp") or "")),
+        key=lambda e: (
+            event_succeeded(e),
+            str(e.get("timestamp") or ""),
+            bool(e.get("caller")),
+        ),
         reverse=True,
     )
     return [candidates[0]]

@@ -173,5 +173,69 @@ class AClaimMustNotInheritAStaleActorTests(unittest.TestCase):
         self.assertEqual(co["last_write_at"], "2026-07-27T21:44:39+00:00")
 
 
+class PlatformTelemetryMustNotEraseTheActorTests(unittest.TestCase):
+    """A manual change attributed to NOBODY is not an attribution.
+
+    Live, 2026-08-02: a VMSS was scaled 0 -> 1 out of band. The report said
+    manual_change / out_of_band / severity high with an EMPTY actor, because
+    'Microsoft.Resourcehealth/healthevent/Updated/action' - platform telemetry
+    on the scale set's VM instance, caller=None - matched the `"update" in op`
+    substring test and, being 5s newer, beat the user's own write.
+
+    This drives orchestration/attribution.py, not select_relevant_activity
+    alone: the unit is where the bug lives, but the pipeline is where it showed.
+    """
+
+    ACTOR = "user@example.com"
+
+    def _attribute_vmss(self, events):
+        from unittest import mock
+        import orchestration.attribution as attr
+
+        report = {"drifts": [{"type": "Microsoft.Compute/virtualMachineScaleSets",
+                              "name": "vmss-drift-test",
+                              "drift_type": "property_drift",
+                              "details": {"changed_properties": {
+                                  "sku.capacity": {"desired": 0, "actual": 1,
+                                                   "severity": "critical"}}}}],
+                  "live_resources": []}
+        with mock.patch.object(attr, "fetch_resource_group_activity", return_value=events), \
+             mock.patch.object(attr, "fetch_policy_principal_ids", return_value=set()), \
+             mock.patch.object(attr, "detect_scanning_identity", return_value=set()), \
+             mock.patch.object(attr, "match_activity_for_resource", return_value=events):
+            attr._attribute_lifecycle(report, "rg")
+        return report["drifts"][0]
+
+    def _ev(self, op, caller, minute, second):
+        return {"operation": op, "caller": caller,
+                "timestamp": datetime(2026, 8, 2, 20, minute, second, tzinfo=timezone.utc),
+                "resource_id": "/subscriptions/s/resourceGroups/rg/providers/"
+                               "Microsoft.Compute/virtualMachineScaleSets/vmss-drift-test"}
+
+    def test_the_real_actor_survives_a_newer_health_event(self):
+        events = [
+            self._ev("Microsoft.Compute/virtualMachineScaleSets/write", self.ACTOR, 37, 14),
+            self._ev("Microsoft.Resourcehealth/healthevent/Updated/action", None, 37, 19),
+        ]
+        d = self._attribute_vmss(events)
+        self.assertEqual(
+            d["change_origin"]["changed_by"], self.ACTOR,
+            "the out-of-band actor was erased by platform telemetry",
+        )
+
+    def test_an_out_of_band_change_is_never_attributed_to_nobody(self):
+        # The invariant, stated independently of which verb caused it: if we
+        # are going to call something a manual change, we must be able to say
+        # who made it.
+        events = [
+            self._ev("Microsoft.Compute/virtualMachineScaleSets/write", self.ACTOR, 37, 14),
+            self._ev("Microsoft.Resourcehealth/healthevent/Updated/action", None, 37, 19),
+        ]
+        co = self._attribute_vmss(events)["change_origin"]
+        if co.get("origin") == "manual_change":
+            self.assertTrue(co.get("changed_by"),
+                            "manual_change with no actor is not an attribution")
+
+
 if __name__ == "__main__":
     unittest.main()

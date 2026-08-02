@@ -67,23 +67,82 @@ them.
 | NSGs and route tables | PR #229 |
 | Event Grid, Service Bus, Container Apps, federated credentials | PR #231 round (6/6 injections detected) |
 | Function Apps | #233 / #234 round |
+| Recovery Services vault backup **policies** | 2026-08-02 round — retention 30→7 detected `critical`, attributed to the out-of-band actor, reverted clean |
+| Azure Firewall rule collection groups | 2026-08-02 round — `ruleCollections[net-deny-smb]` removal detected `critical`, name-keyed (not positional), `owner: platform`, reverted clean |
+| Compute — VMSS capacity | 2026-08-02 round — `sku.capacity` 0→1 detected `critical`; `zones` correctly stayed silent (no subset false positive). **Detection only** — attribution failed, see below |
 
 ### Live-clean only — detection unproven
 
-All five were compared against live resources in the 2026-08-01 run and produced
-no findings. **None has had a drift injected.**
-
 | Capability | Live resources compared |
 |---|---|
-| Recovery Services vault backup config | 1 |
-| Recovery Services vault backup policies | 4 |
-| Azure Firewall policy + rule collection groups | 1 + 2 |
-| Compute — VMSS, disks, availability sets | 1 each |
-| RBAC role assignments | 3 in scope |
+| Compute — disks, availability sets | 1 each |
 
-Backup is the highest priority of these: it is the capability that was previously
-dead, and its documented reachability caveat (Azure rejects a soft-delete disable
-on a hardened vault) means part of it may not be reachable at all.
+### Unreachable — cannot be proven on this estate
+
+| Capability | Why |
+|---|---|
+| Recovery Services vault backup **config** | 2026-08-02: Azure **rejects** the injection — `BMSUserErrorDisablingSoftDeleteStateNotAllowed`. The template declares `enhancedSecurityState: Enabled` and `softDeleteFeatureState: Enabled`; both are already at hardened values Azure refuses to lower, so no permitted write makes this drift exist. Proving it needs a deliberately non-hardened vault in the estate. |
+
+Note: `isSoftDeleteFeatureStateEditable` reports `true` on this vault and does
+**not** predict whether the operation is permitted. Do not use it to decide
+whether this test is runnable.
+
+### Live-proven with a known failure mode
+
+| Capability | Result |
+|---|---|
+| RBAC role assignments | **Live-proven 2026-07-06** for a grant to a principal the template does not reference (`Contributor -> User:70afebf7…`, privileged + provenance + routing all correct). **2026-08-02 found a distinct failure mode:** granting to a principal the template *already declares another role for* (`id-drift-test`) produces a false negative *and* a false positive. See "Known defects" #2. `privileged: true` and `created_by` still populate correctly. |
+
+The boundary is worth stating plainly: RBAC detection is sound when the
+out-of-band grantee is unrelated to the template, and unsound when the grantee is
+a deployed managed identity the template already references. PR #299 fixed the
+adjacent case (deployed vs *deleted* principal); it cannot disambiguate between
+several *deployed* ones.
+
+### Known defects — found by the 2026-08-02 injection round
+
+Both are the same recurring shape (cf. #325 / #327 / #336 / #343): **a heuristic
+overrides evidence the pipeline already holds**. Each has a reproducer.
+
+**1. Health telemetry outranks the real write, erasing the actor.** *(fixed —
+`fix/attribution-health-telemetry`; live re-verify pending)*
+`select_relevant_activity` (`tools/change_origin.py`) classifies an operation as
+a config write with `"update" in op`. That substring matches
+`Microsoft.Resourcehealth/healthevent/**Updated**/action` — platform telemetry
+emitted continuously by every VM and scale-set instance, carrying `caller: None`.
+It is newer than the user's `virtualMachineScaleSets/write`, wins the latest-first
+sort, and the drift is reported `manual_change` / `out_of_band` / severity `high`
+with a **blank actor** — while the correct actor sits in the same event list.
+Defeats out-of-band attribution and owner-routing on any compute resource.
+
+```python
+events = [
+  {'operation':'Microsoft.Compute/virtualMachineScaleSets/write','timestamp':'...14.288Z','actor':'user@example.com','status':'Succeeded'},
+  {'operation':'Microsoft.Resourcehealth/healthevent/Updated/action','timestamp':'...19.608Z','actor':None,'status':'Succeeded'},
+]
+select_relevant_activity(events, 'property_drift')  # -> the healthevent, actor None
+```
+
+**2. Role assignments mis-bind among several *deployed* principals.**
+The template declares its policy-remediation Contributors with
+`principalId: reference(...).identity.principalId`, unresolvable at compile time,
+so Pass 2 matches on role GUID alone. PR #299 made Pass 2 prefer a live
+assignment whose principal is a currently-deployed managed identity — which
+resolves deployed-vs-*deleted*, but **cannot disambiguate between several
+deployed ones**. With 3 live Contributors at a scope (all deployed MIs) and 2
+declared, it pairs two first-come-first-served and calls the leftover
+`extra_in_azure`: it named a **declared, pipeline-created** assignment while the
+genuine out-of-band grant went unreported.
+
+The emitted row carries its own disproof — `created_by` is the authorized
+pipeline identity and `created_on` is the deploy timestamp. Acting on it revokes
+a role the tag-remediation policy needs, while the real privilege escalation
+stays invisible. Confirmed by the clean re-scan: with live count back to 2 =
+declared 2, the false positive disappears.
+
+Likely fix direction: when a declared row's principal is unresolvable, prefer the
+live assignment whose `created_by` is an authorized deployer before falling back
+to first-come-first-served — the evidence is already on the row.
 
 ### Unit-tested only
 
