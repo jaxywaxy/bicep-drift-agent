@@ -92,7 +92,34 @@ Use this document to understand what the agent can detect, how findings are clas
 | Write-Only Protection | Secrets and write-only values not compared or exposed |
 | Unverified Absence | A type the collectors could not read is reported as unverified, never as deleted |
 | Unreadable Scope | A resource group that does not exist aborts the scan; it is never reported as every declared resource being deleted |
+| Declared Resource Groups | At subscription scope a missing resource group is drift on the group itself, with its orphaned contents attributed to it |
 | Condition-Skipped Declarations | A resource this scan gated off is a parameter mismatch, not an unmanaged resource |
+
+**A resource group is a frame at one scope and a resource at the other.**
+Enterprise estates run both shapes, and the rule differs by design:
+
+| Scope | A resource group is… | Missing → |
+|---|---|---|
+| Resource group | the **frame** of the scan (an RG-scoped template cannot declare one) | scan aborts, exit 2 — a targeting failure |
+| Subscription | a **declared resource** the template owns (CAF platform LZs declare theirs) | reported as drift on the resource group |
+
+At subscription scope `Microsoft.Resources/resourceGroups` is compared like any
+other type. It is collected from Resource Graph's **`ResourceContainers`** table
+— the `Resources` table contains no resource groups at all, so the collector
+(`tools/live_state/collectors/resource_groups.py`) has to exist before the
+comparator can mean anything.
+
+A deleted resource group produces **one** finding for the group plus its
+contents **attributed** to it (`details.orphaned_by_missing_resource_group`),
+not N unrelated deletions. The contents are annotated rather than suppressed:
+they genuinely are gone, the deletion cost guard needs to see them, and anyone
+restoring the group needs the inventory.
+
+**An empty subscription is not a deleted landing zone.** One resource group
+missing out of many is drift; *none of them* present is a user or configuration
+error — the wrong subscription, a credential without read access, or an
+environment never deployed — and aborts the same way an unreadable resource
+group does.
 
 **An unreadable scope is not mass deletion.** Resource Graph answers a query for
 a resource group that does not exist with a *successful, empty* result set —

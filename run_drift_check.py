@@ -248,6 +248,75 @@ def _guard_unverifiable_scope(resource_group: str, bicep_file: str = "") -> None
     raise ScopeNotFoundError(reason)
 
 
+def _attribute_orphans_to_missing_rgs(drifts: list, arm_resources: list[dict]) -> int:
+    """Tie resources missing because their resource group is gone to that fact.
+
+    A deleted resource group at subscription scope produces one missing_in_azure
+    for the RG and one for every resource declared into it. Left unattributed
+    that reads as N independent deletions, and the single finding that explains
+    them competes for attention with its own consequences. The annotation lets
+    the report and the analysis lead with the cause.
+
+    They are NOT suppressed: the resources really are gone, the deletion cost
+    guard needs to see them, and a reader restoring the RG needs the inventory.
+    """
+    missing_rgs = {
+        (d.resource_name or "").lower()
+        for d in drifts
+        if d.resource_type == "Microsoft.Resources/resourceGroups"
+        and d.drift_type == "missing_in_azure"
+    }
+    if not missing_rgs:
+        return 0
+
+    declared_rg = {
+        (r.get("type"), r.get("name")): (r.get("_target_rg") or "")
+        for r in arm_resources
+    }
+    attributed = 0
+    for drift in drifts:
+        if drift.drift_type != "missing_in_azure":
+            continue
+        if drift.resource_type == "Microsoft.Resources/resourceGroups":
+            continue
+        target = declared_rg.get((drift.resource_type, drift.resource_name), "").lower()
+        if target and target in missing_rgs:
+            drift.details["orphaned_by_missing_resource_group"] = target
+            drift.details["note"] = (
+                f"Missing because its resource group '{target}' no longer exists - "
+                f"a consequence of that deletion, not an independent one. Restoring "
+                f"the resource group is the prerequisite for restoring this."
+            )
+            attributed += 1
+    if attributed:
+        logger.warning(
+            f"{attributed} missing resource(s) attributed to {len(missing_rgs)} deleted "
+            f"resource group(s) - report the group, not {attributed} separate deletions"
+        )
+    return attributed
+
+
+def _guard_empty_subscription(resource_group: str, bicep_file: str = "") -> None:
+    """A subscription-scoped scan that saw nothing at all has no answer to give.
+
+    One resource group missing out of many IS drift, and is reported as such -
+    the template declares its RGs at this scope. But an empty subscription is
+    not a landing zone that was deleted wholesale; overwhelmingly it is the
+    wrong subscription, a credential without read access, or an environment
+    never deployed. Reporting the entire template as missing would be the same
+    maximum-severity false alarm the RG-scope guard exists to prevent.
+    """
+    reason = (
+        f"Subscription-scoped scan (selector: {resource_group!r}) returned no "
+        f"resources at all. Refusing to report the whole landing zone as deleted: "
+        f"an empty subscription is a targeting or permissions problem, not drift. "
+        f"Check AZURE_SUBSCRIPTION_ID, the scanning identity's read access, and "
+        f"whether this environment has been deployed."
+    )
+    _write_scope_not_found_report(resource_group, bicep_file, reason)
+    raise ScopeNotFoundError(reason)
+
+
 def _write_scope_not_found_report(resource_group: str, bicep_file: str, reason: str) -> None:
     """Record an unreadable scope as its own outcome, not as zero drift.
 
@@ -302,8 +371,16 @@ def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources:
         logger.info("Ensure you're logged in: az login")
         raise
 
-    if not live_resources and deployment_scope != "subscription":
-        _guard_unverifiable_scope(resource_group, bicep_file)
+    if not live_resources:
+        # Both scopes, different reasons for the same refusal. At RG scope the
+        # scope itself may not exist; at subscription scope an empty answer for a
+        # whole landing zone is a user/config error (wrong subscription, no
+        # permissions, nothing deployed yet) - reporting an entire LZ as drift
+        # would be the same false alarm one level up.
+        if deployment_scope == "subscription":
+            _guard_empty_subscription(resource_group, bicep_file)
+        else:
+            _guard_unverifiable_scope(resource_group, bicep_file)
 
     logger.info(f"✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
 
@@ -557,6 +634,7 @@ def run(bicep_file: str, resource_group: str):
     # must not reach either of them claiming the resource is gone.
     _mark_unverified_missing(drifts, gaps)
     _annotate_condition_skipped(drifts, skipped)
+    _attribute_orphans_to_missing_rgs(drifts, arm_resources)
 
     _run_rbac_sidecar(arm_resources, live_resources, resource_group, deployment_scope,
                       ignore_patterns, drifts)

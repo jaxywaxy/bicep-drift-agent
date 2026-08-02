@@ -178,7 +178,10 @@ def extract_resources_from_arm(arm_template: dict, parameter_overrides: dict = N
     if parameter_overrides:
         parameters.update(parameter_overrides)
 
-    normalized = flatten_resources(arm_template, parameters, skipped=skipped)
+    normalized = flatten_resources(
+        arm_template, parameters, skipped=skipped,
+        subscription_scoped=detect_deployment_scope(arm_template) == "subscription",
+    )
     return normalized
 
 

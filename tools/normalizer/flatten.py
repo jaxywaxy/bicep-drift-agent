@@ -141,7 +141,8 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
 
 
 def flatten_resources(arm_template: dict, parameters: dict = None, variables: dict = None,
-                      skipped: SkippedDeclarations | None = None) -> list[dict]:
+                      skipped: SkippedDeclarations | None = None,
+                      subscription_scoped: bool = False) -> list[dict]:
     """Flatten ARM template resources, handling nested deployments and copy loops.
 
     - Extract top-level resources.
@@ -150,6 +151,11 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
     - Skip resources whose `condition` resolves to a definitive false, recording
       them in `skipped` so a gated-off declaration can still explain a live
       resource that would otherwise read as unmanaged.
+
+    `subscription_scoped` is decided ONCE by the caller from the top-level
+    template and threaded down: nested templates carry an RG-scoped schema of
+    their own, so re-detecting per level would classify a platform LZ's own
+    modules as resource-group scoped.
     """
     if parameters is None:
         parameters = extract_parameters(arm_template)
@@ -173,8 +179,17 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
 
         resource_type = resource.get("type", "")
 
-        # Skip infrastructure resources (not drift-checked)
-        if resource_type == "Microsoft.Resources/resourceGroups":
+        # At RG scope the resource group is the FRAME of the scan, not a thing
+        # inside it - an RG-scoped template cannot even declare one, and its
+        # absence is a targeting failure handled before the diff
+        # (run_drift_check._guard_unverifiable_scope).
+        #
+        # At SUBSCRIPTION scope it is a declared resource like any other, and in
+        # a CAF platform landing zone it is part of what the template owns.
+        # Skipping it there hid the single most consequential event that can
+        # happen to a landing zone: the RG's disappearance was silent while
+        # every resource it contained fired as an independent deletion.
+        if resource_type == "Microsoft.Resources/resourceGroups" and not subscription_scoped:
             continue
 
         # Conditional resources: a module/resource gated behind `if (...)` whose
@@ -218,7 +233,8 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
                 # unresolvable; this makes the bare-format case behave the same.
                 nested_vars = extract_variables(nested_template, nested_params)
                 nested_resources = flatten_resources(
-                    nested_template, nested_params, nested_vars, skipped=skipped)
+                    nested_template, nested_params, nested_vars, skipped=skipped,
+                    subscription_scoped=subscription_scoped)
                 # Cross-scope module (scope: resourceGroup(otherSub, rg)): stamp the
                 # target so the scan can verify these resources in THEIR subscription
                 # instead of flagging them missing in the scanned one.
@@ -226,11 +242,19 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
                 target_rg = resource.get("resourceGroup")
                 if target_sub:
                     target_sub = _resolve_value(target_sub, parameters, variables)
-                    target_rg = _resolve_value(target_rg, parameters, variables) if target_rg else None
-                    for nr in nested_resources:
+                # The target RG is stamped for SAME-subscription modules too, not
+                # just cross-subscription ones. It is how an orphaned resource is
+                # tied back to the resource group that vanished: without it a
+                # deleted RG reads as N unrelated deletions with nothing naming
+                # the cause. (cross_sub.py selects on _target_subscription, so
+                # widening this does not pull same-sub resources into that path.)
+                if target_rg:
+                    target_rg = _resolve_value(target_rg, parameters, variables)
+                for nr in nested_resources:
+                    if target_sub:
                         nr.setdefault("_target_subscription", target_sub)
-                        if target_rg:
-                            nr.setdefault("_target_rg", target_rg)
+                    if target_rg:
+                        nr.setdefault("_target_rg", target_rg)
                 flattened.extend(nested_resources)
         else:
             normalized = _normalize_resource(resource, parameters, variables)
