@@ -42,6 +42,26 @@ Use this document to understand what the agent can detect, how findings are clas
 
 # Desired State Analysis
 
+## Which Bicep is supported
+
+The agent aims to work against as broad a range of Bicep codebases as possible —
+hand-rolled resource-group templates, subscription-scoped landing zones, mixed
+styles, older parameter conventions, and repositories that only partially follow
+CAF/ALZ patterns. Coverage degrades gracefully on unfamiliar shapes (log and
+continue) rather than failing the scan.
+
+**The highest-value target is module-based Bicep** — templates composed of
+reusable modules (AVM, in-house libraries, `br/` registry references, or plain
+`module` blocks). Name resolution, parameter/default handling and ownership
+tagging are optimised for that case first, because module boundaries usually
+mirror the platform-versus-workload split in a real estate. Where a design choice
+trades "works on any Bicep" against "works better on module-based Bicep", the
+trade-off is documented and leans toward the module case.
+
+**Hand-authored ARM JSON is out of scope.** The pipeline compiles Bicep to ARM as
+an intermediate; it does not accept `.json` ARM templates as input. Convert with
+`az bicep decompile` first.
+
 | Capability | Details |
 |------------|---------|
 | Bicep Compilation | Converts Bicep to ARM templates |

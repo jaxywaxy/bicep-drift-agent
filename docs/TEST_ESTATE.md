@@ -3,9 +3,22 @@
 The Azure resources the agent is verified against, and how to run a verification
 round. Companion to `VALIDATION_STATUS.md`, which records what each round proved.
 
-**Repository:** `jaxywaxy/drift-test-resources` (registered in
-`.github/lz-index.yml` as `test-resources`, `vhub-test`, `test-stack-resources`
-and `database-testing`).
+> **Reference only — this estate is a separate repository and does not move with
+> the agent.**
+>
+> `drift-test-resources` is deliberately kept apart from the agent: it is a
+> throwaway estate for verification, not a deliverable, and it is not migrated
+> alongside this repo. What is portable here is the **method** — the round
+> procedure below, and the composition principles that make an estate useful for
+> verification. An adopting organisation needs its own estate, registered in its
+> own `lz-index.yml`.
+>
+> Treat the specific module names, resource groups and landing-zone entries below
+> as a worked example of an estate that has exercised these capabilities, not as
+> something to expect in this repository.
+
+**Repository:** `drift-test-resources` (registered in `.github/lz-index.yml` as
+`test-resources`, `vhub-test`, `test-stack-resources` and `database-testing`).
 
 **Resource group:** `rg-drift-test` — a throwaway estate, deployed for a round and
 torn down afterwards. It is not always up: a scan against a torn-down estate now
@@ -78,7 +91,24 @@ live (see `VALIDATION_STATUS.md`).
 ## Running a verification round
 
 The round is what promotes a capability from *live-clean* to *live-proven*.
-Deploy and teardown commands live in the estate repo's `CLAUDE.md`.
+
+Deploy the estate (from the estate repository root):
+
+```bash
+az group create --name rg-drift-test --location australiaeast
+az deployment group create \
+  --resource-group rg-drift-test \
+  --template-file bicep/main.bicep \
+  --parameters @bicep/parameters.json
+```
+
+Add any gating parameter the capability under test needs, e.g.
+`--parameters deployAks=true`. Tear down with
+`az group delete --name rg-drift-test --yes`.
+
+CI equivalents live in the estate repo: `.github/workflows/drift-lz-deploy.yml`
+(deploy on push to `main`) and `.github/workflows/deploy-stack.yml`
+(deployment-stack fixture, deploy and teardown via `workflow_dispatch`).
 
 1. **Deploy** the estate (and set any gating parameter the capability needs).
 2. **Baseline scan** — confirm zero drift. A non-empty baseline means the estate

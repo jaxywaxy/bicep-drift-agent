@@ -412,6 +412,23 @@ Landing zones can be added through configuration rather than platform code chang
 
 ---
 
+## Implementation Invariants
+
+Properties the pipeline relies on. Each was learned from a defect, and breaking
+one produces a failure that a passing test suite will not catch.
+
+| Invariant | Why it exists |
+|-----------|---------------|
+| **A new `drift_type` must be registered in `tools/count_drifts.COUNTED_TYPES`** (or explicitly reconciled, as `matched_unresolvable` is) | Otherwise it is detected, written to the JSON, and silently absent from every count and summary |
+| **Stage ordering is load-bearing.** Smart matching runs *before* ignore filtering; attribution runs *before* the Claude call; the grep-able CI summary is emitted *after* the policy split | Reordering any of these changes the result rather than just the sequence — reconciled resources get swallowed by ignore rules, the analysis prompt loses who/how, or the summary disagrees with the report |
+| **Report filenames go through `tools/rg_selector.rg_label`** — never concatenate `resource_group` | A subscription scan's selector may be `"*"` or a glob, neither of which is a valid filename |
+| **Secrets never reach disk.** `tools/redact.py` scrubs secret-bearing values from the raw ARM/live dump written to the JSON | Property comparison already ignores write-only secrets, but the raw dump would otherwise carry them into an artifact |
+| **Log-and-skip is acceptable in sidecar comparators only** (RBAC, policy, deployment stacks) | Their failure should not sink a scan that still has real answers. Anywhere else, a swallowed error is a silent wrong answer |
+| **The JSON report is the single source of truth** | The HTML report, the CI summary and every downstream consumer read it. A drift absent from the final `drifts` array is reported nowhere |
+| **Claude is optional** | Every deterministic stage runs without `ANTHROPIC_API_KEY`; only the narrative is lost |
+
+---
+
 ## Key Design Decisions
 
 | Decision | Rationale |
