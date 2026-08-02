@@ -24,6 +24,7 @@ unmatched pool - same philosophy as smart_matching for uniqueString names.
 """
 
 import fnmatch
+import hashlib
 import logging
 import os
 import re
@@ -81,6 +82,82 @@ def _is_unresolved(value: Any) -> bool:
     """True when a bicep-side value is still a template expression, not a literal."""
     v = str(value or "")
     return not v or any(marker in v for marker in ("[", "(", "{"))
+
+
+def _declaration_discriminator(raw_name: Any) -> str | None:
+    """The literal in a guid() name that tells one declaration from another.
+
+    An assignment's bicep name is a guid() over whatever makes it unique, e.g.
+
+        guid(resourceGroup().id,
+             resourceId('Microsoft.Authorization/policyAssignments',
+                        'drift-inherit-costcentre'),
+             'b24988ac-6180-42a0-ab88-20f7382dd24c')
+
+    The GUID itself is unresolvable, but its ARGUMENTS survive compilation, and
+    one of them is the discriminator: 'drift-inherit-costcentre'. Everything
+    else in there is ARM plumbing - the role definition GUID, the type string,
+    nested expressions - so those are dropped and the first real literal wins.
+
+    Returns None when nothing identity-bearing survives; the caller falls back
+    to a content hash rather than inventing a name.
+    """
+    literals = re.findall(r"'([^']*)'", str(raw_name or ""))
+    for literal in literals:
+        if not literal or len(literal) > 64:
+            continue
+        if "/" in literal or "(" in literal:  # ARM type string, nested expression
+            continue
+        if _GUID_RE.fullmatch(literal):       # role definition id
+            continue
+        if re.match(r"^\d{4}-\d{2}-\d{2}", literal):  # api-version
+            continue
+        return literal
+    return None
+
+
+def _disambiguate_colliding_names(drifts: list[dict], raw_names: dict[int, str]) -> int:
+    """Make byte-identical role-assignment rows tell themselves apart.
+
+    Two DIFFERENT declarations collapse to one name whenever the part that
+    distinguishes them cannot be resolved - two policy remediation grants, both
+    'Contributor -> unresolved-principal' (issue #351). The rows then share a
+    synthetic resource_id too, since that is built from the name, so a reader
+    cannot tell one grant reported twice from two grants. Both were
+    privileged: true, which is the least helpful place to be ambiguous.
+
+    Only COLLIDING rows are touched. Appending the declaration to every
+    unresolved row would add noise to rows that were never ambiguous, and the
+    best available literal is often a parameter name rather than a
+    discriminator. A row that is already unique keeps exactly the name it has
+    today.
+    """
+    by_name: dict[str, list[int]] = {}
+    for i, d in enumerate(drifts):
+        by_name.setdefault(d["name"], []).append(i)
+
+    renamed = 0
+    for name, indexes in by_name.items():
+        if len(indexes) < 2:
+            continue
+        for i in indexes:
+            raw = raw_names.get(i, "")
+            suffix = _declaration_discriminator(raw)
+            if not suffix:
+                # No literal to name it by. A hash over the declaration keeps
+                # identity distinct without inventing meaning, and is stable
+                # across runs because it is over template content.
+                suffix = hashlib.sha256(str(raw).encode("utf-8")).hexdigest()[:8]
+            drifts[i]["name"] = f"{name} (via {suffix})"
+            drifts[i]["details"]["declared_as"] = raw
+            renamed += 1
+
+    if renamed:
+        logger.info(
+            f"Disambiguated {renamed} role-assignment row(s) that shared a name - "
+            f"different declarations whose distinguishing value could not be resolved"
+        )
+    return renamed
 
 
 def _scope_rg(scope: str) -> str | None:
@@ -355,8 +432,12 @@ def compare_role_assignments(
             "drift_type": "extra_in_azure",
             "details": details,
         })
+    # Which declaration produced each row, so a collision can be broken by the
+    # thing that actually differs between them (see _disambiguate_colliding_names).
+    raw_names: dict[int, str] = {}
     for b in unmatched_bicep:
         role_name = BUILTIN_ROLE_NAMES.get(b["role_guid"], b["role_guid"])
+        raw_names[len(drifts)] = b.get("raw_name", "")
         drifts.append({
             "type": ROLE_ASSIGNMENT_TYPE,
             "name": f"{role_name} -> {b['principal_id'] or 'unresolved-principal'}",
@@ -369,6 +450,8 @@ def compare_role_assignments(
                 "privileged": b["role_guid"] in PRIVILEGED_ROLE_GUIDS,
             },
         })
+
+    _disambiguate_colliding_names(drifts, raw_names)
 
     if drifts:
         extras = sum(1 for d in drifts if d["drift_type"] == "extra_in_azure")

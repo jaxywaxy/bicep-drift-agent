@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tools.ownership import PLATFORM, WORKLOAD, classify_owner
 from tools.rbac import (
+    _declaration_discriminator,
     _extract_guid,
     _scope_rg,
     _scope_target_type,
@@ -352,3 +353,100 @@ class RuntimePrincipalPreferenceTests(unittest.TestCase):
         got = collect_managed_identity_principals(live_resources)
         self.assertIn(self.DEPLOYED, got)          # lowercased
         self.assertIn("aaaa-sys", got)             # system-assigned too
+
+
+def _remediation_grant(policy_assignment_name):
+    """The exact shape from issue #351: a remediation grant whose only
+    distinguishing argument is the policy assignment it belongs to."""
+    return bicep_assignment(
+        f"[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '{CONTRIBUTOR}')]",
+        "[reference(resourceId('Microsoft.Authorization/policyAssignments', "
+        f"'{policy_assignment_name}'), '2022-06-01', 'full').identity.principalId]",
+        name=(
+            "[guid(resourceGroup().id, resourceId("
+            "'Microsoft.Authorization/policyAssignments', "
+            f"'{policy_assignment_name}'), '{CONTRIBUTOR}')]"
+        ),
+    )
+
+
+class DeclarationDiscriminatorTests(unittest.TestCase):
+    """The guid() arguments survive compilation even though the guid does not."""
+
+    def test_picks_the_policy_assignment_out_of_the_expression(self):
+        expr = ("[guid(resourceGroup().id, resourceId("
+                "'Microsoft.Authorization/policyAssignments', 'drift-inherit-costcentre'), "
+                f"'{CONTRIBUTOR}')]")
+        self.assertEqual(_declaration_discriminator(expr), "drift-inherit-costcentre")
+
+    def test_skips_arm_plumbing(self):
+        # type string (has '/'), role GUID, and api-version are all noise.
+        expr = (f"[guid('Microsoft.Authorization/policyAssignments', '{CONTRIBUTOR}', "
+                "'2022-06-01', 'the-real-one')]")
+        self.assertEqual(_declaration_discriminator(expr), "the-real-one")
+
+    def test_no_literal_is_none_not_a_guess(self):
+        self.assertIsNone(_declaration_discriminator("[guid(resourceGroup().id)]"))
+        self.assertIsNone(_declaration_discriminator(""))
+
+
+class CollidingRoleAssignmentNamesTests(unittest.TestCase):
+    """Issue #351: two different declarations must not become one row twice.
+
+    Both remediation grants carry an unresolvable principalId, so both used to
+    render 'Contributor -> unresolved-principal' with the same synthetic
+    resource_id - and both are privileged.
+    """
+
+    def _drifts(self):
+        arm = [_remediation_grant("drift-inherit-costcentre"),
+               _remediation_grant("drift-inherit-environment")]
+        return compare_role_assignments(arm, [])
+
+    def test_the_two_grants_are_distinguishable(self):
+        drifts = self._drifts()
+        self.assertEqual(len(drifts), 2)
+        names = sorted(d["name"] for d in drifts)
+        self.assertNotEqual(names[0], names[1])
+        self.assertIn("drift-inherit-costcentre", names[0])
+        self.assertIn("drift-inherit-environment", names[1])
+
+    def test_the_synthetic_resource_id_no_longer_collides(self):
+        # The id is built from the name (orchestration/attribution.py), so
+        # distinct names are what stops both rows adopting one identity.
+        drifts = self._drifts()
+        ids = {f"/providers/{d['type']}/{d['name']}" for d in drifts}
+        self.assertEqual(len(ids), 2)
+
+    def test_the_declaration_is_recorded_for_the_reader(self):
+        drifts = self._drifts()
+        self.assertTrue(all("declared_as" in d["details"] for d in drifts))
+
+    def test_both_remain_privileged_missing_grants(self):
+        # Legibility fix only: detection and severity must not move.
+        drifts = self._drifts()
+        self.assertTrue(all(d["drift_type"] == "missing_in_azure" for d in drifts))
+        self.assertTrue(all(d["details"]["privileged"] for d in drifts))
+
+    def test_a_lone_unresolved_grant_keeps_todays_name(self):
+        # No collision, no suffix - an unambiguous row gains no noise.
+        drifts = compare_role_assignments([_remediation_grant("only-one")], [])
+        self.assertEqual(len(drifts), 1)
+        self.assertEqual(drifts[0]["name"], "Contributor -> unresolved-principal")
+
+    def test_collision_with_no_literal_still_separates(self):
+        arm = [
+            bicep_assignment(
+                f"[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '{CONTRIBUTOR}')]",
+                "[reference('a').principalId]", name="[guid(resourceGroup().id)]"),
+            bicep_assignment(
+                f"[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '{CONTRIBUTOR}')]",
+                "[reference('b').principalId]", name="[guid(subscription().id)]"),
+        ]
+        names = [d["name"] for d in compare_role_assignments(arm, [])]
+        self.assertEqual(len(set(names)), 2, f"still collapsed: {names}")
+
+    def test_names_are_deterministic_across_runs(self):
+        first = [d["name"] for d in self._drifts()]
+        second = [d["name"] for d in self._drifts()]
+        self.assertEqual(first, second)
