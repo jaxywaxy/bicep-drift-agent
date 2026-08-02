@@ -322,6 +322,18 @@ existed to surface).
 | Privileged Role Detection | Flags Owner, Contributor, UAA and RBAC Administrator roles |
 | Grant Attribution | Records who granted access and when |
 | Scope Awareness | Supports RG and subscription scope |
+| Distinct Identity | Two declarations never collapse into one row, even when the principal cannot be resolved |
+
+Rows are named `<Role> -> <principal>`. When a declared `principalId` is a
+runtime expression the principal reads `unresolved-principal`, which two
+different declarations can share — two policy remediation grants, both
+`Contributor -> unresolved-principal`, with the same synthetic id and both
+privileged. Colliding rows are therefore suffixed with the literal that
+distinguishes them in the template, taken from the `guid()` arguments:
+`Contributor -> unresolved-principal (via drift-inherit-costcentre)`. Rows that
+are already unique are untouched, and `details.declared_as` carries the raw
+declaration. Nothing about detection or severity changes — this is identity, not
+scoring.
 
 ## Policy Drift
 
