@@ -87,6 +87,13 @@ Control which events trigger notifications:
 | `drift,extra` | DRIFT + EXTRA | Config changes or orphaned |
 | `extra,missing` | EXTRA + MISSING | Resource issues only |
 
+> **A misspelled filter sends everything, not nothing.** Unrecognised values are
+> discarded, and a filter that ends up empty falls back to `all` — so
+> `filter: drfit` delivers DRIFT, EXTRA *and* MISSING. The fallback is
+> deliberate (silently muting a team is worse than over-notifying them), but it
+> means a typo is invisible except as unexpected volume. Check the spelling
+> against the table above if a team is receiving more than it configured.
+
 ### Owner-Based Routing (CAF/ALZ)
 
 In a Cloud Adoption Framework landing zone, the **platform team** owns the network
@@ -273,6 +280,16 @@ Two report entry types are informational and deliberately excluded from events:
   runtime-named resource (`uniqueString()` etc.) was reconciled to its deployed
   counterpart. Shown in the report's "🔗 Smart-Matched Resources" section only.
 
+There is also a case where **nobody is notified because there is nothing to say**:
+
+- **A scan that could not read its scope** (`scope_status: "not_found"`) — a
+  decommissioned or renamed resource group, the wrong subscription, or an
+  identity without read access. The report carries zero drifts by design, so no
+  events are generated and no channel is messaged. The failure surfaces in CI
+  instead: the run exits 2 and the counting step fails naming the resource
+  group. **Do not read channel silence as "no drift"** for a landing zone whose
+  scheduled run is failing — see `OPERATIONS_RUNBOOK.md`, "Scan aborted".
+
 ---
 
 ## Getting Webhook URLs
@@ -348,6 +365,26 @@ gh api repos/ORG/DRIFT_AGENT_REPO/contents/.github/lz-index.yml
 - Webhook may be failing silently
 - Test webhook independently (see above)
 - Check GitHub Actions logs: workflow step "Send consolidated notifications"
+- Confirm the scan actually produced findings. A run that could not read its
+  scope reports zero drift and messages nobody (see
+  [What never triggers a notification](#what-never-triggers-a-notification))
+- Check the team's `owners` and `filter` values — an `owners` list that matches
+  no finding's owner tag delivers nothing to that team while others receive normally
+
+### A 3xx Response
+
+Redirects are **deliberately not followed** when posting to a webhook. A valid
+Slack or Teams webhook answers a POST with 200/201 directly; a 3xx means the URL
+is wrong — most often a truncated secret. Following it would land on a generic
+200 page and turn a delivery failure into a false "sent" success, so the send
+raises instead.
+
+If the logs show an `HTTPError` carrying a 301/302, re-set the secret and check
+it was stored whole:
+
+```bash
+gh secret set DRIFT_WEBHOOK_PLATFORM --body "https://outlook.webhook.office.com/webhookb2/..."
+```
 
 ---
 
