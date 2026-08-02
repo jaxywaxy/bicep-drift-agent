@@ -208,7 +208,7 @@ def _compile_and_extract(bicep_file: str, param_overrides: dict,
     return arm_resources, deployment_scope
 
 
-def _guard_unverifiable_scope(resource_group: str) -> None:
+def _guard_unverifiable_scope(resource_group: str, bicep_file: str = "") -> None:
     """Refuse to report an empty live set we cannot attribute to an empty scope.
 
     Zero live resources has two causes that look identical here: the resource
@@ -233,16 +233,48 @@ def _guard_unverifiable_scope(resource_group: str) -> None:
         "does not exist" if exists is False
         else "could not be confirmed to exist (the existence check itself failed)"
     )
-    raise ScopeNotFoundError(
+    reason = (
         f"Resource group '{resource_group}' {detail}. Refusing to report the "
         f"template's resources as deleted: an unreadable scope is a targeting "
         f"problem, not drift. Check the RG name, the subscription, and whether "
         f"the environment has been decommissioned."
     )
+    # Write the marker report BEFORE raising. The pipeline guarantees an
+    # artifact always exists, and count_drifts deliberately fails on an empty
+    # reports dir because "no report" must never be read as "no drift". Aborting
+    # without a report traded a wrong answer for an unreadable one: CI failed
+    # with "the drift check produced no report" instead of naming the RG.
+    _write_scope_not_found_report(resource_group, bicep_file, reason)
+    raise ScopeNotFoundError(reason)
+
+
+def _write_scope_not_found_report(resource_group: str, bicep_file: str, reason: str) -> None:
+    """Record an unreadable scope as its own outcome, not as zero drift.
+
+    `scope_status` is what downstream reads: count_drifts surfaces it as a
+    failure naming the RG, rather than tallying a report with no drifts as a
+    clean estate.
+    """
+    try:
+        label = rg_label(resource_group)
+        output_file = Path(f"reports/{label}-drift.json")
+        output_file.parent.mkdir(exist_ok=True)
+        with open(output_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "resource_group": label,
+                "bicep_file": bicep_file,
+                "scope_status": "not_found",
+                "scope_status_reason": reason,
+                "drift_count": 0,
+                "drifts": [],
+            }, f, indent=2, default=str)
+        logger.info(f"✓ Scope-not-found marker written to: {output_file}")
+    except Exception as e:
+        logger.warning(f"Could not write scope-not-found report: {e}")
 
 
 def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources: list[dict],
-                      gaps=None) -> list[dict]:
+                      gaps=None, bicep_file: str = "") -> list[dict]:
     """Query Resource Graph, then augment with cross-sub resources and Defender pricings.
 
     Cross-sub: a vending template may deploy resources into ANOTHER subscription
@@ -271,7 +303,7 @@ def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources:
         raise
 
     if not live_resources and deployment_scope != "subscription":
-        _guard_unverifiable_scope(resource_group)
+        _guard_unverifiable_scope(resource_group, bicep_file)
 
     logger.info(f"✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
 
@@ -517,7 +549,8 @@ def run(bicep_file: str, resource_group: str):
     arm_resources, deployment_scope = _compile_and_extract(bicep_file, param_overrides,
                                                            skipped=skipped)
     gaps = CollectionGaps()
-    live_resources = _fetch_live_state(resource_group, deployment_scope, arm_resources, gaps=gaps)
+    live_resources = _fetch_live_state(resource_group, deployment_scope, arm_resources,
+                                       gaps=gaps, bicep_file=bicep_file)
     ignore_patterns = _load_ignore_patterns(bicep_file)
     drifts = _diff_states(arm_resources, live_resources, ignore_patterns)
     # Before the sidecars and the summary: a row the collectors never looked at

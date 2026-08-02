@@ -104,6 +104,7 @@ def count_drifts(reports_dir: str) -> dict[str, int]:
     counts["changed_property_count"] = 0
     counts["critical_count"] = 0
     counts["reports"] = 0
+    counts["unreadable_scope_count"] = 0
 
     d = pathlib.Path(reports_dir)
     reports = sorted(d.glob("*-drift.json")) if d.is_dir() else []
@@ -114,15 +115,26 @@ def count_drifts(reports_dir: str) -> dict[str, int]:
             "clean estate."
         )
 
+    unreadable: list[str] = []
     for report_file in reports:
         with open(report_file, encoding="utf-8") as f:
             report = json.load(f)  # a corrupt report must raise, not count as 0
         counts["reports"] += 1
+        # A scope we could not read carries no drift *and no information*. It
+        # must not tally as a clean scan: zero findings from an RG that does not
+        # exist is the same "0 is indistinguishable from clean" failure the
+        # empty-directory guard above exists to prevent, one level in.
+        if report.get("scope_status") == "not_found":
+            counts["unreadable_scope_count"] += 1
+            unreadable.append(str(report.get("resource_group") or report_file.stem))
+            continue
         for key, value in tally_report(report).items():
             if key != "total_issues":
                 counts[key] += value
 
     counts["total_issues"] = sum(counts[k] for k in COUNTED_TYPES.values())
+    if unreadable:
+        counts["unreadable_scopes"] = unreadable  # type: ignore[assignment]
     return counts
 
 
@@ -141,6 +153,7 @@ def main(argv) -> int:
         return 1
 
     import os
+    unreadable = counts.pop("unreadable_scopes", [])
     lines = [f"{k}={v}" for k, v in counts.items() if k != "reports"]
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
@@ -156,6 +169,19 @@ def main(argv) -> int:
         print(f"  ({counts['changed_property_count']} property path(s) changed)")
     for line in lines:
         print(f"  {line}")
+    if unreadable:
+        # Fail, and say which scope. The drift numbers above are real for the
+        # scopes that WERE readable; this one produced no answer at all, and a
+        # green run would report it as clean.
+        print(
+            f"::error::Scope not found: {', '.join(unreadable)}. The drift check could "
+            f"not read {'this resource group' if len(unreadable) == 1 else 'these resource groups'}, "
+            f"so no drift conclusion is possible for "
+            f"{'it' if len(unreadable) == 1 else 'them'}. Check the resource group name, "
+            f"the subscription, and whether the environment has been decommissioned.",
+            file=sys.stderr,
+        )
+        return 1
     return 0
 
 

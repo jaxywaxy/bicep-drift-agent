@@ -14,6 +14,7 @@ deleted" and produced 74 findings at maximum severity, routed to the LZ owner.
 
 import os
 import sys
+import tempfile
 import unittest
 import urllib.error
 from unittest import mock
@@ -60,7 +61,20 @@ class ResourceGroupExistsTests(unittest.TestCase):
         self.assertIsNone(resource_group_exists("rg-a", ""))
 
 
-class GuardUnverifiableScopeTests(unittest.TestCase):
+class _IsolatedReportsDir(unittest.TestCase):
+    """Run in a scratch cwd: the guard WRITES a marker report, so a test calling
+    it from the repo root drops junk reports into reports/ - which the CI
+    counting step then reads as real scopes."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self._cwd = os.getcwd()
+        os.chdir(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        self.addCleanup(os.chdir, self._cwd)
+
+
+class GuardUnverifiableScopeTests(_IsolatedReportsDir):
     """The guard fires only on the ambiguous case, and errs toward silence."""
 
     def test_absent_scope_raises(self):
@@ -84,7 +98,7 @@ class GuardUnverifiableScopeTests(unittest.TestCase):
             self.assertIsNone(run_drift_check._guard_unverifiable_scope("rg-empty"))
 
 
-class GuardIsNotCalledOnTheHappyPathTests(unittest.TestCase):
+class GuardIsNotCalledOnTheHappyPathTests(_IsolatedReportsDir):
     """No ARM round-trip when the scan found resources - the check exists for
     the empty result only, so a normal scan pays nothing for it."""
 
@@ -130,6 +144,98 @@ class MultiRgPassSurvivesOneDeadScopeTests(unittest.TestCase):
                 _run_phase1("main.bicep", ["rg-only"])
         self.assertEqual(ctx.exception.code, 2)
 
+
+
+class ScopeNotFoundReportTests(_IsolatedReportsDir):
+    """The artifact must exist even when the scan cannot proceed.
+
+    The pipeline guarantees a report always exists, and count_drifts fails on an
+    empty reports dir because "no report" must never read as "no drift".
+    Aborting without a report traded a wrong answer for an unreadable one - CI
+    failed with "the drift check produced no report" instead of naming the RG.
+    """
+
+    def test_marker_report_is_written_before_raising(self):
+        import json
+
+        with mock.patch("run_drift_check.resource_group_exists", return_value=False):
+            with self.assertRaises(ScopeNotFoundError):
+                run_drift_check._guard_unverifiable_scope("rg-gone", "main.bicep")
+        written = os.path.join("reports", "rg-gone-drift.json")
+        self.assertTrue(os.path.exists(written))
+        with open(written) as f:
+            report = json.load(f)
+
+        self.assertEqual(report["scope_status"], "not_found")
+        self.assertEqual(report["drifts"], [])
+        self.assertIn("does not exist", report["scope_status_reason"])
+
+
+class CountDriftsRejectsUnreadableScopeTests(unittest.TestCase):
+    """A zero-drift report from a scope that does not exist is not a clean scan."""
+
+    def _reports_dir(self, tmp, payload):
+        import json
+        d = os.path.join(tmp, "reports")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "rg-gone-drift.json"), "w") as f:
+            json.dump(payload, f)
+        return d
+
+    def test_not_found_report_does_not_tally_as_clean(self):
+        import tempfile
+        from tools.count_drifts import count_drifts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = self._reports_dir(tmp, {
+                "resource_group": "rg-gone", "scope_status": "not_found",
+                "drift_count": 0, "drifts": [],
+            })
+            counts = count_drifts(d)
+
+        self.assertEqual(counts["unreadable_scope_count"], 1)
+        self.assertEqual(counts["total_issues"], 0)
+        self.assertEqual(counts["unreadable_scopes"], ["rg-gone"])
+
+    def test_main_exits_nonzero_and_names_the_scope(self):
+        import io
+        import tempfile
+        from contextlib import redirect_stderr
+        from tools.count_drifts import main
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = self._reports_dir(tmp, {
+                "resource_group": "rg-gone", "scope_status": "not_found",
+                "drift_count": 0, "drifts": [],
+            })
+            err = io.StringIO()
+            with redirect_stderr(err):
+                rc = main(["count_drifts.py", d])
+
+        self.assertEqual(rc, 1)
+        self.assertIn("Scope not found", err.getvalue())
+        self.assertIn("rg-gone", err.getvalue())
+
+    def test_a_real_report_alongside_still_counts(self):
+        import json
+        import tempfile
+        from tools.count_drifts import count_drifts
+
+        with tempfile.TemporaryDirectory() as tmp:
+            d = self._reports_dir(tmp, {
+                "resource_group": "rg-gone", "scope_status": "not_found",
+                "drift_count": 0, "drifts": [],
+            })
+            with open(os.path.join(d, "rg-live-drift.json"), "w") as f:
+                json.dump({"resource_group": "rg-live", "drifts": [
+                    {"drift_type": "missing_in_azure", "details": {}},
+                ]}, f)
+            counts = count_drifts(d)
+
+        # The readable scope's drift is still reported; the unreadable one is
+        # flagged separately rather than diluting or hiding it.
+        self.assertEqual(counts["missing_count"], 1)
+        self.assertEqual(counts["unreadable_scope_count"], 1)
 
 if __name__ == "__main__":
     unittest.main()
