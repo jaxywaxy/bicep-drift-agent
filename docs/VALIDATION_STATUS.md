@@ -135,7 +135,9 @@ Stated here rather than left implicit:
 
 ## Promoting a capability
 
-Run the injection round in `TEST_ESTATE.md`: deploy the estate, introduce the
+Run the injection round in [TEST_ESTATE.md](TEST_ESTATE.md) — noting that the
+estate it describes lives in a **separate repository that does not move with this
+one**; an adopting organisation supplies its own. Deploy the estate, introduce the
 drift, confirm detection and severity in the report, confirm the notification
 routed, revert, confirm the scan returns clean. Then move the row here and cite
 the date.

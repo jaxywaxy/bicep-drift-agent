@@ -3,9 +3,22 @@
 The Azure resources the agent is verified against, and how to run a verification
 round. Companion to `VALIDATION_STATUS.md`, which records what each round proved.
 
-**Repository:** `jaxywaxy/drift-test-resources` (registered in
-`.github/lz-index.yml` as `test-resources`, `vhub-test`, `test-stack-resources`
-and `database-testing`).
+> **Reference only — this estate is a separate repository and does not move with
+> the agent.**
+>
+> `drift-test-resources` is deliberately kept apart from the agent: it is a
+> throwaway estate for verification, not a deliverable, and it is not migrated
+> alongside this repo. What is portable here is the **method** — the round
+> procedure below, and the composition principles that make an estate useful for
+> verification. An adopting organisation needs its own estate, registered in its
+> own `lz-index.yml`.
+>
+> Treat the specific module names, resource groups and landing-zone entries below
+> as a worked example of an estate that has exercised these capabilities, not as
+> something to expect in this repository.
+
+**Repository:** `drift-test-resources` (registered in `.github/lz-index.yml` as
+`test-resources`, `vhub-test`, `test-stack-resources` and `database-testing`).
 
 **Resource group:** `rg-drift-test` — a throwaway estate, deployed for a round and
 torn down afterwards. It is not always up: a scan against a torn-down estate now

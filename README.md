@@ -263,7 +263,7 @@ gh workflow run drift-lz-platform.yml
 | `docs/SECURITY.md` | Security architecture and permissions |
 | `docs/OPERATIONS_RUNBOOK.md` | Operational procedures and troubleshooting |
 | `docs/VALIDATION_STATUS.md` | What each capability has actually been proven to detect |
-| `docs/TEST_ESTATE.md` | The test estate, and how to run a verification round |
+| `docs/TEST_ESTATE.md` | Verification-round procedure, and the reference estate it was run against (separate repo, not migrated) |
 
 ---
 
