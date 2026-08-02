@@ -68,6 +68,19 @@ Use this document to understand what the agent can detect, how findings are clas
 | Private Endpoint DNS Zone Groups | ARM REST |
 | Log Analytics Workspace Tables | ARM REST (declared tables only) |
 | Cross-Subscription Resources | Resource Graph and ARM REST |
+| Recovery Services Vault Backup Config | ARM REST |
+| Recovery Services Vault Backup Policies | ARM REST (declared policies only) |
+| Defender Plans | ARM REST (declared plans only) |
+| App Service Config Children | ARM REST (`config/web`, `config/appsettings` as key sets) |
+| Extension Resources | ARM REST (diagnostic settings, DCR associations) |
+| Data-Plane Children | ARM REST (storage containers/shares, Service Bus queues/topics, Event Hub children) |
+
+Collectors live in `tools/live_state/collectors/`. That location is load-bearing:
+`tests/test_ignore_patterns.py::CollectedTypesAreNotBlanketIgnoredTests` derives
+the collected type set from that directory and fails if any of those types is
+discarded by a type-only ignore rule. A collector placed elsewhere is outside
+that guard — which is how a comparator can ship, be documented, and produce
+nothing.
 
 ---
 
@@ -105,11 +118,15 @@ wrong subscription).
 So an empty live set triggers an explicit ARM read of the resource group, and
 only then:
 
-- **absent, or unconfirmable** → the scan aborts with exit code **2** and writes
-  no report. Exit 2 is distinct from a real error (1) and a clean scan (0), so
-  CI can tell a targeting failure from drift without parsing logs. An
-  inconclusive check (403, network failure) aborts too — an unverifiable scope
-  is exactly as unsafe to report on as an absent one.
+- **absent, or unconfirmable** → the scan aborts with exit code **2** and writes a
+  marker report carrying `scope_status: "not_found"` and the reason. Exit 2 is
+  distinct from a real error (1) and a clean scan (0), so CI can tell a targeting
+  failure from drift without parsing logs. An inconclusive check (403, network
+  failure) aborts too — an unverifiable scope is exactly as unsafe to report on
+  as an absent one. The marker matters: `count_drifts` fails on an empty reports
+  directory precisely because "no report" must never read as "no drift", so
+  aborting without one traded a wrong answer for an unreadable one. It is kept
+  out of the drift tallies and surfaced as a failure naming the resource group.
 - **present but empty** → the scan proceeds and every declared resource *is*
   reported missing. That case is real drift and stays loud.
 
@@ -434,7 +451,24 @@ Critical findings are flagged where a detected change increases exposure or redu
 
 # Supported Resource Coverage
 
-## Fully Validated
+## Coverage and Validation Status
+
+The agent has comparators for the 63 resource types listed below. **Comparator
+coverage is not the same as verified detection** — see
+[VALIDATION_STATUS.md](VALIDATION_STATUS.md) for what each one has actually been
+proven to catch, and against what evidence.
+
+The distinction matters because a comparator can ship, be documented as covered,
+and produce nothing: both backup comparators were dead in the pipeline for about
+a month (recorded below) while this page listed them as validated.
+
+| Status | Meaning | Where |
+|---|---|---|
+| Live-proven | Drift introduced, detected, reverted, clean | `VALIDATION_STATUS.md` |
+| Live-clean | Compared against live Azure, no drift found — proves no false positives only | `VALIDATION_STATUS.md` |
+| Unit-tested | Comparator and tests, never exercised live | `VALIDATION_STATUS.md` |
+
+### Types with comparators
 
 - Storage Accounts
 - App Services
@@ -499,6 +533,9 @@ Critical findings are flagged where a detected change increases exposure or redu
 - Virtual Hub Route Tables
 - Virtual Hub VNet Connections
 - Virtual Hub Routing Intent
+
+The caveats below apply regardless of tier — they are properties of the resource
+type or the Azure API, not of how much verification a comparator has had.
 
 ### Virtual Hub routing
 
@@ -633,7 +670,7 @@ do, and treating them as drift candidates adds noise without adding signal.
 **Note — hub *routing* is covered, only the connectivity gateways are not.**
 Virtual WAN, Virtual Hub, and — the security-relevant part — its route tables,
 VNet connections and **routing intent** are all fully covered (see
-[Fully Validated](#fully-validated)): a routing-intent policy repointed off the hub
+[Coverage and Validation Status](#coverage-and-validation-status)): a routing-intent policy repointed off the hub
 firewall, or a route widened to bypass inspection, is out-of-band and carries
 security consequence, so it is detected as critical. Likewise Azure Firewall and
 Firewall Policies are covered. The exclusions above are limited to the static
@@ -659,8 +696,15 @@ connectivity gateways, not to the hub's routing or security surface.
 
 | Capability | Description |
 |------------|-------------|
-| Unit Test Coverage | Comprehensive automated testing |
-| End-to-End Validation | Live validation of drift scenarios |
+| Unit Test Coverage | ~1,000 tests, run on every pull request |
+| End-to-End Validation | Live drift rounds (introduce → detect → notify → revert → clean). **Coverage varies by capability** — see [VALIDATION_STATUS.md](VALIDATION_STATUS.md) |
+| Structural Coverage Guard | A collected type cannot be silently discarded by an ignore rule (`CollectedTypesAreNotBlanketIgnoredTests`) |
 | Least Privilege Access | Reader-only Azure permissions |
 | Secretless Authentication | GitHub OIDC Workload Identity Federation |
 | Safe Drift Detection | Read-only operation, no remediation changes performed |
+
+**Live validation is per capability, not blanket.** Some comparators have caught
+real injected drift; some have only ever run against a clean estate, which proves
+they produce no false positives and nothing about whether they detect. The
+difference is recorded honestly in [VALIDATION_STATUS.md](VALIDATION_STATUS.md),
+and the estate and round procedure are in [TEST_ESTATE.md](TEST_ESTATE.md).

@@ -165,6 +165,11 @@ See docs/LANDING_ZONE_OPERATIONS.md.
 
 ✅ RBAC and policy assignment drift detection
 
+✅ Backup, firewall and AI governance coverage
+
+✅ Scope integrity — an unreadable resource group is a targeting failure, never
+reported as every declared resource being deleted
+
 ✅ Slack and Teams notifications
 
 ✅ HTML and JSON reporting
@@ -250,20 +255,36 @@ gh workflow run drift-lz-platform.yml
 |-----------|----------|
 | `docs/ARCHITECTURE.md` | Solution architecture and design decisions |
 | `docs/CAPABILITIES.md` | Supported drift detection capabilities |
-| `docs/LANDING_ZONE_OPERATIONS.md` | Landing-zone onboarding and operations |
-| `docs/CONFIG_REFERENCE.md` | Configuration schema and examples |
+| `docs/LANDING_ZONES_OPERATIONS.md` | Landing-zone onboarding and operations |
+| `docs/CONFIGURATION_REFERENCE.md` | Configuration schema and examples |
+| `docs/RESOURCE_GROUP_TARGETING.md` | How RG selectors resolve, and scope semantics |
 | `docs/TEAM_NOTIFICATIONS.md` | Notification routing and templates |
 | `docs/AZURE_AUTHENTICATION.md` | GitHub OIDC and Azure setup |
-| `docs/SECURITY_MODEL.md` | Security architecture and permissions |
+| `docs/SECURITY.md` | Security architecture and permissions |
 | `docs/OPERATIONS_RUNBOOK.md` | Operational procedures and troubleshooting |
+| `docs/VALIDATION_STATUS.md` | What each capability has actually been proven to detect |
+| `docs/TEST_ESTATE.md` | The test estate, and how to run a verification round |
 
 ---
 
 ## Current Limitations
 
+**Live validation varies by capability.** Comparator coverage is not the same as
+proven detection: some comparators have caught real injected drift, others have
+only ever run against a clean estate. `docs/VALIDATION_STATUS.md` records which is
+which, and `docs/TEST_ESTATE.md` has the outstanding verification backlog. Backup
+detection is the notable gap — those comparators were silently discarded by an
+ignore rule for about a month, and positive detection is still unproven.
+
+Other limits:
+
 - Runtime-generated resource names require smart matching.
 - Some complex ARM expressions cannot be fully resolved.
-- Change attribution depends on available Azure activity data.
+- Change attribution depends on available Azure activity data, and cannot always
+  separate two findings that share a synthetic resource id.
+- Tags are compared **declared-only**: a tag the template does not declare is not
+  reported when added out of band.
+- Hand-authored ARM JSON is out of scope — decompile to Bicep first.
 - Detection accuracy depends on the quality and completeness of Bicep definitions.
 
 See individual documentation pages for detailed limitations.
