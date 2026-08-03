@@ -13,6 +13,8 @@ from typing import Any
 
 from azure.identity import DefaultAzureCredential
 
+from .rg_selector import is_glob
+
 try:
     from .http_util import urlopen_checked
 except ImportError:
@@ -106,12 +108,17 @@ def fetch_resource_group_activity(
     credential: Any | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Fetch ALL Azure Monitor Activity Log events for a resource group, once.
+    Fetch ALL Azure Monitor Activity Log events for a scan's scope, once.
+
+    `resource_group` is the scan selector, not necessarily a resource group: a
+    subscription-scoped scan passes '*' or a glob, and the whole subscription
+    window is fetched for those (the API compares resourceGroupName literally,
+    so filtering on a selector matches nothing).
 
     The Activity Log $filter only supports a limited set of fields
     (eventTimestamp, resourceGroupName, resourceId, resourceProvider, correlationId)
     combined with 'and' ONLY - no 'status', 'resourceType', or 'or'. So we pull the
-    whole RG window here and let callers match individual resources in memory
+    whole window here and let callers match individual resources in memory
     (see match_activity_for_resource) instead of issuing one API query per drift.
 
     Returns a list of normalized entry dicts (may be empty). Never raises.
@@ -127,14 +134,25 @@ def fetch_resource_group_activity(
 
         # Timezone-aware UTC (datetime.utcnow() is deprecated in Python 3.12+).
         start_time = datetime.now(timezone.utc) - timedelta(days=days)
-        filter_str = (
-            f"eventTimestamp ge '{start_time.isoformat()}' "
-            f"and resourceGroupName eq '{resource_group}'"
-        )
-        logger.debug(f"Activity Log query: rg={resource_group}, days={days}, filter={filter_str}")
+
+        # A subscription-scoped scan is driven by '*' or a glob. The API has no
+        # wildcard for resourceGroupName - it compares literally - so filtering
+        # on the selector asked for a resource group actually named '*' and
+        # returned nothing, leaving EVERY drift unattributed behind the reason
+        # "no activity log entries found". Fetch the subscription window instead
+        # and let match_activity_for_resource pick per resource by resource_id,
+        # which is already how the RG case works: pull once, match in memory.
+        whole_subscription = is_glob(resource_group)
+        clauses = [f"eventTimestamp ge '{start_time.isoformat()}'"]
+        if not whole_subscription:
+            clauses.append(f"resourceGroupName eq '{resource_group}'")
+        filter_str = " and ".join(clauses)
+        scope_label = f"subscription (selector '{resource_group}')" if whole_subscription \
+            else f"resource group '{resource_group}'"
+        logger.debug(f"Activity Log query: scope={scope_label}, days={days}, filter={filter_str}")
 
         entries = [_entry_from_log(log) for log in client.activity_logs.list(filter=filter_str)]
-        logger.info(f"Activity Log: fetched {len(entries)} event(s) for resource group '{resource_group}'")
+        logger.info(f"Activity Log: fetched {len(entries)} event(s) for {scope_label}")
         return entries
     except Exception as e:
         logger.error(f"Failed to fetch Activity Log for '{resource_group}': {e}")

@@ -32,11 +32,25 @@ def extract_variables(arm_template: dict, parameters: dict = None) -> dict:
     template_vars = arm_template.get("variables", {})
 
     if isinstance(template_vars, dict):
-        for var_name, var_value in template_vars.items():
-            if isinstance(var_value, str) and (var_value.startswith("[") and var_value.endswith("]")):
-                variables[var_name] = resolve_expression(var_value, parameters, {})
-            else:
-                variables[var_name] = var_value
+        # Resolve against the variables resolved SO FAR, not an empty dict. A
+        # variable built from another variable - purposeCode feeding
+        # storageAccountName - otherwise kept the literal text
+        # "variables('purposecode')" in a resource NAME, because the resolver was
+        # never given the value it had already computed.
+        #
+        # Repeated until stable rather than one pass: ARM does not require a
+        # variable to be declared before the one that uses it, so a single
+        # forward pass is order-dependent. Bounded because each pass either
+        # resolves something new or stops.
+        for _ in range(3):
+            before = dict(variables)
+            for var_name, var_value in template_vars.items():
+                if isinstance(var_value, str) and (var_value.startswith("[") and var_value.endswith("]")):
+                    variables[var_name] = resolve_expression(var_value, parameters, variables)
+                else:
+                    variables[var_name] = var_value
+            if variables == before:
+                break
 
     return variables
 

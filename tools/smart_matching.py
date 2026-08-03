@@ -76,6 +76,34 @@ def _has_unresolvable_expression(name_str: str) -> bool:
     return False
 
 
+def _scope_to_target_rg(bicep_resource: dict, candidates: list[dict]) -> list[dict]:
+    """Keep only candidates in the resource group the declaration deploys into.
+
+    A subscription-scoped declaration records `_target_rg`, and can only be
+    satisfied by a live resource IN that group. Name shape separates siblings
+    like 'stl' (logging) and 'stg' (general) only while BOTH are alive: delete
+    the logging resource group and the apps account becomes the ONLY unmatched
+    candidate of its type, which the caller then treats as a "perfect match" at
+    high confidence. That hid the real deletion and orphaned the survivor into a
+    false missing_in_azure (live, 2026-08-03).
+
+    Applied before the candidate count is judged, so the lone-candidate
+    short-circuit is scoped too - filtering inside the tie-breaker alone left
+    exactly this case unguarded.
+
+    Candidates whose resource group is unknown are left alone: a collector that
+    does not populate resource_group must not make every declaration read as
+    missing.
+    """
+    target_rg = (bicep_resource.get("_target_rg") or "").lower()
+    if not target_rg or not any(c.get("resource_group") for c in candidates):
+        return candidates
+    return [
+        c for c in candidates
+        if (c.get("resource_group") or "").lower() == target_rg
+    ]
+
+
 def smart_match_resources(
     bicep_resources: list[dict],
     azure_resources: list[dict],
@@ -111,6 +139,7 @@ def smart_match_resources(
         # (microsoft.storage/storageaccounts) but Bicep is PascalCase.
         rtype_lower = resource_type.lower()
         candidates = [r for r in unmatched_azure if (r.get('type') or '').lower() == rtype_lower]
+        candidates = _scope_to_target_rg(bicep_resource, candidates)
 
         if len(candidates) == 1:
             # Perfect match: one unresolvable Bicep resource and one unmatched Azure resource of same type
@@ -174,6 +203,10 @@ def _find_best_match(bicep_resource: dict, candidates: list[dict]) -> dict:
     # matter how the (possibly unresolved) parent segment scores. Mirrors the
     # sibling guard in property_drift._match_by_fuzzy_tokens. Parent segments are
     # deliberately NOT compared: they are frequently unresolved expressions.
+    candidates = _scope_to_target_rg(bicep_resource, candidates)
+    if not candidates:
+        return None
+
     if "/" in bicep_name:
         leaf = bicep_name.rsplit("/", 1)[1]
         candidates = [

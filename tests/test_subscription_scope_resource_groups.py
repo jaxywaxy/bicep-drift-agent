@@ -210,3 +210,72 @@ class EmptySubscriptionFailsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TopLevelVariablesResolveAgainstParametersTests(unittest.TestCase):
+    """flatten_resources derived top-level variables WITHOUT the parameters it
+    was handed, so any variable built from a parameter baked in the literal
+    'None'. A landing zone naming its resource groups the normal way -
+
+        var loggingRgName = '${prefix}-rg-logging'
+
+    - stamped `_target_rg: 'None-rg-logging'`, which never matches the real
+    'jacquidev-rg-logging', so orphan attribution silently never fired. Found
+    live 2026-08-03 deleting an RG from a subscription-scoped LZ.
+
+    The identical bug was already fixed for NESTED templates (see the
+    'driftAppPlanNone' comment in flatten.py) and left in place at the top level.
+
+    Why the existing tests could not catch it: they pass `variables={}`
+    explicitly, so the defaulting branch never runs, AND they use a literal
+    resource group name where production uses a parameter. This one does
+    neither - it omits `variables` and parameterises the name.
+    """
+
+    def _lz_template(self):
+        return {
+            "$schema": SUB_SCHEMA,
+            "parameters": {"prefix": {"type": "string"}},
+            "variables": {
+                "loggingRgName": "[format('{0}-rg-logging', parameters('prefix'))]",
+            },
+            "resources": [{
+                "type": "Microsoft.Resources/deployments",
+                "name": "deploy-logging",
+                "resourceGroup": "[variables('loggingRgName')]",
+                "properties": {"template": {"resources": [
+                    {"type": "Microsoft.OperationalInsights/workspaces", "name": "law"},
+                ]}},
+            }],
+        }
+
+    def _law(self, **kw):
+        # `variables` deliberately NOT passed - the defaulting branch is the bug.
+        flat = flatten_resources(self._lz_template(), {"prefix": "jacquidev"},
+                                 subscription_scoped=True, **kw)
+        return [r for r in flat if r["type"].endswith("/workspaces")][0]
+
+    def test_target_rg_resolves_the_parameter(self):
+        self.assertEqual(self._law()["_target_rg"], "jacquidev-rg-logging")
+
+    def test_target_rg_never_contains_the_literal_none(self):
+        # The symptom is specific and worth asserting on directly: a Python None
+        # formatted into a name reads as a real resource group that cannot exist.
+        self.assertNotIn("None", self._law()["_target_rg"])
+
+    def test_orphan_attribution_matches_the_real_group(self):
+        # The consequence, at the level that matters: the stamped value must be
+        # the key the orphan lookup uses against the missing resource group.
+        from run_drift_check import _attribute_orphans_to_missing_rgs
+        from tools.diff_states import ResourceDrift
+        law = self._law()
+        drifts = [
+            ResourceDrift(RESOURCE_GROUP_TYPE, "jacquidev-rg-logging", "missing_in_azure"),
+            ResourceDrift("Microsoft.OperationalInsights/workspaces", "law", "missing_in_azure"),
+        ]
+        n = _attribute_orphans_to_missing_rgs(drifts, [law])
+        self.assertEqual(n, 1, "the orphan was not tied back to its deleted resource group")
+        self.assertEqual(
+            drifts[1].details["orphaned_by_missing_resource_group"],
+            "jacquidev-rg-logging",
+        )

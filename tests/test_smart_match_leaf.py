@@ -95,3 +95,96 @@ class SmartMatchLeafTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ADeclarationCannotMatchOutsideItsResourceGroupTests(unittest.TestCase):
+    """A subscription-scoped declaration records the resource group it deploys
+    into (`_target_rg`). Smart matching ignored it and paired on name shape
+    alone.
+
+    Live, 2026-08-03: `jacquidev-rg-logging` was deleted, taking its storage
+    account with it. The logging declaration (`jacquidevstl[...]`,
+    _target_rg=jacquidev-rg-logging) then matched the APPS storage account
+    (`jacquidevstgm4fg23`, in jacquidev-rg-apps) with "high" confidence, because
+    with its own account gone the apps one was the only candidate left and won on
+    shared prefix.
+
+    Two failures at once, the familiar pair: the real deletion was HIDDEN (the
+    declaration looked satisfied), and the live apps account was orphaned and
+    reported missing_in_azure. It also broke orphan attribution, since the
+    surviving row pointed at a resource group that still exists.
+
+    The prefix heuristic only separates 'stl' from 'stg' while BOTH are alive.
+    `_target_rg` separates them regardless - and the pipeline already has it.
+    """
+
+    def _declared(self, target_rg):
+        return {"type": "Microsoft.Storage/storageAccounts",
+                "name": "jacquidevstl[86c9cbf6]", "_target_rg": target_rg}
+
+    def _live(self, name, rg):
+        return {"type": "Microsoft.Storage/storageAccounts", "name": name,
+                "resource_group": rg}
+
+    def test_a_candidate_in_another_resource_group_is_not_matched(self):
+        match = _find_best_match(
+            self._declared("jacquidev-rg-logging"),
+            [self._live("jacquidevstgm4fg23", "jacquidev-rg-apps")],
+        )
+        self.assertIsNone(
+            match,
+            "a declaration matched a live resource in a different resource group",
+        )
+
+    def test_the_candidate_in_the_right_group_still_matches(self):
+        match = _find_best_match(
+            self._declared("jacquidev-rg-logging"),
+            [self._live("jacquidevstgm4fg23", "jacquidev-rg-apps"),
+             self._live("jacquidevstla7m6et", "jacquidev-rg-logging")],
+        )
+        self.assertIsNotNone(match)
+        self.assertEqual(match["name"], "jacquidevstla7m6et")
+
+    def test_without_a_target_rg_behaviour_is_unchanged(self):
+        # RG-scoped templates never stamp _target_rg; they must keep matching.
+        match = _find_best_match(
+            {"type": "Microsoft.Storage/storageAccounts", "name": "jacquidevstl[86c9cbf6]"},
+            [self._live("jacquidevstla7m6et", "jacquidev-rg-logging")],
+        )
+        self.assertIsNotNone(match)
+
+    def test_a_lone_candidate_in_the_wrong_group_is_not_matched(self):
+        """The live failure. smart_match_resources short-circuits when exactly
+        ONE candidate of the type is unmatched - 'perfect match', confidence
+        high, no checks. Deleting the logging RG left exactly one storage
+        account, so the logging declaration paired with the APPS account through
+        that shortcut, never reaching _find_best_match."""
+        from tools.smart_matching import smart_match_resources
+        declared = self._declared("jacquidev-rg-logging")
+        matched, unmatched_bicep, unmatched_azure = smart_match_resources(
+            [declared],
+            [self._live("jacquidevstgm4fg23", "jacquidev-rg-apps")],
+            {},
+        )
+        self.assertEqual(matched, [], "the lone-candidate shortcut matched across resource groups")
+        self.assertEqual(len(unmatched_bicep), 1)
+        self.assertEqual(len(unmatched_azure), 1, "the live resource must stay available to match")
+
+    def test_a_lone_candidate_in_the_right_group_still_matches(self):
+        from tools.smart_matching import smart_match_resources
+        matched, _, _ = smart_match_resources(
+            [self._declared("jacquidev-rg-logging")],
+            [self._live("jacquidevstla7m6et", "jacquidev-rg-logging")],
+            {},
+        )
+        self.assertEqual(len(matched), 1)
+        self.assertEqual(matched[0]["matched_to"], "jacquidevstla7m6et")
+
+    def test_candidates_without_a_known_group_are_not_discarded(self):
+        # Collectors that do not populate resource_group must not cause every
+        # declaration to read as missing.
+        match = _find_best_match(
+            self._declared("jacquidev-rg-logging"),
+            [{"type": "Microsoft.Storage/storageAccounts", "name": "jacquidevstla7m6et"}],
+        )
+        self.assertIsNotNone(match)

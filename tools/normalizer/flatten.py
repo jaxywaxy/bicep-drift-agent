@@ -160,7 +160,15 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
     if parameters is None:
         parameters = extract_parameters(arm_template)
     if variables is None:
-        variables = extract_variables(arm_template)
+        # Resolve against the parameters we were handed, not the template alone.
+        # A landing zone names its resource groups the ordinary way -
+        #   var loggingRgName = '${prefix}-rg-logging'
+        # - and extracting variables without parameters baked in the literal
+        # 'None-rg-logging', which matches no real group, so `_target_rg` never
+        # tied an orphan back to the group that vanished. The nested path below
+        # already resolves against the parent's params (see the
+        # 'driftAppPlanNone' comment); this is the same bug at the top level.
+        variables = extract_variables(arm_template, parameters)
 
     flattened = []
     resources = arm_template.get("resources", [])

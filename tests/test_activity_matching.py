@@ -55,3 +55,62 @@ class MatchActivityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SubscriptionScopeActivityFetchTests(unittest.TestCase):
+    """A subscription-scoped scan is driven by '*' or a glob, and that selector
+    was passed straight into the Activity Log $filter as
+    `resourceGroupName eq '*'`. The API treats it as a LITERAL name, so it
+    matched nothing and EVERY drift came back origin=unknown with the reason
+    "No activity log entries found (logs may have expired)" - which reads as an
+    empty log rather than a query aimed at a resource group called '*'.
+
+    Found live 2026-08-03: 15 of 15 rows unattributed on a subscription-scoped
+    landing zone, while the Activity Log held every delete event naming the
+    actor. Both landing zones in lz-index.yml are subscription-scoped, so this
+    was every scheduled run of both.
+
+    The whole-window fetch is already the design (see the docstring: pull once,
+    match per resource in memory via match_activity_for_resource, which keys off
+    resource_id) - so dropping the resourceGroupName clause for a selector is
+    the same strategy with a wider net, not a new one.
+    """
+
+    def _captured_filter(self, selector):
+        from unittest import mock
+        import tools.activity_log as al
+
+        seen = {}
+
+        class _Logs:
+            def list(self, filter):
+                seen["filter"] = filter
+                return []
+
+        class _Client:
+            def __init__(self, *a, **kw):
+                self.activity_logs = _Logs()
+
+        with mock.patch.dict("sys.modules", {
+            "azure.mgmt.monitor": mock.MagicMock(MonitorManagementClient=_Client)
+        }), mock.patch.object(al, "DefaultAzureCredential", mock.MagicMock()):
+            al.fetch_resource_group_activity("sub-1", selector, days=30)
+        return seen.get("filter", "")
+
+    def test_wildcard_does_not_filter_on_a_resource_group_named_star(self):
+        f = self._captured_filter("*")
+        self.assertNotIn("resourceGroupName", f,
+                         f"'*' was passed to the API as a literal RG name: {f}")
+
+    def test_glob_does_not_filter_on_a_literal_glob(self):
+        f = self._captured_filter("jacquidev-*")
+        self.assertNotIn("resourceGroupName", f,
+                         f"a glob was passed to the API as a literal RG name: {f}")
+
+    def test_the_time_window_is_still_applied(self):
+        # Dropping the RG clause must not drop the bound that keeps the query sane.
+        self.assertIn("eventTimestamp ge", self._captured_filter("*"))
+
+    def test_a_real_resource_group_still_filters_on_it(self):
+        f = self._captured_filter("rg-drift-test")
+        self.assertIn("resourceGroupName eq 'rg-drift-test'", f)
