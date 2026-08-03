@@ -1,0 +1,70 @@
+name: Landing Zone Remediation Check
+
+# Runs the subscription-scoped landing zone drift check and then asserts
+# invariants ON THE REPORT ITSELF.
+#
+# Why this exists: every defect found on 2026-08-03 produced a report that
+# looked fine. Attribution was dead for all subscription-scoped scans - 15 of 15
+# rows read `origin: unknown, "no activity log entries found"`, which is exactly
+# what a genuinely quiet subscription looks like. A resource name was rendered as
+# its own ARM source. A deleted resource group's contents came back as unrelated
+# deletions. The unit suite was green throughout, because its fixtures used
+# literal resource group names where production uses parameters.
+#
+# So this checks the SHAPE of a live report, which unit tests cannot: run it
+# from a branch to confirm a fix actually holds against real Azure before merge.
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  workflow_dispatch:
+    inputs:
+      landing_zone:
+        description: 'Landing zone key from lz-index.yml'
+        required: false
+        default: 'landingzone'
+        type: string
+      expect_attribution:
+        description: 'Fail if no drift row names an actor (turn off for a genuinely clean estate)'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  drift-check:
+    uses: ./.github/workflows/drift-check-lz-hybrid.yml
+    with:
+      landing_zone: ${{ inputs.landing_zone || 'landingzone' }}
+      override_subscription: ''
+      override_resource_group: ''
+    secrets:
+      BICEP_REPO_TOKEN: ${{ secrets.BICEP_REPO_TOKEN }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      PLATFORM_SLACK_WEBHOOK: ${{ secrets.PLATFORM_SLACK_WEBHOOK }}
+      WORKLOAD_SLACK_WEBHOOK: ${{ secrets.WORKLOAD_SLACK_WEBHOOK }}
+
+  verify-report:
+    needs: drift-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6.0.0
+
+      - name: Download the drift report
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f28c025e4dfd1ca53b3 # v6.0.0
+        with:
+          name: drift-reports-${{ inputs.landing_zone || 'landingzone' }}
+          path: reports/
+
+      - name: Assert the report is well formed
+        env:
+          EXPECT_ATTRIBUTION: ${{ inputs.expect_attribution }}
+        run: python3 .github/scripts/verify_lz_report.py reports/

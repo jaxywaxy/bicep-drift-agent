@@ -374,6 +374,48 @@ def resource_id_expression_name(expr: str) -> str | None:
     return (m.group("name") or None) if m else None
 
 
+def _resolve_equals(expr: str, parameters: dict, variables: dict):
+    """Evaluate equals() for NAME resolution only. True/False, or None when an
+    argument didn't resolve.
+
+    _resolve_boolean excludes equals() on purpose (see its docstring): there an
+    unresolved argument returns its bare name, two bare names compare equal, and
+    the manufactured True gates a resource `condition:` - silently dropping a
+    declared resource. Rendering a name carries no such consequence, and
+    _resolve_string_arg leaves an unresolved argument as its own call text, so
+    "never resolved" stays detectable instead of masquerading as a value.
+    """
+    match = re.match(r"equals\s*\((.*)\)\s*$", expr.strip(), re.DOTALL)
+    if not match:
+        return None
+    args = _split_function_arguments(match.group(1))
+    if len(args) != 2:
+        return None
+    left, right = (_resolve_string_arg(a, parameters, variables) for a in args)
+    if "(" in left or "(" in right:
+        return None
+    return left == right
+
+
+def _resolve_string_arg(arg: str, parameters: dict, variables: dict) -> str:
+    """Resolve one argument of a string function to a plain value.
+
+    A missing parameter/variable returns the argument UNCHANGED rather than an
+    empty string: an absent value must stay visibly unresolved so smart matching
+    can still recover it, instead of silently collapsing into a name that looks
+    real and is not.
+    """
+    arg = arg.strip()
+    if len(arg) >= 2 and arg.startswith("'") and arg.endswith("'"):
+        return arg[1:-1]
+    for fn, source in (("parameters", parameters), ("variables", variables)):
+        match = re.match(rf"{fn}\(\s*'([^']+)'\s*\)$", arg)
+        if match:
+            key = match.group(1)
+            return str(source[key]) if key in (source or {}) else arg
+    return _resolve_function_call(arg, parameters, variables)
+
+
 def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
     """Resolve simple function calls like uniqueString(), copyIndex(), etc.
 
@@ -391,6 +433,42 @@ def _resolve_function_call(call: str, parameters: dict, variables: dict) -> str:
         template, args = _parse_format_call(call, parameters, variables)
         if template is not None:
             return _apply_format_args(template, args)
+        return call
+
+    # toLower()/toUpper()/replace() — pure string transforms. Given resolved
+    # arguments these are exactly computable at compile time, unlike
+    # uniqueString() below which legitimately cannot be. Without these branches
+    # a name wrapped in toLower() fell through as its own SOURCE TEXT, so a
+    # subscription-scoped landing zone reported a storage account titled
+    # "toLower(format('{0}st{1}{2}', replace(...), ...))" instead of
+    # "jacquidevstl[6f2c…]".
+    for fn, case in (("toLower", str.lower), ("toUpper", str.upper)):
+        if call.startswith(f"{fn}(") and call.endswith(")"):
+            inner = _resolve_string_arg(call[len(fn) + 1:-1], parameters, variables)
+            return case(inner)
+
+    # if(equals(...), a, b) — conditional naming is ordinary Bicep (a purpose or
+    # SKU code chosen by a parameter). Only a fully resolved condition selects a
+    # branch; otherwise the call is returned untouched rather than guessing.
+    if call.startswith("if(") and call.endswith(")"):
+        args = _split_function_arguments(call[len("if("):-1])
+        if len(args) == 3:
+            condition = _resolve_equals(args[0], parameters, variables)
+            if condition is not None:
+                return _resolve_string_arg(args[1] if condition else args[2],
+                                           parameters, variables)
+        return call
+
+    if call.startswith("replace(") and call.endswith(")"):
+        args = _split_function_arguments(call[len("replace("):-1])
+        if len(args) == 3:
+            parts = [_resolve_string_arg(a, parameters, variables) for a in args]
+            # Only substitute once every argument is a plain string. A part that
+            # still carries call text never resolved, and replacing into it would
+            # fabricate a name that looks resolved but is wrong - the same class
+            # of failure as baking 'None' into a resource group name.
+            if not any("(" in p for p in parts):
+                return parts[0].replace(parts[1], parts[2])
         return call
 
     # uniqueString() — can't resolve at compile time, generate a consistent placeholder
@@ -541,6 +619,16 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     bool_result = _resolve_boolean(inner, parameters, variables)
     if bool_result is not None:
         return bool_result
+
+    # Pure string transforms. These reduce to an exact value once their
+    # arguments do, so they must be attempted BEFORE the embedded-refs fallback
+    # below - that fallback only substitutes variables()/parameters() and hands
+    # back the surrounding source text, which is how a storage account came to
+    # be reported under the name "toLower(format('{0}st{1}{2}', ...))".
+    if inner.startswith(("toLower(", "toUpper(", "replace(", "if(")):
+        resolved = _resolve_function_call(inner, parameters, variables)
+        if resolved != inner:
+            return resolved
 
     # Other expressions — resolve any EMBEDDED variables()/parameters() so that
     # identity extractors still see literal values even when the OUTER function
