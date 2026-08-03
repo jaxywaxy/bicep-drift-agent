@@ -854,6 +854,13 @@ def _get_origin_badge(change_origin: dict) -> str:
         title = 'Manual change - requires review' if origin == 'manual_change' else 'External IaC tool (Terraform)'
         return f'<span class="badge origin-manual" title="{title}">{icon} Manual</span>'
 
+    # An out-of-band change we could not attribute is still out-of-band. The row
+    # already carries category and severity; deriving the badge from `origin`
+    # alone greys out a HIGH finding purely because no actor was recorded.
+    if change_origin.get('category') == 'out_of_band':
+        return ('<span class="badge origin-manual" title="Out-of-band change - no actor '
+                'recorded in the Activity Log">⚠️ Out-of-band</span>')
+
     # Unknown
     return '<span class="badge origin-unknown">Unknown</span>'
 
