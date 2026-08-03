@@ -427,11 +427,32 @@ def classify_change_origin(
             reason="Resource modified by Terraform (external IaC tool, not bicep)",
         )
 
+    method = latest.get('method') or 'Unknown'
+    via = f" via {method}" if method not in ('Unknown', 'None') else ''
+
+    # An event with no caller cannot support the claim `manual_change` makes -
+    # that a PERSON acted outside the pipeline. Reported literally it rendered
+    # "Manual change by  (out-of-band)" with a blank where the name belongs
+    # (live, 2026-08-02, sqldrift.../driftdb). Withdraw the actor claim, keep
+    # everything else: the change is still out-of-band, still HIGH, still
+    # actionable. Downgrading it here would hide a real finding and collide with
+    # the #327 invariant that classification never downgrades.
+    if not caller.strip():
+        return ChangeOriginInfo(
+            origin=ChangeOrigin.UNKNOWN,
+            category=ChangeCategory.OUT_OF_BAND,
+            severity=ChangeSeverity.HIGH,
+            expected=False,
+            timestamp=latest.get('timestamp'),
+            changed_by=None,
+            method=method,
+            reason=(f"Out-of-band change{via} with no actor recorded in the "
+                    "Activity Log - who made it is unknown"),
+        )
+
     # Manual change - made outside the IaC pipeline ("out-of-band"), not
     # necessarily illegitimate. Only name the method when we actually know it;
     # a null/Unknown method rendered "via None"/"via Unknown", which is noise.
-    method = latest.get('method') or 'Unknown'
-    via = f" via {method}" if method not in ('Unknown', 'None') else ''
     return ChangeOriginInfo(
         origin=ChangeOrigin.MANUAL_CHANGE,
         category=ChangeCategory.OUT_OF_BAND,

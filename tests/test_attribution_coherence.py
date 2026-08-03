@@ -24,7 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from orchestration.attribution import _claim_policy_required_tags
 from tools.change_origin import (
+    ChangeCategory,
     ChangeOrigin,
+    ChangeSeverity,
     classify_change_origin,
     event_explains_drift,
 )
@@ -239,3 +241,64 @@ class PlatformTelemetryMustNotEraseTheActorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AManualChangeMustBeAbleToNameSomeoneTests(unittest.TestCase):
+    """`manual_change` asserts a PERSON acted outside the pipeline. When the
+    Activity Log entry carries no caller, that assertion is unsupported and the
+    report renders it literally:
+
+        "reason": "Manual change by  (out-of-band)"   <- note the blank
+
+    Seen in the 2026-08-02 CI run on sqldrift.../driftdb: origin manual_change,
+    category out_of_band, severity high, `changed_by: ""`. The health-telemetry
+    fix (#375) only re-ORDERS candidate events; it cannot help when the single
+    event that explains the drift has no actor at all.
+
+    The change is deliberately NOT a downgrade. An out-of-band change we cannot
+    attribute is still out-of-band and still urgent - what is false is only the
+    claim that a person did it. Dropping to UNKNOWN/MEDIUM here would collide
+    with the #327 invariant that classification never downgrades a finding.
+    """
+
+    def _nameless(self, caller):
+        event = {"operation": "write", "caller": caller,
+                 "timestamp": "2026-08-02T20:03:50Z"}
+        return classify_change_origin(
+            [event], None, DEPLOYERS,
+            explained=event_explains_drift(event, "property_drift"),
+        )
+
+    def test_a_nameless_change_is_not_called_a_manual_change(self):
+        for caller in (None, "", "   "):
+            with self.subTest(caller=repr(caller)):
+                info = self._nameless(caller)
+                self.assertNotEqual(
+                    info.origin, ChangeOrigin.MANUAL_CHANGE,
+                    "manual_change asserts a person acted; no actor was recorded",
+                )
+
+    def test_the_urgency_is_not_downgraded(self):
+        # Still out-of-band, still HIGH, still actionable - only the actor claim
+        # is withdrawn. A silent drop to MEDIUM would hide a real finding.
+        info = self._nameless(None)
+        self.assertEqual(info.category, ChangeCategory.OUT_OF_BAND)
+        self.assertEqual(info.severity, ChangeSeverity.HIGH)
+        self.assertFalse(info.expected)
+
+    def test_the_reason_never_renders_a_blank_name(self):
+        for caller in (None, "", "   "):
+            with self.subTest(caller=repr(caller)):
+                reason = self._nameless(caller).reason
+                self.assertNotIn("by  ", reason, f"blank actor rendered: {reason!r}")
+                self.assertFalse(reason.rstrip().endswith("by"), reason)
+
+    def test_changed_by_is_null_not_empty_string(self):
+        # An empty string reads as "we know the actor and it is nothing".
+        self.assertIsNone(self._nameless(None).changed_by)
+
+    def test_a_named_manual_change_is_untouched(self):
+        info = self._nameless("someone@example.com")
+        self.assertEqual(info.origin, ChangeOrigin.MANUAL_CHANGE)
+        self.assertEqual(info.changed_by, "someone@example.com")
+        self.assertEqual(info.severity, ChangeSeverity.HIGH)

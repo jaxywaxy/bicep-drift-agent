@@ -627,5 +627,32 @@ class PolicyEnforcedSectionTests(unittest.TestCase):
         self.assertNotIn("Policy-Enforced", _render(policy_enforced_drifts=[]))
 
 
+class AnUnattributedOutOfBandChangeStaysRedTests(unittest.TestCase):
+    """The badge is derived from `origin`. Once an out-of-band change with no
+    recorded actor stopped being labelled `manual_change`, it fell through to a
+    neutral grey "Unknown" badge - visually downgrading a HIGH finding purely
+    because Azure logged no caller. The row already carries the evidence.
+    """
+
+    def _badge(self, origin, category):
+        from tools.html_report import _get_origin_badge
+        return _get_origin_badge({"origin": origin, "category": category})
+
+    def test_unattributed_out_of_band_is_not_greyed_out(self):
+        badge = self._badge("unknown", "out_of_band")
+        self.assertIn("origin-manual", badge)
+        self.assertNotIn("origin-unknown", badge)
+
+    def test_a_genuinely_unknown_origin_still_reads_unknown(self):
+        # No category evidence either - the neutral badge is correct here.
+        badge = self._badge("unknown", "unknown")
+        self.assertIn("origin-unknown", badge)
+
+    def test_named_manual_change_badge_is_unchanged(self):
+        badge = self._badge("manual_change", "out_of_band")
+        self.assertIn("origin-manual", badge)
+        self.assertIn("Manual", badge)
+
+
 if __name__ == "__main__":
     unittest.main()

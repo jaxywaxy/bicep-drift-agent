@@ -129,6 +129,20 @@ events = [
 select_relevant_activity(events, 'property_drift')  # -> the healthevent, actor None
 ```
 
+**1b. …and re-ordering events is not enough on its own.** *(follow-up —
+`fix/manual-change-needs-an-actor`)* The 2026-08-02 CI run still produced
+`"reason": "Manual change by  (out-of-band)"` — note the blank — on
+`sqldrift…/driftdb`, at severity `high` with `changed_by: ""`. The #375 fix only
+re-orders *candidate* events; it cannot help when the single event that explains
+the drift carries no caller at all. `manual_change` asserts a **person** acted,
+so the actor claim is now withdrawn (`origin: unknown`, `changed_by: null`) while
+category `out_of_band` and severity `high` are kept — an out-of-band change we
+cannot attribute is still out-of-band. Dropping it to `medium` would hide a real
+finding and collide with the #327 invariant that classification never downgrades.
+The HTML badge was fixed in the same change: it keyed off `origin` alone, so
+these rows would have rendered a neutral grey "Unknown" despite the row carrying
+`high` / `out_of_band`.
+
 **2. Role assignments mis-bind among several *deployed* principals.**
 The template declares its policy-remediation Contributors with
 `principalId: reference(...).identity.principalId`, unresolvable at compile time,
