@@ -87,17 +87,23 @@ Note: `isSoftDeleteFeatureStateEditable` reports `true` on this vault and does
 **not** predict whether the operation is permitted. Do not use it to decide
 whether this test is runnable.
 
-### Live-proven with a known failure mode
+### RBAC — both grantee shapes now live-proven
 
-| Capability | Result |
+| Grantee | Result |
 |---|---|
-| RBAC role assignments | **Live-proven 2026-07-06** for a grant to a principal the template does not reference (`Contributor -> User:70afebf7…`, privileged + provenance + routing all correct). **2026-08-02 found a distinct failure mode:** granting to a principal the template *already declares another role for* (`id-drift-test`) produces a false negative *and* a false positive. See "Known defects" #2. `privileged: true` and `created_by` still populate correctly. |
+| A principal the template does **not** reference | **Live-proven 2026-07-06** — `Contributor -> User:70afebf7…`, privileged + provenance + routing all correct |
+| A deployed MI the template **already declares another role for** | **Failure mode found and fixed 2026-08-02.** Granting `Contributor` to `id-drift-test` (which the template declares `Monitoring Reader` for) produced a false negative *and* a false positive. Fixed by the `created_by` preference tier; **live-verified on the identical condition**: exactly one role row, naming the real grant, `privileged: true`, `created_by` the human actor, `owner: workload`, neither policy-remediation Contributor flagged, zero ignored role rows |
 
-The boundary is worth stating plainly: RBAC detection is sound when the
-out-of-band grantee is unrelated to the template, and unsound when the grantee is
-a deployed managed identity the template already references. PR #299 fixed the
-adjacent case (deployed vs *deleted* principal); it cannot disambiguate between
-several *deployed* ones.
+Why the second shape was hard: the template declares its policy-remediation
+Contributors with `principalId: reference(...).identity.principalId`, unresolvable
+at compile time, so Pass 2 matches on role GUID alone. PR #299 taught it to prefer
+a *deployed* principal over a *deleted* one — which cannot disambiguate when every
+candidate is deployed. Pass 2 now prefers a live assignment whose `created_by` is
+an authorized deployer first, using evidence already on the emitted row.
+
+Still ambiguous by construction: a grant made **through** the pipeline identity
+itself. No ordering can separate that from a declared one, and the fix does not
+pretend to.
 
 ### Known defects — found by the 2026-08-02 injection round
 
@@ -140,9 +146,17 @@ a role the tag-remediation policy needs, while the real privilege escalation
 stays invisible. Confirmed by the clean re-scan: with live count back to 2 =
 declared 2, the false positive disappears.
 
-Likely fix direction: when a declared row's principal is unresolvable, prefer the
-live assignment whose `created_by` is an authorized deployer before falling back
-to first-come-first-served — the evidence is already on the row.
+**Fixed** on `fix/rbac-deployed-principal-collision` and **live-verified against
+the identical condition** (3 live Contributors, all deployed MIs, 2 declared):
+Pass 2 gained a tier that prefers a live assignment whose `created_by` is an
+authorized deployer, ahead of PR #299's deployed-principal tier. The result named
+the real out-of-band grant and no declared one.
+
+Two things the fix deliberately does not do. It passes `AUTHORIZED_DEPLOYERS`
+**only** — never the scanning identity, because if whoever runs the scan counted
+as a deployer, a role *they* granted out of band would be adopted as declared and
+the finding would vanish. And with `DRIFT_AUTHORIZED_DEPLOYERS` unset the tier is
+inert, so behaviour is unchanged for anyone not configuring it.
 
 ### Unit-tested only
 

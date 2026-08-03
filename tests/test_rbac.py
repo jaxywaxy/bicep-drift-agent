@@ -12,6 +12,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tools.ignore_patterns import IgnorePatternList
 from tools.ownership import PLATFORM, WORKLOAD, classify_owner
 from tools.rbac import (
     _declaration_discriminator,
@@ -450,3 +451,165 @@ class CollidingRoleAssignmentNamesTests(unittest.TestCase):
         first = [d["name"] for d in self._drifts()]
         second = [d["name"] for d in self._drifts()]
         self.assertEqual(first, second)
+
+
+class SeveralDeployedPrincipalsCollideTests(unittest.TestCase):
+    """PR #299 taught Pass 2 to prefer a DEPLOYED principal over a deleted
+    (orphaned) one. It cannot choose between several deployed ones.
+
+    Live, 2026-08-02: the template declares two policy-remediation Contributors
+    with `principalId: reference(...).identity.principalId` - unresolvable, so
+    both match by role GUID alone. An out-of-band Contributor was then granted
+    to id-drift-test, a THIRD deployed managed identity. Three live rows, two
+    declarations, every principal deployed: Pass 2 paired two first-come-
+    first-served and called the leftover extra_in_azure.
+
+    The result was a false positive AND a false negative at once - it named a
+    declared, pipeline-created assignment (acting on it revokes a role the tag
+    policy needs) while the real privilege escalation went unreported.
+
+    The disproof was already on the row we emit: `created_by` is the authorized
+    deployer for the declared ones, and a human for the out-of-band grant.
+    """
+
+    PIPELINE = "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+    HUMAN = "someone@example.com"
+    POLICY_MI_A = "8bf7baa2-8bc8-4947-9f84-d293452327c1"
+    POLICY_MI_B = "d1ee1741-a799-4eba-a307-54a01bdfa4c6"
+    WORKLOAD_MI = "1346f29e-771b-44e9-8493-b468164163f8"
+    RG = f"/subscriptions/{SUB}/resourcegroups/rg-drift-test"
+
+    def _declared_runtime_pair(self):
+        # Both policy-remediation Contributors: role resolves, principal does not.
+        role = (f"subscriptionResourceId('Microsoft.Authorization/roleDefinitions', "
+                f"'{CONTRIBUTOR}')")
+        principal = ("reference(resourceId('Microsoft.Authorization/policyAssignments', "
+                     "'drift-inherit-{}'), '2022-06-01', 'full').identity.principalId")
+        return [
+            bicep_assignment(role, principal.format("costcentre"),
+                             name="[guid(resourceGroup().id, 'costcentre')]"),
+            bicep_assignment(role, principal.format("environment"),
+                             name="[guid(resourceGroup().id, 'environment')]"),
+        ]
+
+    def _live_three(self):
+        # The out-of-band grant is listed FIRST on purpose: first-come-first-
+        # served would consume it, so asserting on a favourable input order
+        # would pass without the fix and prove nothing.
+        return [
+            live(CONTRIBUTOR, self.WORKLOAD_MI, self.RG, name="out-of-band",
+                 created_by=self.HUMAN, created_on="2026-08-02T20:55:00Z",
+                 role_name="Contributor"),
+            live(CONTRIBUTOR, self.POLICY_MI_A, self.RG, name="declared-a",
+                 created_by=self.PIPELINE, created_on="2026-08-02T20:01:39Z",
+                 role_name="Contributor"),
+            live(CONTRIBUTOR, self.POLICY_MI_B, self.RG, name="declared-b",
+                 created_by=self.PIPELINE, created_on="2026-08-02T20:01:40Z",
+                 role_name="Contributor"),
+        ]
+
+    def _all_deployed(self):
+        return {self.WORKLOAD_MI, self.POLICY_MI_A, self.POLICY_MI_B}
+
+    def test_the_out_of_band_grant_is_the_one_reported(self):
+        drifts = compare_role_assignments(
+            self._declared_runtime_pair(), self._live_three(),
+            deployed_principals=self._all_deployed(),
+            authorized_deployers={self.PIPELINE},
+        )
+        self.assertEqual(len(drifts), 1, f"expected exactly one extra, got {len(drifts)}")
+        self.assertEqual(drifts[0]["details"]["principal_id"], self.WORKLOAD_MI,
+                         "the real out-of-band grant must be the one flagged")
+
+    def test_a_pipeline_created_assignment_is_never_called_extra(self):
+        drifts = compare_role_assignments(
+            self._declared_runtime_pair(), self._live_three(),
+            deployed_principals=self._all_deployed(),
+            authorized_deployers={self.PIPELINE},
+        )
+        flagged = {d["details"]["principal_id"] for d in drifts}
+        self.assertNotIn(self.POLICY_MI_A, flagged,
+                         "a declared, pipeline-created assignment was called unmanaged")
+        self.assertNotIn(self.POLICY_MI_B, flagged)
+
+    def test_the_privileged_flag_and_provenance_still_ride_along(self):
+        # These two worked live and must not regress while fixing the binding.
+        drifts = compare_role_assignments(
+            self._declared_runtime_pair(), self._live_three(),
+            deployed_principals=self._all_deployed(),
+            authorized_deployers={self.PIPELINE},
+        )
+        self.assertTrue(drifts[0]["details"]["privileged"])
+        self.assertEqual(drifts[0]["details"]["created_by"], self.HUMAN)
+
+    def test_unset_authorized_deployers_preserves_existing_behaviour(self):
+        # With nothing configured the new tier is inert: the result must be
+        # whatever it is today, not an exception and not a changed shape.
+        drifts = compare_role_assignments(
+            self._declared_runtime_pair(), self._live_three(),
+            deployed_principals=self._all_deployed(),
+        )
+        self.assertEqual(len(drifts), 1)
+        self.assertEqual(drifts[0]["drift_type"], "extra_in_azure")
+
+    def test_pr299_orphan_preference_still_holds(self):
+        # The deployed-vs-deleted tier must survive: one declaration, one
+        # deployed principal, one orphan, no provenance to help.
+        role = (f"subscriptionResourceId('Microsoft.Authorization/roleDefinitions', "
+                f"'{CONTRIBUTOR}')")
+        arm = [bicep_assignment(role, "reference('x').outputs.principalId")]
+        orphan = "c0630203-1b63-4b51-ba40-3d2d42c32bdc"
+        azure = [live(CONTRIBUTOR, orphan, self.RG, name="orphan"),
+                 live(CONTRIBUTOR, self.POLICY_MI_A, self.RG, name="declared")]
+        drifts = compare_role_assignments(
+            arm, azure, deployed_principals={self.POLICY_MI_A},
+            authorized_deployers={self.PIPELINE},
+        )
+        self.assertEqual(len(drifts), 1)
+        self.assertEqual(drifts[0]["details"]["principal_id"], orphan)
+
+
+class TheDeployerTierIsWiredIntoThePipelineTests(unittest.TestCase):
+    """Every test above passes `authorized_deployers` by hand, which proves the
+    comparator and NOT the wiring - deleting the kwarg from the call site in
+    run_drift_check._run_rbac_sidecar leaves them all green. Same trap the
+    project has hit repeatedly, so this one drives the real step.
+    """
+
+    PIPELINE = "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+
+    def _call_step(self, env_value):
+        import importlib
+        import run_drift_check as rdc
+
+        captured = {}
+
+        def fake_compare(arm, live, **kwargs):
+            captured.update(kwargs)
+            return []
+
+        with mock.patch.dict(os.environ, {"DRIFT_AUTHORIZED_DEPLOYERS": env_value}), \
+             mock.patch.object(rdc, "rbac_enabled", return_value=True), \
+             mock.patch.object(rdc, "fetch_role_assignments", return_value=[]), \
+             mock.patch.object(rdc, "collect_managed_identity_principals", return_value=set()), \
+             mock.patch.object(rdc, "compare_role_assignments", side_effect=fake_compare):
+            # tools.config reads the env var at import time, so reload it inside
+            # the patched environment or this asserts on a stale frozenset.
+            import tools.config
+            importlib.reload(tools.config)
+            # A real IgnorePatternList, not []: the sidecar's log-and-skip would
+            # otherwise swallow an AttributeError AFTER the call we assert on,
+            # and the test would pass through a broken step.
+            rdc._run_rbac_sidecar([], [], "rg", "resource_group",
+                                  IgnorePatternList(), [])
+        return captured
+
+    def test_the_configured_deployer_reaches_the_comparator(self):
+        captured = self._call_step(self.PIPELINE)
+        self.assertIn("authorized_deployers", captured,
+                      "the comparator was called without the deployer tier")
+        self.assertIn(self.PIPELINE, {str(x).lower() for x in captured["authorized_deployers"]})
+
+    def test_unconfigured_passes_an_empty_set_not_a_crash(self):
+        captured = self._call_step("")
+        self.assertEqual(set(captured.get("authorized_deployers") or set()), set())

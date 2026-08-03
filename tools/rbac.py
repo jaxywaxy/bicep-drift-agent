@@ -349,6 +349,7 @@ def compare_role_assignments(
     arm_resources: list[dict],
     live_assignments: list[dict],
     deployed_principals: set | None = None,
+    authorized_deployers: set | None = None,
 ) -> list[dict]:
     """Match bicep assignments to live ones by identity; emit drift dicts.
 
@@ -365,6 +366,9 @@ def compare_role_assignments(
     Unmatched bicep -> missing_in_azure.
     """
     deployed_principals = deployed_principals or set()
+    # created_by is compared lower-cased: an object id from the RBAC API and a
+    # configured deployer id can differ in case and still be the same principal.
+    authorized_deployers = {str(d).lower() for d in (authorized_deployers or set())}
     bicep, skipped = extract_bicep_role_assignments(arm_resources)
     if skipped:
         logger.info(f"RBAC: skipped {skipped} bicep assignment(s) with unresolvable role ids")
@@ -390,16 +394,37 @@ def compare_role_assignments(
         else:
             deferred.append(b)
 
-    # Pass 2: role-only matches for runtime principals. Prefer a live assignment
-    # whose principal is a currently-deployed identity before falling back to
-    # any assignment with the role (see collect_managed_identity_principals).
+    # Pass 2: role-only matches for runtime principals, in order of how much
+    # the evidence favours the candidate:
+    #   2a. created_by is an authorized deployer - the deployment made it, so it
+    #       IS the declared grant. Without this tier, several assignments whose
+    #       principals are ALL currently deployed are indistinguishable and 2b
+    #       falls through to first-come-first-served: live 2026-08-02, a
+    #       declared policy-remediation Contributor was reported extra_in_azure
+    #       while an out-of-band grant to a third deployed identity went
+    #       unreported. Revoking the flagged one breaks tag remediation.
+    #   2b. principal is a currently-deployed identity, not an orphan left by a
+    #       prior deploy cycle (PR #299 - resolves deployed vs DELETED only).
+    #   2c. any assignment with the role.
+    #
+    # An out-of-band grant made THROUGH the pipeline identity stays ambiguous;
+    # no ordering here can separate it from a declared one.
     for b in deferred:
-        hit = next(
-            (a for a in remaining
-             if a["role_guid"] == b["role_guid"]
-             and str(a.get("principal_id") or "").lower() in deployed_principals),
-            None,
-        )
+        hit = None
+        if authorized_deployers:
+            hit = next(
+                (a for a in remaining
+                 if a["role_guid"] == b["role_guid"]
+                 and str(a.get("created_by") or "").lower() in authorized_deployers),
+                None,
+            )
+        if hit is None:
+            hit = next(
+                (a for a in remaining
+                 if a["role_guid"] == b["role_guid"]
+                 and str(a.get("principal_id") or "").lower() in deployed_principals),
+                None,
+            )
         if hit is None:
             hit = next((a for a in remaining if a["role_guid"] == b["role_guid"]), None)
         if hit:
