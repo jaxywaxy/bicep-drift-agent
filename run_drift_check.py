@@ -259,13 +259,35 @@ def _attribute_orphans_to_missing_rgs(drifts: list, arm_resources: list[dict]) -
 
     They are NOT suppressed: the resources really are gone, the deletion cost
     guard needs to see them, and a reader restoring the RG needs the inventory.
+
+    Runs at TWO stages, over two representations. Phase 1 holds ResourceDrift
+    objects and sees only literal-named rows; smart matching later emits
+    placeholder-named ones as plain dicts, and those are exactly the rows that
+    need attributing (a uniqueString-named resource is only proven missing BY
+    matching). So this accepts either shape and is idempotent - an already
+    annotated row is skipped, so running it at both stages neither
+    double-counts nor raises.
+
+    Identity does NOT come from the name. Phase 3 renames a deleted
+    placeholder-named resource to the real deployed name recovered from its
+    activity-log event, so a name-keyed lookup would work only in the window
+    between matching and attribution. The declaration's target group is read
+    from the row itself (`_declared_in_rg`, stamped at creation) and only falls
+    back to the arm_resources lookup for rows created before the stamp existed.
     """
-    missing_rgs = {
-        (d.resource_name or "").lower()
-        for d in drifts
-        if d.resource_type == "Microsoft.Resources/resourceGroups"
-        and d.drift_type == "missing_in_azure"
-    }
+    def _view(drift):
+        """(type, name, drift_type, details) for a ResourceDrift or a report dict."""
+        if hasattr(drift, "resource_type"):
+            return (drift.resource_type, drift.resource_name,
+                    drift.drift_type, drift.details)
+        return (drift.get("type"), drift.get("name"),
+                drift.get("drift_type"), drift.setdefault("details", {}))
+
+    missing_rgs = set()
+    for d in drifts:
+        rtype, rname, dtype, _ = _view(d)
+        if rtype == "Microsoft.Resources/resourceGroups" and dtype == "missing_in_azure":
+            missing_rgs.add((rname or "").lower())
     if not missing_rgs:
         return 0
 
@@ -275,14 +297,18 @@ def _attribute_orphans_to_missing_rgs(drifts: list, arm_resources: list[dict]) -
     }
     attributed = 0
     for drift in drifts:
-        if drift.drift_type != "missing_in_azure":
+        rtype, rname, dtype, details = _view(drift)
+        if dtype != "missing_in_azure":
             continue
-        if drift.resource_type == "Microsoft.Resources/resourceGroups":
+        if rtype == "Microsoft.Resources/resourceGroups":
             continue
-        target = declared_rg.get((drift.resource_type, drift.resource_name), "").lower()
+        if details.get("orphaned_by_missing_resource_group"):
+            continue  # already tied by an earlier stage
+        target = (details.get("_declared_in_rg")
+                  or declared_rg.get((rtype, rname), "")).lower()
         if target and target in missing_rgs:
-            drift.details["orphaned_by_missing_resource_group"] = target
-            drift.details["note"] = (
+            details["orphaned_by_missing_resource_group"] = target
+            details["note"] = (
                 f"Missing because its resource group '{target}' no longer exists - "
                 f"a consequence of that deletion, not an independent one. Restoring "
                 f"the resource group is the prerequisite for restoring this."
