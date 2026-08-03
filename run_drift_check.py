@@ -479,9 +479,17 @@ def _run_rbac_sidecar(arm_resources: list[dict], live_resources: list[dict],
             resource_group=resource_group,
             scope=deployment_scope if deployment_scope == "subscription" else "resource_group",
         )
+        # AUTHORIZED_DEPLOYERS only - deliberately NOT the scanning identity.
+        # Attribution unions the two, but here the set decides which live
+        # assignment IS the declared one: if the person running the scan counted
+        # as a deployer, a role THEY granted out of band would be adopted as
+        # declared and the real finding would vanish - the exact defect this
+        # tier exists to fix.
+        from tools.config import AUTHORIZED_DEPLOYERS
         rbac_drift_dicts = compare_role_assignments(
             arm_resources, live_assignments,
             deployed_principals=collect_managed_identity_principals(live_resources),
+            authorized_deployers=set(AUTHORIZED_DEPLOYERS),
         )
         rbac_drift_dicts = _apply_sidecar_ignore(rbac_drift_dicts, ignore_patterns, "RBAC")
         drifts.extend(_to_resource_drifts(rbac_drift_dicts))
