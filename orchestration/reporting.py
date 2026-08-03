@@ -47,6 +47,26 @@ def _print_drift_summary(drifts):
     print("=" * 60 + "\n")
 
 
+def _strip_internal_details(report_data: dict) -> None:
+    """Remove pipeline-internal keys from every drift's `details` before the
+    report is published.
+
+    `_declared_in_rg` records which resource group a declaration targets so that
+    orphan attribution survives the Phase 3 rename - useful to the pipeline,
+    meaningless to the platform team reading the artifact, and it was appearing
+    verbatim next to the human-readable note.
+
+    The rule is the leading underscore rather than a named key, so a future
+    internal field does not have to remember to add itself here.
+    """
+    for bucket in ("drifts", "policy_enforced_drifts", "ignored_drifts"):
+        for row in report_data.get(bucket) or []:
+            details = row.get("details")
+            if isinstance(details, dict):
+                for key in [k for k in details if str(k).startswith("_")]:
+                    del details[key]
+
+
 def _finalize_drift_count(report_data: dict) -> int:
     """Recompute drift_count as ACTIONABLE drift and store it.
 

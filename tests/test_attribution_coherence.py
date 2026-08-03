@@ -302,3 +302,122 @@ class AManualChangeMustBeAbleToNameSomeoneTests(unittest.TestCase):
         self.assertEqual(info.origin, ChangeOrigin.MANUAL_CHANGE)
         self.assertEqual(info.changed_by, "someone@example.com")
         self.assertEqual(info.severity, ChangeSeverity.HIGH)
+
+
+class AResourceGroupDeletionMustNameItsActorTests(unittest.TestCase):
+    """The deletion of a resource group is the most consequential event that can
+    happen to a subscription-scoped landing zone - and it was the ONE finding
+    that could not name who did it, while its orphaned children named the actor
+    correctly.
+
+    Two independent reasons, both in the constructed fallback id:
+
+        /subscriptions/<sub>/resourceGroups/<SELECTOR>/providers/<type>/<name>
+
+    1. `<SELECTOR>` is the scan selector, which is '*' or a glob at subscription
+       scope. A resource group literally named '*' does not exist.
+    2. A resource group's real id has NO providers segment at all:
+           /subscriptions/<sub>/resourceGroups/jacquidev-rg-logging
+       so even with the right selector the shape would never match.
+
+    The resource-type fallback cannot rescue it either: it matches events whose
+    resource_id CONTAINS the type string, and 'microsoft.resources/resourcegroups'
+    never appears in a resource group's id (verified live).
+    """
+
+    SUB = "bd48a22c-91b9-46e6-a2ff-15893e348d83"
+    RG = "jacquidev-rg-logging"
+
+    def _rg_delete_event(self):
+        # Verbatim shape from the live Activity Log.
+        return {
+            "operation": "Microsoft.Resources/subscriptions/resourcegroups/delete",
+            "resource_id": f"/subscriptions/{self.SUB}/resourcegroups/{self.RG}",
+            "caller": "jacqui.anker@gmail.com",
+            "status": "Succeeded",
+            "timestamp": datetime(2026, 8, 3, 21, 56, 7, tzinfo=timezone.utc),
+        }
+
+    def _attribute(self, selector):
+        from unittest import mock
+        import orchestration.attribution as attr
+
+        event = self._rg_delete_event()
+        report = {
+            "drifts": [{"type": "Microsoft.Resources/resourceGroups",
+                        "name": self.RG, "drift_type": "missing_in_azure",
+                        "details": {}}],
+            "live_resources": [],
+        }
+        with mock.patch.dict(os.environ, {"AZURE_SUBSCRIPTION_ID": self.SUB}), \
+             mock.patch.object(attr, "fetch_resource_group_activity", return_value=[event]), \
+             mock.patch.object(attr, "fetch_policy_principal_ids", return_value=set()), \
+             mock.patch.object(attr, "detect_scanning_identity", return_value=set()):
+            attr._attribute_lifecycle(report, selector)
+        return report["drifts"][0]
+
+    def test_a_deleted_resource_group_names_its_actor(self):
+        co = self._attribute("*")["change_origin"]
+        self.assertEqual(
+            co.get("changed_by"), "jacqui.anker@gmail.com",
+            "the resource group deletion - the cause of every orphan - was unattributed",
+        )
+
+    def test_the_constructed_id_has_no_selector_in_it(self):
+        rid = self._attribute("*")["lifecycle"]["resource_id"]
+        self.assertNotIn("/*", rid, f"the scan selector was baked into a resource id: {rid}")
+
+    def test_a_resource_group_id_has_no_providers_segment(self):
+        rid = self._attribute("*")["lifecycle"]["resource_id"]
+        self.assertNotIn("providers/", rid.lower(), f"malformed resource group id: {rid}")
+        self.assertTrue(rid.lower().endswith(f"/resourcegroups/{self.RG}".lower()), rid)
+
+    def test_it_also_works_for_a_glob_selector(self):
+        co = self._attribute("jacquidev-*")["change_origin"]
+        self.assertEqual(co.get("changed_by"), "jacqui.anker@gmail.com")
+
+
+class ALiteralNamedOrphanStillGetsARealIdTests(unittest.TestCase):
+    """`_declared_in_rg` is stamped only on PLACEHOLDER-named rows, because only
+    smart matching creates those. A literal-named resource in a deleted resource
+    group (jacquidev-law) therefore had no group to build an id from and fell to
+    the honest-but-blank "" path.
+
+    It still attributed correctly via the type fallback, but a blank
+    lifecycle.resource_id is not good enough: the analysis prompt reasons by it.
+    The declaration in arm_resources carries `_target_rg` - read it.
+    """
+
+    SUB = "s"
+
+    def _attribute(self):
+        from unittest import mock
+        import orchestration.attribution as attr
+        event = {"operation": "Microsoft.OperationalInsights/workspaces/delete",
+                 "resource_id": f"/subscriptions/{self.SUB}/resourcegroups/rg-logging"
+                                "/providers/microsoft.operationalinsights/workspaces/law",
+                 "caller": "someone@example.com", "status": "Succeeded",
+                 "timestamp": datetime(2026, 8, 3, 22, 5, 47, tzinfo=timezone.utc)}
+        report = {
+            "arm_resources": [{"type": "Microsoft.OperationalInsights/workspaces",
+                               "name": "law", "_target_rg": "rg-logging"}],
+            "live_resources": [],
+            "drifts": [{"type": "Microsoft.OperationalInsights/workspaces", "name": "law",
+                        "drift_type": "missing_in_azure", "details": {}}],
+        }
+        with mock.patch.dict(os.environ, {"AZURE_SUBSCRIPTION_ID": self.SUB}), \
+             mock.patch.object(attr, "fetch_resource_group_activity", return_value=[event]), \
+             mock.patch.object(attr, "fetch_policy_principal_ids", return_value=set()), \
+             mock.patch.object(attr, "detect_scanning_identity", return_value=set()):
+            attr._attribute_lifecycle(report, "*")
+        return report["drifts"][0]
+
+    def test_the_resource_id_is_not_blank(self):
+        rid = self._attribute()["lifecycle"]["resource_id"]
+        self.assertTrue(rid, "a literal-named orphan was left with no resource id")
+        self.assertIn("rg-logging", rid)
+        self.assertNotIn("/*", rid)
+
+    def test_it_is_still_attributed(self):
+        self.assertEqual(
+            self._attribute()["change_origin"].get("changed_by"), "someone@example.com")

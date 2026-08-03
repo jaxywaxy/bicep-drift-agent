@@ -54,6 +54,7 @@ from orchestration.attribution import (
 from orchestration.analysis import _run_claude_analysis
 from orchestration.reporting import (
     _finalize_drift_count,
+    _strip_internal_details,
     _drift_type_counts,  # noqa: F401  (re-exported for tests)
     _print_drift_summary,
     _generate_html_report,
@@ -171,6 +172,7 @@ def main():
         try:
             # ensure_ascii=False keeps Unicode readable in the artifact; that
             # makes the explicit encoding load-bearing rather than cosmetic.
+            _strip_internal_details(report_data)
             with open(report_file, "w", encoding="utf-8") as f:
                 json.dump(report_data, f, indent=2, default=str, ensure_ascii=False)
             logger.info(f"Saved processed drift report to JSON: {report_file}")
