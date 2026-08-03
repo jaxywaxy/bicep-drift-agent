@@ -69,7 +69,7 @@ them.
 | Function Apps | #233 / #234 round |
 | Recovery Services vault backup **policies** | 2026-08-02 round — retention 30→7 detected `critical`, attributed to the out-of-band actor, reverted clean |
 | Azure Firewall rule collection groups | 2026-08-02 round — `ruleCollections[net-deny-smb]` removal detected `critical`, name-keyed (not positional), `owner: platform`, reverted clean |
-| Compute — VMSS capacity | 2026-08-02 round — `sku.capacity` 0→1 detected `critical`; `zones` correctly stayed silent (no subset false positive). **Detection only** — attribution failed, see below |
+| Compute — VMSS capacity | 2026-08-02 round — `sku.capacity` 0→1 detected `critical`; `zones` correctly stayed silent (no subset false positive). Attribution failed on that round and was fixed in #375; **re-proven adversarially 2026-08-03** — actor named correctly with a caller-less health event newer than the write |
 
 ### Live-clean only — detection unproven
 
@@ -105,13 +105,19 @@ Still ambiguous by construction: a grant made **through** the pipeline identity
 itself. No ordering can separate that from a declared one, and the fix does not
 pretend to.
 
-### Known defects — found by the 2026-08-02 injection round
+### Defects found by the 2026-08-02 injection round — all fixed
 
-Both are the same recurring shape (cf. #325 / #327 / #336 / #343): **a heuristic
+All the same recurring shape (cf. #325 / #327 / #336 / #343): **a heuristic
 overrides evidence the pipeline already holds**. Each has a reproducer.
 
-**1. Health telemetry outranks the real write, erasing the actor.** *(fixed —
-`fix/attribution-health-telemetry`; live re-verify pending)*
+| # | Defect | Fix | Live status |
+|---|---|---|---|
+| 1 | Health telemetry outranks the real write | **#375** | **Adversarially proven** 2026-08-03 |
+| 1b | `manual_change` with a blank actor | **#377** | Invariant holds; **no positive trigger** — see below |
+| 2 | RBAC mis-binds among deployed principals | **#376** | **Adversarially proven** 2026-08-03, locally and in CI |
+
+**1. Health telemetry outranks the real write, erasing the actor.**
+*(fixed by #375; **adversarially live-proven 2026-08-03**)*
 `select_relevant_activity` (`tools/change_origin.py`) classifies an operation as
 a config write with `"update" in op`. That substring matches
 `Microsoft.Resourcehealth/healthevent/**Updated**/action` — platform telemetry
@@ -129,8 +135,28 @@ events = [
 select_relevant_activity(events, 'property_drift')  # -> the healthevent, actor None
 ```
 
-**1b. …and re-ordering events is not enough on its own.** *(follow-up —
-`fix/manual-change-needs-an-actor`)* The 2026-08-02 CI run still produced
+**How it was finally proven (2026-08-03).** Two earlier attempts failed to be
+adversarial: Azure emitted `healthevent/Resolved/action`, which contains none of
+the matched keywords, so the *old* code would have rejected it too — a passing
+scan there proved only that nothing regressed. **Which health verb fires is
+Azure's choice, not ours**, so the round has to wait for the condition rather
+than assume it. Poll the Activity Log until a caller-less `.../Updated/action`
+is **newer than** the write, then scan.
+
+Once the condition held, both branches were replayed over the *same captured
+events* — the strongest available evidence, because nothing but the predicate
+differs:
+
+| Selection logic | Candidates | Selected | Actor |
+|---|---|---|---|
+| OLD (substring) | 8 | `Resourcehealth/healthevent/Updated/action` | `None` |
+| NEW (segments) | 3 | `virtualMachineScaleSets/write` | `jacqui.anker@gmail.com` |
+
+The end-to-end scan agreed: `sku.capacity 0→1 critical`, attributed to the real
+actor at the write's timestamp, not the health event 11 minutes later.
+
+**1b. …and re-ordering events is not enough on its own.**
+*(follow-up, fixed by #377)* The 2026-08-02 CI run still produced
 `"reason": "Manual change by  (out-of-band)"` — note the blank — on
 `sqldrift…/driftdb`, at severity `high` with `changed_by: ""`. The #375 fix only
 re-orders *candidate* events; it cannot help when the single event that explains
@@ -142,6 +168,21 @@ finding and collide with the #327 invariant that classification never downgrades
 The HTML badge was fixed in the same change: it keyed off `origin` alone, so
 these rows would have rendered a neutral grey "Unknown" despite the row carrying
 `high` / `out_of_band`.
+
+**This one is NOT live-proven, and cannot be injected.** Its trigger is *Azure
+declining to log a caller on a config write* — not something an operator can
+cause. The 2026-08-03 round confirmed only the negative: across `drifts`,
+`policy_enforced_drifts` and `ignored_drifts`, **no row** carried
+`manual_change` with a blank actor. An absence is not a detection.
+
+Two facts make a scheduled injection pointless. The original trigger
+(`sqldrift…/driftdb`) had **aged out of the Activity Log window** — 50 events
+retained, all SQL ones gone. And of the 43 caller-less events present, every one
+was a health or `repairVM` action, none of which passes `is_write` after #375 —
+so none can ever be selected as an explaining event. **Catch this one
+opportunistically instead:** it appeared on a fresh deploy, when Azure writes SQL
+children on your behalf, so check the first post-deploy report for
+`changed_by: ""` rather than scheduling a round for it.
 
 **2. Role assignments mis-bind among several *deployed* principals.**
 The template declares its policy-remediation Contributors with
@@ -160,7 +201,7 @@ a role the tag-remediation policy needs, while the real privilege escalation
 stays invisible. Confirmed by the clean re-scan: with live count back to 2 =
 declared 2, the false positive disappears.
 
-**Fixed** on `fix/rbac-deployed-principal-collision` and **live-verified against
+**Fixed by #376** and **live-verified against
 the identical condition** (3 live Contributors, all deployed MIs, 2 declared):
 Pass 2 gained a tier that prefers a live assignment whose `created_by` is an
 authorized deployer, ahead of PR #299's deployed-principal tier. The result named
