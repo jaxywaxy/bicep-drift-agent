@@ -13,6 +13,7 @@ from orchestration.reconciliation import _find_deployed_resource
 from tools.activity_log import deployed_name_from_event_id, detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource
 from tools.change_origin import build_resource_lifecycle, classify_change_origin, event_explains_drift, select_relevant_activity
 from tools.config import AUTHORIZED_DEPLOYERS
+from tools.rg_selector import is_glob
 from tools.logger import get_logger
 from tools.ownership import classify_owner
 
@@ -33,6 +34,57 @@ def _recover_deployed_name(resource_type: str, event_resource_id: str) -> str:
     would let the rejection and the rename disagree about what a name is.
     """
     return deployed_name_from_event_id(resource_type, event_resource_id)
+
+
+RESOURCE_GROUP_TYPE = "microsoft.resources/resourcegroups"
+
+
+def _fallback_resource_id(subscription_id: str, selector: str, resource_type: str,
+                          name: str, drift: dict,
+                          declared_rg: dict | None = None) -> str:
+    """Best-effort Azure id for a drift with no live row - typically a deletion.
+
+    Returns "" when no honest id can be built, so match_activity_for_resource
+    falls through to its resource-type matching instead of being handed a path
+    that cannot exist.
+
+    Three things the naive f-string got wrong, all seen live 2026-08-03:
+
+    1. A RESOURCE GROUP is not nested under providers/. Its id is
+           /subscriptions/<sub>/resourceGroups/<name>
+       Building the provider form meant a deleted resource group never matched
+       its own delete event - and the type fallback could not rescue it either,
+       because 'microsoft.resources/resourcegroups' never appears in a resource
+       group's id. The deletion that CAUSED every orphan was the one finding
+       that could not name who did it.
+
+    2. The resource-group segment was the scan SELECTOR, which is '*' or a glob
+       at subscription scope. No resource group is named '*'. The declaration
+       records the group it deploys into (`_declared_in_rg`); use that, and fall
+       back to the selector only when it is a literal name.
+
+    3. A role assignment already carries its real id in details.assignment_id -
+       there is no need to invent one.
+    """
+    details = drift.get("details") or {}
+    if (resource_type or "").lower() == RESOURCE_GROUP_TYPE:
+        return f"/subscriptions/{subscription_id}/resourceGroups/{name}"
+    if details.get("assignment_id"):
+        return details["assignment_id"]
+
+    # `_declared_in_rg` is stamped only on placeholder-named rows (only smart
+    # matching creates those), so a LITERAL-named resource in a deleted group has
+    # to read its target from the declaration itself or it ends up with no id at
+    # all - and the analysis prompt reasons by that id.
+    resource_group = (details.get("_declared_in_rg")
+                      or (declared_rg or {}).get((resource_type, drift.get("name")))
+                      or "")
+    if not resource_group and selector and not is_glob(selector):
+        resource_group = selector
+    if not resource_group:
+        return ""
+    return (f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}"
+            f"/providers/{resource_type}/{name}")
 
 
 def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
@@ -69,6 +121,14 @@ def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
     authorized_deployers = set(AUTHORIZED_DEPLOYERS) | detect_scanning_identity()
     logger.info(f"Authorized deployer identities: {len(authorized_deployers)}")
 
+    # Which resource group each DECLARATION deploys into, for rows that have no
+    # live counterpart to read a real id from.
+    declared_rg_by_key = {
+        (r.get("type"), r.get("name")): r.get("_target_rg")
+        for r in report_data.get("arm_resources") or []
+        if r.get("_target_rg")
+    }
+
     for drift in drifts_to_analyze:
         try:
             resource_type = drift.get("type", "")
@@ -82,7 +142,10 @@ def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
                 resource_id = live["id"]
             else:
                 deployed_name = (live or {}).get("name") or bicep_name
-                resource_id = f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}/providers/{resource_type}/{deployed_name}"
+                resource_id = _fallback_resource_id(
+                    subscription_id, resource_group, resource_type, deployed_name,
+                    drift, declared_rg_by_key,
+                )
 
             # Match against pre-fetched RG events; resource_type enables matching
             # deleted resources whose exact ID can't be built.

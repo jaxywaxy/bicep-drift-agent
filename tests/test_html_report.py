@@ -656,3 +656,39 @@ class AnUnattributedOutOfBandChangeStaysRedTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InternalPlumbingStaysOutOfTheReportTests(unittest.TestCase):
+    """`_declared_in_rg` is how a drift row remembers which resource group its
+    declaration targets, so orphan attribution survives the Phase 3 rename. It is
+    pipeline plumbing, and it was appearing verbatim in the published report
+    beside the human-readable note.
+
+    The rule is general rather than one key: a details key starting with '_' is
+    internal, and the report is the artifact a platform team reads.
+    """
+
+    def test_underscore_details_keys_are_stripped(self):
+        from orchestration.reporting import _strip_internal_details
+        report = {"drifts": [{"name": "x", "details": {
+            "_declared_in_rg": "rg-logging",
+            "orphaned_by_missing_resource_group": "rg-logging",
+            "note": "kept",
+        }}]}
+        _strip_internal_details(report)
+        details = report["drifts"][0]["details"]
+        self.assertNotIn("_declared_in_rg", details)
+        self.assertEqual(details["orphaned_by_missing_resource_group"], "rg-logging")
+        self.assertEqual(details["note"], "kept")
+
+    def test_every_bucket_is_cleaned(self):
+        from orchestration.reporting import _strip_internal_details
+        report = {b: [{"details": {"_declared_in_rg": "rg"}}]
+                  for b in ("drifts", "policy_enforced_drifts", "ignored_drifts")}
+        _strip_internal_details(report)
+        for bucket in ("drifts", "policy_enforced_drifts", "ignored_drifts"):
+            self.assertNotIn("_declared_in_rg", report[bucket][0]["details"], bucket)
+
+    def test_rows_without_details_do_not_raise(self):
+        from orchestration.reporting import _strip_internal_details
+        _strip_internal_details({"drifts": [{"name": "x"}, {"name": "y", "details": None}]})
