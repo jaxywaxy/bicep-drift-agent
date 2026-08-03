@@ -89,6 +89,19 @@ def _apply_smart_matching(report_data: dict) -> None:
 
     _flag_unmatched_placeholder_resources(report_data, unmatched_bicep)
 
+    # Tie the rows just created back to a deleted resource group. Phase 1 ran
+    # this too, but could only see literal-named rows - a placeholder-named
+    # resource is proven missing only HERE, so it never reached attribution and
+    # a deleted RG still read as N unrelated deletions. Idempotent, so the
+    # earlier pass's work is left alone.
+    #
+    # Local import: run_drift_check pulls in orchestration.targeting, and a
+    # module-level import here would tie the two together at import time.
+    from run_drift_check import _attribute_orphans_to_missing_rgs
+    _attribute_orphans_to_missing_rgs(
+        report_data.get("drifts", []), report_data.get("arm_resources", [])
+    )
+
 
 def _flag_unmatched_placeholder_resources(report_data: dict, unmatched_bicep: list) -> None:
     """Emit missing_in_azure for placeholder-named Bicep resources with no live match.
@@ -120,17 +133,25 @@ def _flag_unmatched_placeholder_resources(report_data: dict, unmatched_bicep: li
         logger.warning(
             f"Unresolvable-named resource has no live counterpart — missing_in_azure: {rtype}/{name}"
         )
+        details = {
+            "note": (
+                "Runtime-generated name (uniqueString/placeholder); no deployed "
+                "resource of this type left to match, so the deployed instance "
+                "has been deleted or was never created."
+            ),
+        }
+        # Carry the declaration's target resource group ON the row. Orphan
+        # attribution otherwise looks it up by (type, name), and THIS name is
+        # replaced in Phase 3 with the real deployed name recovered from the
+        # activity log - so the lookup would miss exactly the placeholder-named
+        # rows that only this stage can produce.
+        if resource.get("_target_rg"):
+            details["_declared_in_rg"] = resource["_target_rg"]
         report_data.setdefault("drifts", []).append({
             "type": rtype,
             "name": name,
             "drift_type": "missing_in_azure",
-            "details": {
-                "note": (
-                    "Runtime-generated name (uniqueString/placeholder); no deployed "
-                    "resource of this type left to match, so the deployed instance "
-                    "has been deleted or was never created."
-                ),
-            },
+            "details": details,
         })
 
 

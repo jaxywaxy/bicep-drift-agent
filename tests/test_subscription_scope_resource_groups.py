@@ -279,3 +279,100 @@ class TopLevelVariablesResolveAgainstParametersTests(unittest.TestCase):
             drifts[1].details["orphaned_by_missing_resource_group"],
             "jacquidev-rg-logging",
         )
+
+
+class OrphanAttributionSurvivesTheStagesTests(unittest.TestCase):
+    """Orphan attribution ran in Phase 1; smart matching creates
+    placeholder-named missing rows in Phase 2. Those rows could therefore never
+    be attributed - and they are precisely the ones that need it, because a
+    uniqueString-named resource is only proven missing BY smart matching.
+
+    Live, 2026-08-03, deleting jacquidev-rg-logging: the literal-named
+    'jacquidev-law' linked to its deleted group; the placeholder-named storage
+    account did not.
+
+    There is a second, subtler half. The Phase 1 lookup keys on (type, name)
+    against arm_resources, and the NAME CHANGES in Phase 3 - a deleted
+    placeholder-named resource is renamed to the real deployed name recovered
+    from its activity-log event (jacquidevstl[86c9cbf6] -> jacquidevstla7m6et).
+    So a pure ordering fix would work only in the window between Phase 2 and
+    Phase 3, and break the moment a stage moved. The declaration's target group
+    is therefore carried ON the row instead of looked up by a mutable name.
+
+    The existing tests call _attribute_orphans_to_missing_rgs directly, which is
+    why a stage-ordering gap was invisible to them; these enter through the
+    orchestration path.
+    """
+
+    RG = "jacquidev-rg-logging"
+
+    def _report(self):
+        return {
+            "arm_resources": [
+                {"type": RESOURCE_GROUP_TYPE, "name": self.RG},
+                {"type": "Microsoft.Storage/storageAccounts",
+                 "name": "jacquidevstl[86c9cbf6]", "_target_rg": self.RG},
+            ],
+            "live_resources": [],
+            "drifts": [
+                {"type": RESOURCE_GROUP_TYPE, "name": self.RG,
+                 "drift_type": "missing_in_azure", "details": {}},
+            ],
+        }
+
+    def _run(self):
+        from orchestration.reconciliation import _apply_smart_matching
+        from run_drift_check import _attribute_orphans_to_missing_rgs
+        report = self._report()
+        _apply_smart_matching(report)
+        _attribute_orphans_to_missing_rgs(report["drifts"], report["arm_resources"])
+        return report
+
+    def _storage_row(self, report):
+        rows = [d for d in report["drifts"]
+                if d.get("type") == "Microsoft.Storage/storageAccounts"]
+        self.assertEqual(len(rows), 1, "smart matching should flag the placeholder as missing")
+        return rows[0]
+
+    def test_a_placeholder_row_is_tied_to_its_deleted_group(self):
+        row = self._storage_row(self._run())
+        self.assertEqual(
+            (row.get("details") or {}).get("orphaned_by_missing_resource_group"),
+            self.RG,
+            "a Phase 2 missing row was never attributed to the group that vanished",
+        )
+
+    def test_the_link_survives_the_phase_3_rename(self):
+        # Phase 3 replaces the placeholder name with the real deployed name. The
+        # attribution must not depend on the name it was created with.
+        report = self._report()
+        from orchestration.reconciliation import _apply_smart_matching
+        from run_drift_check import _attribute_orphans_to_missing_rgs
+        _apply_smart_matching(report)
+        for d in report["drifts"]:
+            if d.get("type") == "Microsoft.Storage/storageAccounts":
+                d["name"] = "jacquidevstla7m6et"   # as Phase 3 rewrites it
+        _attribute_orphans_to_missing_rgs(report["drifts"], report["arm_resources"])
+        row = self._storage_row(report)
+        self.assertEqual(
+            (row.get("details") or {}).get("orphaned_by_missing_resource_group"),
+            self.RG,
+        )
+
+    def test_running_twice_is_idempotent(self):
+        # Phase 1 annotates what it can see; the later pass catches the rest.
+        # Running both must not double-annotate or raise.
+        report = self._run()
+        from run_drift_check import _attribute_orphans_to_missing_rgs
+        n = _attribute_orphans_to_missing_rgs(report["drifts"], report["arm_resources"])
+        self.assertEqual(n, 0, "an already-attributed row was attributed again")
+
+    def test_a_row_outside_a_deleted_group_is_left_alone(self):
+        report = self._report()
+        report["arm_resources"][1]["_target_rg"] = "jacquidev-rg-apps"  # still exists
+        from orchestration.reconciliation import _apply_smart_matching
+        from run_drift_check import _attribute_orphans_to_missing_rgs
+        _apply_smart_matching(report)
+        _attribute_orphans_to_missing_rgs(report["drifts"], report["arm_resources"])
+        row = self._storage_row(report)
+        self.assertNotIn("orphaned_by_missing_resource_group", row.get("details") or {})
