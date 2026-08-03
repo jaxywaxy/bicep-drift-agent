@@ -144,13 +144,64 @@ and 7 remain.
 | 4 | VMSS `sku.capacity` 0 → 1, or remove a zone | Compute detection, incl. the zones-subset trap | ⚠️ detection proven (zones correctly silent); **attribution defect** found |
 | 5 | Grant a role to `id-drift-test` out of band | RBAC detection + grantor provenance | ❌ **failed** — false negative + false positive; `privileged` and `created_by` do work |
 | 6 | Delete one RG from a **subscription-scoped** LZ | One RG finding with attributed orphans, not N loose deletions (#369) | pending |
-| 7 | Leave both policy remediation grants unresolved | Colliding role-assignment rows render distinctly (#370) | pending |
+| 7 | Leave both policy remediation grants unresolved | Colliding role-assignment rows render distinctly (#370) | ⛔ attempted 2026-08-03 — **blocked**, see "Resource Graph keeps phantoms" |
 
-Items 6 and 7 need a subscription-scoped landing zone (`azure-landingzone-bicep`,
+Item 6 needs a subscription-scoped landing zone (`azure-landingzone-bicep`,
 `envs/dev`), not `rg-drift-test`.
+
+**Item 7 does not.** It was parked here for a long time on the assumption that it
+needed a subscription-scoped LZ, and that is wrong: what it needs is *two
+colliding role-assignment declarations whose principals are unresolvable*, and
+`rg-drift-test` has had exactly that all along — the two policy-remediation
+Contributors for `drift-inherit-costcentre` and `drift-inherit-environment`. Both
+compile to an unresolvable `guid()`, both grant the same role, and both take
+`principalId` from `reference(...).identity.principalId`. Delete both live grants
+and they should surface as two `missing_in_azure` rows sharing one name.
+
+Neither `azure-landingzone-bicep` nor `azure-alz-avm` can run item 7 at all —
+**neither declares a single role assignment.**
 
 Note on 4: a live VMSS's `zones` are immutable, so "remove a zone" is not
 performable in-place — capacity is the only usable compute injection here.
+
+### Resource Graph keeps phantoms — RBAC injections race the index
+
+**The RBAC sidecar does not read the API you verify with.** `tools/rbac.py`
+queries Resource Graph's `authorizationresources`; `az role assignment list`
+queries ARM. They disagree, and Resource Graph keeps assignments **after ARM has
+dropped them**.
+
+This blocked item 7 on 2026-08-03. Both policy-remediation Contributors were
+deleted and `az` confirmed one assignment left. The scan still reported three:
+
+| Principal | Role | ARM | Resource Graph |
+|---|---|---|---|
+| current `id-drift-test` | Monitoring Reader | yes | yes |
+| **previous** `id-drift-test` | Monitoring Reader | no | **still indexed** |
+| **previous** `id-drift-test` | Contributor | no | **still indexed** |
+
+Both phantoms pointed at a principal a redeploy had replaced ~21 hours earlier.
+The phantom Contributor matched one of the two unresolved declarations through
+the role-only fallback, so only **one** row came back missing — and one row
+cannot collide, so the disambiguation under test never ran. Every number in the
+log (`3 in scan scope`, `1 extra, 1 missing`, `Ignoring 1 RBAC drift`) was
+correct for the data the comparator was handed.
+
+The phantoms cannot be cleared by hand. `az` cannot even resolve the principal
+("Cannot find user or service principal in graph database") and the ARM REST call
+at scope does not list them; there is nothing to delete. They age out.
+
+**Before any RBAC injection, check the sidecar's own data source:**
+
+```bash
+az graph query -q "authorizationresources
+  | where tolower(properties.scope) contains '/resourcegroups/rg-drift-test'
+  | project tostring(properties.principalId), tostring(properties.roleDefinitionId)"
+```
+
+`az role assignment list` reflecting your injection is **not** evidence the scan
+will see it. This is also why PR #299 exists — orphans from prior deploy cycles
+are a standing feature of this estate, not an anomaly.
 
 ### Two estate gotchas found running this round
 
