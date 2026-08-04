@@ -67,7 +67,7 @@ landing_zones:
 |----------|-----------|-------------|
 | `landing_zones` | Yes | Collection of registered landing zones |
 | `<landing-zone-name>` | Yes | Logical identifier used by workflows |
-| `repo` | Yes | Repository containing landing zone configuration |
+| `repo` | Yes | Repository containing landing zone configuration. **Drift issues are also published here** (see Step 4a in `LANDING_ZONES_OPERATIONS.md`), so `BICEP_REPO_TOKEN` needs `issues: write` on it — the same field decides where the config is read FROM and where the report is written TO |
 | `config_path` | Yes | Path to `drift-lz-config.yml` |
 | `workflow` | Yes | Workflow associated with the landing zone |
 
