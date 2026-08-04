@@ -55,6 +55,8 @@ from orchestration.analysis import _run_claude_analysis
 from orchestration.reporting import (
     _finalize_drift_count,
     _strip_internal_details,
+    _include_placeholder_deletions,
+    _group_orphans_with_their_cause,
     _drift_type_counts,  # noqa: F401  (re-exported for tests)
     _print_drift_summary,
     _generate_html_report,
@@ -151,6 +153,12 @@ def main():
 
         # Emit the grep-able summary from the FINAL actionable set (post Phase 3 split),
         # so the CI summary matches the report and excludes policy-enforced changes.
+        # One deleted resource group is ONE finding: put its orphans directly
+        # under it, and make sure a placeholder-named deletion reaches the
+        # report section too. Before the summary print so the CI log, the JSON
+        # and the HTML all tell the same story.
+        _group_orphans_with_their_cause(report_data)
+        _include_placeholder_deletions(report_data)
         _print_drift_summary(report_data.get("drifts", []))
 
         # drift_count was stamped on the raw Phase-1 drifts; the array has since

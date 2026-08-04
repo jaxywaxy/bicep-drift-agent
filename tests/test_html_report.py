@@ -692,3 +692,125 @@ class InternalPlumbingStaysOutOfTheReportTests(unittest.TestCase):
     def test_rows_without_details_do_not_raise(self):
         from orchestration.reporting import _strip_internal_details
         _strip_internal_details({"drifts": [{"name": "x"}, {"name": "y", "details": None}]})
+
+
+class ADeletedPlaceholderNamedResourceReachesTheReportTests(unittest.TestCase):
+    """`property_drifts` feeds a report section of its own, and it was built from
+    a bicep set that FILTERS OUT unresolvable-named declarations.
+
+    That filter is right for property COMPARISON - you cannot diff a name that
+    never resolved - but it also removed the row's existence. Live 2026-08-04:
+    the deleted storage account rendered once (the drift table) where every
+    literal-named finding rendered twice, so the section that lists missing
+    resources simply did not mention it.
+
+    Same shape as the rest of this round: a filter correct for its original
+    purpose, reused as the input to something it was never checked against.
+    """
+
+    def _report(self):
+        return {
+            "drifts": [
+                {"type": "Microsoft.Resources/resourceGroups", "name": "rg-logging",
+                 "drift_type": "missing_in_azure", "details": {}},
+                {"type": "Microsoft.Storage/storageAccounts", "name": "stla7m6et",
+                 "drift_type": "missing_in_azure", "bicep_name_expression": "stl[86c9cbf6]",
+                 "details": {"orphaned_by_missing_resource_group": "rg-logging"}},
+                {"type": "Microsoft.KeyVault/vaults", "name": "kv-live",
+                 "drift_type": "matched_unresolvable", "details": {}},
+            ],
+            "property_drifts": [
+                {"resource_type": "Microsoft.Resources/resourceGroups",
+                 "resource_name": "rg-logging", "bicep_name": "rg-logging",
+                 "deployed_name": "", "drift_type": "missing",
+                 "match_confidence": 1.0, "property_diffs": []},
+            ],
+        }
+
+    def test_the_placeholder_named_deletion_is_added(self):
+        from orchestration.reporting import _include_placeholder_deletions
+        report = self._report()
+        _include_placeholder_deletions(report)
+        names = [r["resource_name"] for r in report["property_drifts"]]
+        self.assertIn("stla7m6et", names,
+                      "a deleted uniqueString-named resource never reached the report section")
+
+    def test_it_keeps_the_bicep_expression_so_the_reader_can_find_it(self):
+        from orchestration.reporting import _include_placeholder_deletions
+        report = self._report()
+        _include_placeholder_deletions(report)
+        row = [r for r in report["property_drifts"] if r["resource_name"] == "stla7m6et"][0]
+        self.assertEqual(row["drift_type"], "missing")
+        self.assertEqual(row["bicep_name"], "stl[86c9cbf6]")
+
+    def test_a_row_already_present_is_not_duplicated(self):
+        from orchestration.reporting import _include_placeholder_deletions
+        report = self._report()
+        _include_placeholder_deletions(report)
+        _include_placeholder_deletions(report)
+        names = [r["resource_name"] for r in report["property_drifts"]]
+        self.assertEqual(len(names), len(set(names)), f"duplicated rows: {names}")
+
+    def test_matched_rows_are_not_added(self):
+        from orchestration.reporting import _include_placeholder_deletions
+        report = self._report()
+        _include_placeholder_deletions(report)
+        self.assertNotIn("kv-live", [r["resource_name"] for r in report["property_drifts"]])
+
+
+class OneEventReadsAsOneEventTests(unittest.TestCase):
+    """Drift rows were emitted in CREATION order, and an orphan is created a
+    whole stage after the resource group that explains it. Live 2026-08-04:
+
+        0.  missing  jacquidev-rg-logging   <- the cause      (Phase 1)
+        1.  missing  jacquidev-law          <- orphan         (Phase 1)
+        2-13.  six matched rows, six role assignments
+        14. missing  jacquidevstla7m6et     <- orphan         (Phase 2)
+
+    So the summary read as "logging RG and workspace deleted ... (six role
+    assignments) ... and also a storage account" - the exact failure the orphan
+    attribution exists to prevent. The link was in the data and nothing used it
+    to order the output.
+    """
+
+    def _rows(self):
+        return [
+            {"type": "Microsoft.Resources/resourceGroups", "name": "rg-logging",
+             "drift_type": "missing_in_azure", "details": {}},
+            {"type": "Microsoft.OperationalInsights/workspaces", "name": "law",
+             "drift_type": "missing_in_azure",
+             "details": {"orphaned_by_missing_resource_group": "rg-logging"}},
+            {"type": "Microsoft.Authorization/roleAssignments", "name": "Owner -> User:x",
+             "drift_type": "extra_in_azure", "details": {}},
+            {"type": "Microsoft.Resources/resourceGroups", "name": "NetworkWatcherRG",
+             "drift_type": "extra_in_azure", "details": {}},
+            {"type": "Microsoft.Storage/storageAccounts", "name": "stla7m6et",
+             "drift_type": "missing_in_azure",
+             "details": {"orphaned_by_missing_resource_group": "rg-logging"}},
+        ]
+
+    def _ordered(self):
+        from orchestration.reporting import _group_orphans_with_their_cause
+        report = {"drifts": self._rows()}
+        _group_orphans_with_their_cause(report)
+        return [r["name"] for r in report["drifts"]]
+
+    def test_orphans_immediately_follow_their_resource_group(self):
+        names = self._ordered()
+        self.assertEqual(names[:3], ["rg-logging", "law", "stla7m6et"],
+                         f"one deletion still reads as three unrelated ones: {names}")
+
+    def test_nothing_is_lost_or_duplicated(self):
+        before = sorted(r["name"] for r in self._rows())
+        self.assertEqual(sorted(self._ordered()), before)
+
+    def test_unrelated_rows_keep_their_relative_order(self):
+        names = self._ordered()
+        self.assertLess(names.index("Owner -> User:x"), names.index("NetworkWatcherRG"))
+
+    def test_a_report_with_no_missing_group_is_untouched(self):
+        from orchestration.reporting import _group_orphans_with_their_cause
+        rows = [r for r in self._rows() if r["name"] != "rg-logging"]
+        report = {"drifts": [dict(r) for r in rows]}
+        _group_orphans_with_their_cause(report)
+        self.assertEqual([r["name"] for r in report["drifts"]], [r["name"] for r in rows])

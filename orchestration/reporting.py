@@ -47,6 +47,84 @@ def _print_drift_summary(drifts):
     print("=" * 60 + "\n")
 
 
+def _include_placeholder_deletions(report_data: dict) -> None:
+    """Add deleted uniqueString-named resources to `property_drifts`.
+
+    That list feeds a report section of its own, and it is built from a bicep set
+    that filters out unresolvable-named declarations. The filter is right for
+    property COMPARISON - you cannot diff a name that never resolved - but it
+    also removed the row's EXISTENCE, so a genuinely deleted placeholder-named
+    resource rendered once where every literal-named finding rendered twice, and
+    the section listing missing resources did not mention it at all.
+
+    Only missing_in_azure rows are added, and only ones not already represented:
+    a matched placeholder resource is present in Azure and belongs in neither
+    list.
+    """
+    property_drifts = report_data.setdefault("property_drifts", [])
+    present = {(r.get("resource_type"), r.get("resource_name")) for r in property_drifts}
+    for drift in report_data.get("drifts") or []:
+        if drift.get("drift_type") != "missing_in_azure":
+            continue
+        key = (drift.get("type"), drift.get("name"))
+        if key in present:
+            continue
+        present.add(key)
+        property_drifts.append({
+            "resource_type": drift.get("type"),
+            "resource_name": drift.get("name"),
+            # The bicep expression is what a reader greps for in the template;
+            # the row's own name is the deployed name recovered from the log.
+            "bicep_name": drift.get("bicep_name_expression") or drift.get("name"),
+            "deployed_name": "",
+            "drift_type": "missing",
+            "match_confidence": 1.0,
+            "property_diffs": [],
+        })
+
+
+def _group_orphans_with_their_cause(report_data: dict) -> None:
+    """Put each orphan immediately after the resource group that explains it.
+
+    Rows are emitted in CREATION order, and an orphan is created a whole stage
+    after its resource group - so a single deletion read as "logging RG and
+    workspace deleted ... (six role assignments) ... and also a storage account".
+    That is the exact failure orphan attribution exists to prevent; the link was
+    in the data and nothing used it to order the output.
+
+    Stable: rows that are not part of a deleted group keep their relative order,
+    and nothing is added or dropped.
+    """
+    drifts = report_data.get("drifts") or []
+    # Only regroup around groups that are THEMSELVES reported missing. An orphan
+    # whose group is not in the report (ignored, filtered, or a different scan)
+    # has nothing to sit under, and relocating it would reorder the report for
+    # no reader benefit.
+    reported_groups = {
+        str(r.get("name") or "").lower() for r in drifts
+        if r.get("type") == "Microsoft.Resources/resourceGroups"
+        and r.get("drift_type") == "missing_in_azure"
+    }
+    orphans_by_rg: dict[str, list] = {}
+    for row in drifts:
+        rg = ((row.get("details") or {}).get("orphaned_by_missing_resource_group") or "").lower()
+        if rg and rg in reported_groups:
+            orphans_by_rg.setdefault(rg, []).append(row)
+    if not orphans_by_rg:
+        return
+
+    moved = {id(r) for rows in orphans_by_rg.values() for r in rows}
+    ordered = []
+    for row in drifts:
+        if id(row) in moved:
+            continue
+        ordered.append(row)
+        if (row.get("type") == "Microsoft.Resources/resourceGroups"
+                and row.get("drift_type") == "missing_in_azure"):
+            ordered.extend(orphans_by_rg.get(str(row.get("name") or "").lower(), []))
+    report_data["drifts"] = ordered
+
+
 def _strip_internal_details(report_data: dict) -> None:
     """Remove pipeline-internal keys from every drift's `details` before the
     report is published.
