@@ -328,20 +328,38 @@ def _should_compare_resource(resource: dict) -> bool:
 
 
 def format_drift_report(drifts: list[ResourceDrift], resource_group: str) -> str:
-    """
-    Simple text summary — good enough for Phase 1, the agent will do better later.
+    """Provisional text summary of the RAW Phase 1 diff.
+
+    Deliberately does NOT use the bracketed [MISSING]/[EXTRA]/[DRIFT] tokens:
+    those belong to the FINAL summary (_print_drift_summary), which runs after
+    smart matching and ignore filtering. Both used to appear in one CI log in
+    the identical format ~370 lines apart, and Phase 1's list was wrong by then
+    - it named 13 extras of which six were reconciled away, including a storage
+    account the final summary correctly reported as DELETED. Reading the log
+    could not answer "extra or deleted?".
+
+    Nothing machine-readable depends on either (CI counts come from the JSON -
+    see tests/test_count_drifts.py); the cost was entirely to the human reading
+    it.
     """
     if not drifts:
         return f"✅ No drift detected in resource group '{resource_group}'."
 
     lines = [
-        f"Drift Report — {resource_group}",
+        f"Drift Report (provisional, pre-reconciliation) — {resource_group}",
         f"{'=' * 50}",
-        f"Found {len(drifts)} drift(s):\n",
+        f"Found {len(drifts)} raw drift(s); smart matching and ignore filtering "
+        f"have NOT run yet, so this list is not the answer:\n",
     ]
 
     for d in drifts:
-        lines.append(f"  {d.summary()}")
+        # Strip the reserved tokens; keep the sentence they introduced.
+        lines.append("  " + d.summary().replace("[MISSING]", "missing: ")
+                     .replace("[EXTRA]  ", "extra:   ")
+                     .replace("[EXTRA]", "extra:")
+                     .replace("[DRIFT]  ", "changed: ")
+                     .replace("[DRIFT]", "changed:")
+                     .replace("[UNKNOWN]", "unknown:"))
         if d.details:
             for prop, change in d.details.get("changed_properties", {}).items():
                 lines.append(f"      {prop}:")

@@ -104,11 +104,73 @@ def check_collection_gaps_are_declared(report):
         "collectors could not read some types (absence here is unverified, not drift)"
 
 
+def check_orphans_are_shown_with_their_cause(report):
+    """An orphan must be shown DIRECTLY under the resource group that explains it.
+
+    Linkage alone is not enough, and this guard learned that the hard way: it
+    passed a report where every `orphaned_by_missing_resource_group` was
+    correctly populated while the rows themselves were scattered - the group
+    first, six role assignments in between, an orphan last. One deletion read as
+    three unrelated ones and the guard said "ok".
+
+    An orphan whose group is NOT itself reported has nothing to sit under; that
+    is not a violation.
+    """
+    drifts = report.get("drifts") or []
+    reported_groups = {
+        str(r.get("name") or "").lower() for r in drifts
+        if r.get("type") == "Microsoft.Resources/resourceGroups"
+        and r.get("drift_type") == "missing_in_azure"
+    }
+    bad = []
+    for i, row in enumerate(drifts):
+        group = ((row.get("details") or {}).get("orphaned_by_missing_resource_group") or "").lower()
+        if not group or group not in reported_groups:
+            continue
+        # Walk back over any sibling orphans of the SAME group; the row before
+        # that run must be the group itself.
+        j = i - 1
+        while j >= 0 and ((drifts[j].get("details") or {}).get(
+                "orphaned_by_missing_resource_group") or "").lower() == group:
+            j -= 1
+        anchor = drifts[j] if j >= 0 else None
+        if not (anchor and str(anchor.get("name") or "").lower() == group
+                and anchor.get("drift_type") == "missing_in_azure"):
+            bad.append(("drifts", f"{row.get('name')} is not shown under '{group}'"))
+    return bad, "orphans shown with the resource group that explains them"
+
+
+def check_deletions_reach_the_report_section(report):
+    """Every missing resource must appear in `property_drifts` too.
+
+    That list feeds a report section of its own and was built from a bicep set
+    that filters out unresolvable-named declarations - so a deleted
+    uniqueString-named resource rendered ONCE where every literal-named finding
+    rendered twice, and the section listing missing resources never mentioned
+    it. The finding existed; the report did not show it.
+
+    Skipped entirely when there is no such section (Phase-1-only output).
+    """
+    property_drifts = report.get("property_drifts")
+    if not property_drifts:
+        return [], "report section (absent - nothing to cross-check)"
+    present = {(r.get("resource_type"), r.get("resource_name")) for r in property_drifts}
+    bad = [
+        ("drifts", f"{row.get('type')}/{row.get('name')}")
+        for row in report.get("drifts") or []
+        if row.get("drift_type") == "missing_in_azure"
+        and (row.get("type"), row.get("name")) not in present
+    ]
+    return bad, "deleted resources missing from the report's own section"
+
+
 CHECKS = [
     check_names_are_not_source_code,
     check_no_none_baked_into_names,
     check_orphans_name_their_resource_group,
     check_collection_gaps_are_declared,
+    check_orphans_are_shown_with_their_cause,
+    check_deletions_reach_the_report_section,
 ]
 
 
