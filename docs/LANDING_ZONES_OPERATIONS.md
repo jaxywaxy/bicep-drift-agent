@@ -169,6 +169,33 @@ See:
 TEAM_NOTIFICATIONS.md
 ```
 
+## Step 4a – Enable the drift issue in the landing zone repo (recommended)
+
+Skipping this step is **silent**: notifications still send, and their report
+link points at the Actions run in the drift-agent repo — which the workload team
+usually cannot read. Granting them that read is not the fix, because it would
+expose every landing zone's reports to every team.
+
+Instead the run publishes the drift result as a rolling issue in the landing
+zone's **own** repo (`Drift Report — <lz>`, label `drift-report`), created and
+updated as drift is found and closed with a "✅ Drift resolved" comment when the
+scan comes back clean. When an issue exists, every team's `{{ report_url }}`
+becomes the issue link.
+
+To enable it:
+
+1. Give `BICEP_REPO_TOKEN` **`issues: write`** on the repo named by `repo` in
+   `lz-index.yml` — the same repo the configuration is read from.
+2. Nothing else. There is no enable flag; publication is attempted whenever the
+   token allows it.
+
+**How you know it did not work.** A missing or read-only token is *not* an
+error — publication is an enhancement, never a gate, so it logs a warning and
+the run still succeeds. Confirm it by looking for the issue in the landing zone
+repo after the first run with drift, not by looking for a failure.
+
+See `TEAM_NOTIFICATIONS.md` for the issue body format and template variables.
+
 ## Step 5 – Execute Validation
 
 Run the workflow manually:
