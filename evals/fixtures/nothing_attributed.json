@@ -1,0 +1,233 @@
+{
+  "_what_this_pins": "Every row is origin:unknown. The narrative must say so plainly and must NOT name a culprit. This is the state every subscription-scoped scan was in before #382, and a confident-sounding analysis over it would have been confidently wrong.",
+  "bicep_file": "/Users/jacquirennie/Desktop/git/azure-landingzone-bicep/envs/dev/main.bicep",
+  "resource_group": "subscription",
+  "drifts": [
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "name": "jacquidev-rg-logging",
+      "drift_type": "missing_in_azure",
+      "details": {},
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "workload"
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "name": "jacquidev-law",
+      "drift_type": "missing_in_azure",
+      "details": {
+        "orphaned_by_missing_resource_group": "jacquidev-rg-logging",
+        "note": "Missing because its resource group 'jacquidev-rg-logging' no longer exists - a consequence of that deletion, not an independent one. Restoring the resource group is the prerequisite for restoring this."
+      },
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "workload"
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "jacquidevstla7m6et",
+      "drift_type": "missing_in_azure",
+      "details": {
+        "note": "Missing because its resource group 'jacquidev-rg-logging' no longer exists - a consequence of that deletion, not an independent one. Restoring the resource group is the prerequisite for restoring this.",
+        "orphaned_by_missing_resource_group": "jacquidev-rg-logging"
+      },
+      "bicep_name_expression": "jacquidevstl[86c9cbf6]",
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "workload"
+    },
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "name": "DefaultResourceGroup-EAU",
+      "drift_type": "extra_in_azure",
+      "details": {},
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "workload"
+    },
+    {
+      "type": "Microsoft.Resources/resourceGroups",
+      "name": "NetworkWatcherRG",
+      "drift_type": "extra_in_azure",
+      "details": {},
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "workload"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "name": "Contributor -> ServicePrincipal:ef83bff1-c6c1-4cb1-84be-9bd758e8fc41",
+      "drift_type": "extra_in_azure",
+      "details": {
+        "role_name": "Contributor",
+        "role_definition_guid": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principal_id": "ef83bff1-c6c1-4cb1-84be-9bd758e8fc41",
+        "principal_type": "ServicePrincipal",
+        "scope": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83",
+        "assignment_id": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83/providers/Microsoft.Authorization/RoleAssignments/5ea31b9e-618d-4adc-a6a4-ab2fe23c6d87",
+        "privileged": true,
+        "created_by": "70afebf7-5bdd-45d9-9cfc-534af9a95589",
+        "created_on": "2026-07-01T01:51:47.085Z"
+      },
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "platform"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "name": "Owner -> User:70afebf7-5bdd-45d9-9cfc-534af9a95589",
+      "drift_type": "extra_in_azure",
+      "details": {
+        "role_name": "Owner",
+        "role_definition_guid": "8e3af657-a8ff-443c-a75c-2fe8c4bcb635",
+        "principal_id": "70afebf7-5bdd-45d9-9cfc-534af9a95589",
+        "principal_type": "User",
+        "scope": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83",
+        "assignment_id": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83/providers/Microsoft.Authorization/RoleAssignments/79565f05-62fc-437a-bc0e-d82baccc6ccb",
+        "privileged": true,
+        "created_on": "2024-12-03T21:42:07.748Z"
+      },
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "platform"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "name": "53ca6127-db72-4b80-b1b0-d745d6d5456d -> User:70afebf7-5bdd-45d9-9cfc-534af9a95589",
+      "drift_type": "extra_in_azure",
+      "details": {
+        "role_name": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
+        "role_definition_guid": "53ca6127-db72-4b80-b1b0-d745d6d5456d",
+        "principal_id": "70afebf7-5bdd-45d9-9cfc-534af9a95589",
+        "principal_type": "User",
+        "scope": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83",
+        "assignment_id": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83/providers/Microsoft.Authorization/RoleAssignments/cf0375c3-1a9a-4fef-9997-cb2873291153",
+        "privileged": false,
+        "created_by": "70afebf7-5bdd-45d9-9cfc-534af9a95589",
+        "created_on": "2025-11-17T19:55:47.609Z"
+      },
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "platform"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "name": "Contributor -> ServicePrincipal:4c2cb1db-9eaf-4107-aedd-2a0a96e79577",
+      "drift_type": "extra_in_azure",
+      "details": {
+        "role_name": "Contributor",
+        "role_definition_guid": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principal_id": "4c2cb1db-9eaf-4107-aedd-2a0a96e79577",
+        "principal_type": "ServicePrincipal",
+        "scope": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83",
+        "assignment_id": "/subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83/providers/Microsoft.Authorization/RoleAssignments/e6107770-8abf-4f65-a45f-b7c875f91931",
+        "privileged": true,
+        "created_by": "70afebf7-5bdd-45d9-9cfc-534af9a95589",
+        "created_on": "2026-07-01T00:24:20.072Z"
+      },
+      "lifecycle": {
+        "events": [],
+        "deleted_by": null,
+        "created_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "changed_by": null,
+        "timestamp": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "platform"
+    }
+  ]
+}
