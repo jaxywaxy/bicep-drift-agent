@@ -60,20 +60,26 @@ class LLMProvider(Protocol):
         ...
 
 
-def _providers() -> dict:
-    # Imported lazily so a missing optional SDK only breaks the provider that
-    # needs it, not every import of this package.
-    from agent.llm.anthropic_provider import AnthropicProvider
-    return {"anthropic": AnthropicProvider}
+# name -> "module:attribute". Resolved one at a time so a provider whose SDK is
+# not installed cannot break selection of one whose SDK is.
+_REGISTRY = {
+    "anthropic": "agent.llm.anthropic_provider:AnthropicProvider",
+    "azure_openai": "agent.llm.azure_openai_provider:AzureOpenAIProvider",
+}
+
+
+def _load(path: str):
+    import importlib
+    module, _, attr = path.partition(":")
+    return getattr(importlib.import_module(module), attr)
 
 
 def get_provider(name: str | None = None, **kwargs: Any) -> LLMProvider:
     """Construct the configured provider. Defaults to anthropic."""
     chosen = (name or os.environ.get("DRIFT_LLM_PROVIDER") or "anthropic").strip().lower()
-    registry = _providers()
-    if chosen not in registry:
+    if chosen not in _REGISTRY:
         raise UnknownProviderError(
             f"DRIFT_LLM_PROVIDER={chosen!r} is not a known provider. "
-            f"Available: {', '.join(sorted(registry))}"
+            f"Available: {', '.join(sorted(_REGISTRY))}"
         )
-    return registry[chosen](**kwargs)
+    return _load(_REGISTRY[chosen])(**kwargs)
