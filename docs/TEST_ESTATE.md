@@ -143,11 +143,20 @@ and 7 remain.
 | 3 | Delete a rule from `rcg-network`, or drop its priority | Firewall rule collection group detection | ✅ **live-proven** 2026-08-02 |
 | 4 | VMSS `sku.capacity` 0 → 1, or remove a zone | Compute detection, incl. the zones-subset trap | ⚠️ detection proven (zones correctly silent); **attribution defect** found |
 | 5 | Grant a role to `id-drift-test` out of band | RBAC detection + grantor provenance | ❌ **failed** — false negative + false positive; `privileged` and `created_by` do work |
-| 6 | Delete one RG from a **subscription-scoped** LZ | One RG finding with attributed orphans, not N loose deletions (#369) | pending |
+| 6 | Delete one RG from a **subscription-scoped** LZ | One RG finding with attributed orphans, not N loose deletions (#369) | ✅ **live-proven 2026-08-04** — after fixing **seven** defects it exposed (PRs #382/#384/#385/#387/#388). See VALIDATION_STATUS. |
 | 7 | Leave both policy remediation grants unresolved | Colliding role-assignment rows render distinctly (#370) | ⛔ attempted 2026-08-03 — **blocked**, see "Resource Graph keeps phantoms" |
 
 Item 6 needs a subscription-scoped landing zone (`azure-landingzone-bicep`,
-`envs/dev`), not `rg-drift-test`.
+`envs/dev`), not `rg-drift-test`. **That LZ was torn down on 2026-08-04** once
+item 6 passed; re-running it (or item 7 against a sub-scoped estate) means
+`az deployment sub create` against `envs/dev/main.bicep` first. The bicep is all
+committed, including the platform RG contents added in LZ PR #7.
+
+**First contact with a new SCOPE behaves like first contact with a new resource
+type.** Every prior round here was resource-group scoped. The first
+subscription-scoped run found seven defects, one of which (attribution dead for
+every `*` selector) had been silently wrong for both landing zones in
+`lz-index.yml` since they were configured. Assume defects, not confirmation.
 
 **Item 7 does not.** It was parked here for a long time on the assumption that it
 needed a subscription-scoped LZ, and that is wrong: what it needs is *two

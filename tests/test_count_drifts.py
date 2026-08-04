@@ -174,3 +174,42 @@ class CountDriftsTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThePhase1SummaryCannotBeMistakenForTheFinalOneTests(unittest.TestCase):
+    """Two summaries used to appear in one CI log in the IDENTICAL
+    [MISSING]/[EXTRA] format: Phase 1's (pre-reconciliation) and the final one,
+    ~370 lines apart. Phase 1 listed 13 extras of which six were reconciled away
+    by the end.
+
+    They agree post-#382, and CI's counts come from the JSON (see the module
+    docstring above), so nothing machine-readable breaks. The cost is human: it
+    is why "is this storage account extra or deleted?" could not be answered by
+    reading the log. The reserved tokens belong to the FINAL summary alone.
+    """
+
+    def _report(self):
+        from tools.diff_states import ResourceDrift, format_drift_report
+        return format_drift_report(
+            [ResourceDrift(resource_type="Microsoft.Storage/storageAccounts",
+                           resource_name="stg1", drift_type="extra_in_azure")],
+            "rg-x",
+        )
+
+    def test_it_does_not_emit_the_reserved_tokens(self):
+        text = self._report()
+        for token in ("[MISSING]", "[EXTRA]", "[DRIFT]", "[UNVERIFIED]"):
+            self.assertNotIn(token, text,
+                             f"Phase 1 still emits {token}, which belongs to the final summary")
+
+    def test_it_says_it_is_provisional(self):
+        self.assertIn("pre-reconciliation", self._report().lower())
+
+    def test_it_still_names_the_resource_and_what_changed(self):
+        text = self._report()
+        self.assertIn("stg1", text)
+        self.assertIn("extra", text.lower())
+
+    def test_a_clean_report_is_unchanged(self):
+        from tools.diff_states import format_drift_report
+        self.assertIn("No drift detected", format_drift_report([], "rg-x"))
