@@ -272,3 +272,56 @@ the date.
 
 A capability moves **down** a tier if its comparator changes materially without a
 new round.
+
+---
+
+## The 2026-08-03/04 subscription-scope round — seven defects
+
+The agent's **first live run against a subscription-scoped landing zone**
+(`azure-landingzone-bicep`, `envs/dev`). Every prior round was resource-group
+scoped. Backlog item 6 — *delete one resource group, expect ONE finding with its
+contents attributed to it* — now **passes**, after seven defects it exposed.
+
+**The one to remember is #2.** Both landing zones in `lz-index.yml` are
+subscription-scoped, so *every scheduled run of both* had been returning
+completely unattributed reports — 15 of 15 rows `origin: unknown` behind
+*"No activity log entries found (logs may have expired)"*, which is exactly what
+a genuinely quiet subscription looks like. The suite was green throughout.
+
+| # | Defect | PR |
+|---|---|---|
+| 1 | Top-level variables resolved WITHOUT their parameters, so a resource group named the ordinary way (`var loggingRgName = '${prefix}-rg-logging'`) stamped `_target_rg: 'None-rg-logging'` — matching no real group | #382 |
+| 2 | **Attribution dead on every subscription-scoped scan** — the selector (`*` or a glob) went into the Activity Log `$filter` as a literal resource group name | #382 |
+| 3 | Resource names rendered as their own ARM source (`toLower(format(...))`). Three layers: no `toLower`/`replace` branch, `resolve_expression` never routed there, and `extract_variables` resolved each variable against an EMPTY dict so one variable could never reference another | #382 |
+| 4 | Smart matching's lone-candidate short-circuit paired ACROSS resource groups at `high` confidence — hiding a real deletion *and* orphaning the live resource into a false `missing_in_azure` | #382 |
+| 5 | Orphan attribution ran in Phase 1; smart matching creates placeholder-named missing rows in Phase 2, so those could never be attributed | #384 |
+| 6 | **A deleted resource group could never name its actor** — the scan selector was baked into the synthetic id, AND a resource group's real id has no `providers/` segment, so the exact match and the type fallback were both guaranteed to miss | #385 |
+| 7 | Presentation: rows emitted in CREATION order split one deletion into three scattered findings; and `property_drifts` dropped placeholder-named rows, so the deleted storage account rendered once where literal-named findings rendered twice | #387 |
+
+### Why resource-group scope was fine and subscription scope was not
+
+Azure requires unique names **within** a resource group, so at RG scope the
+discriminator is always in the NAME — which is what smart matching compares. At
+subscription scope the same module deploys into several groups, producing
+declarations with an identical name shape; the discriminator moves out of the
+name and into `_target_rg`. And deleting a resource group — the very thing under
+test — collapses the candidate pool from two to one, routing execution around the
+guarded tie-breaker into the unchecked short-circuit.
+
+RG scope is not immune to the family: #233 was the same shape (wrong sibling),
+fixed with the leaf guard.
+
+### What this round says about the guards
+
+**Unit tests were green for all seven.** Three of them produced perfectly
+plausible reports. The fixtures for #369 passed `variables={}` explicitly (so the
+defaulting branch never ran) AND used a literal resource group name where
+production uses a parameter — the reason 15 tests and a mutation check all passed
+while the feature could not work.
+
+`.github/workflows/drift-lz-verify.yml` + `.github/scripts/verify_lz_report.py`
+exist because of this: they assert invariants on a **live report**, which unit
+tests cannot. The guard then failed to catch #7 — it asserted orphans were
+LINKED, never that they were SHOWN together or shown in every section — and was
+itself untested until #388. Both gaps are closed.
+
