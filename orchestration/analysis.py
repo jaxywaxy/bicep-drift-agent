@@ -50,6 +50,25 @@ def _clean_estate_summary(report_data: dict, reconciled: int) -> str:
     return "\n".join(lines)
 
 
+def _explain_llm_failure(provider, exc: Exception) -> str:
+    """Plain-language cause for an LLM failure, asked of the PROVIDER.
+
+    Surfacing the common operational failures (exhausted credit, bad key) is
+    worth doing, but the remediation is vendor-specific - so the vendor supplies
+    it. A provider with no explainer, or an error it does not recognise, yields
+    the generic message rather than another vendor's advice.
+    """
+    explain = getattr(provider, "explain_error", None)
+    if explain is not None:
+        try:
+            hint = explain(exc)
+        except Exception:  # an explainer must never replace the real failure
+            hint = None
+        if hint:
+            return hint
+    return "LLM analysis unavailable this run"
+
+
 def _run_claude_analysis(agent, report_data: dict):
     """Build the DriftReport and, if an agent is available, run Claude analysis.
 
@@ -124,16 +143,8 @@ def _run_claude_analysis(agent, report_data: dict):
         report_data["agent_analysis"] = agent_analysis
         return agent_analysis
     except Exception as e:
-        msg = str(e)
-        # Surface the two most common operational failures in plain language;
-        # both are configuration issues, not drift-processing bugs.
-        if "credit balance is too low" in msg or "billing" in msg.lower():
-            hint = "Anthropic API credit exhausted - top up at console.anthropic.com/settings/billing"
-        elif "authentication" in msg.lower() or "401" in msg or "invalid x-api-key" in msg.lower():
-            hint = "ANTHROPIC_API_KEY is invalid or revoked"
-        else:
-            hint = "Claude analysis unavailable this run"
-        logger.error(f"✗ Claude analysis failed ({type(e).__name__}): {hint}")
+        hint = _explain_llm_failure(getattr(agent, "provider", None), e)
+        logger.error(f"✗ LLM analysis failed ({type(e).__name__}): {hint}")
         logger.warning(
             "Continuing without AI analysis/recommendations - the deterministic "
             "drift report (smart matching, filtering, property drift) is unaffected."

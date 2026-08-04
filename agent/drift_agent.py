@@ -1,7 +1,8 @@
 """
 Phase 2: Agent-based drift analysis and remediation.
 
-`DriftAgent` is the LLM orchestrator - it owns the Anthropic client, the
+`DriftAgent` is the LLM orchestrator - it owns the LLM provider (see
+`agent/llm/`, selected by DRIFT_LLM_PROVIDER, default anthropic), the
 conversation history, and the analyze / follow-up / recommend calls. The work it
 composes lives in mixins it inherits, each independently testable:
 
@@ -19,7 +20,7 @@ import logging
 import os
 from dataclasses import replace
 
-from anthropic import Anthropic
+from agent.llm import get_provider
 
 from tools.models import DriftReport
 
@@ -52,29 +53,37 @@ class DriftAgent(DriftClassifier, LiveContextMixin, PromptsMixin):
         api_key: str | None = None,
         model: str | None = None,
         max_drift_items_for_prompt: int = 100,
+        provider=None,
     ):
         """
         Initialise drift agent.
 
         Args:
-            api_key: Anthropic API key. Defaults to ANTHROPIC_API_KEY env var.
-            model: Claude model. Defaults to DRIFT_AGENT_MODEL env var, then DEFAULT_MODEL.
+            api_key: Provider API key. Defaults to the provider's own env var.
+            model: Model id. Defaults to DRIFT_AGENT_MODEL env var, then the
+                PROVIDER's default - so selecting a provider does not also
+                require naming one of its models.
+            provider: Pre-built LLM provider (tests, or an embedder choosing its
+                own). Defaults to DRIFT_LLM_PROVIDER, which defaults to
+                anthropic - so existing deployments are unaffected.
             max_drift_items_for_prompt: Safety limit to prevent overly large prompts.
         """
-        self.client = Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
-        self.model = model or os.environ.get("DRIFT_AGENT_MODEL", self.DEFAULT_MODEL)
+        self.provider = provider or get_provider(api_key=api_key)
+        self.model = (model or os.environ.get("DRIFT_AGENT_MODEL")
+                      or getattr(self.provider, "default_model", self.DEFAULT_MODEL))
         self.max_drift_items_for_prompt = max_drift_items_for_prompt
         self.conversation_history: list[dict[str, str]] = []
         self.usage = AgentUsage()
 
     def _create_message(self, **kwargs):
-        """All Claude calls go through here so per-run usage/cost accumulates."""
-        response = self.client.messages.create(model=self.model, **kwargs)
+        """Every LLM call goes through here, so per-run usage/cost accumulates
+        and no caller above this line sees a vendor response shape."""
+        response = self.provider.complete(model=self.model, **kwargs)
         usage = getattr(response, "usage", None)
         if usage is not None:
             self.usage.record(self.model, usage)
             logger.debug(
-                f"Claude call {self.usage.calls}: "
+                f"LLM call {self.usage.calls}: "
                 f"{getattr(usage, 'input_tokens', 0)} in / {getattr(usage, 'output_tokens', 0)} out"
             )
         return response
@@ -124,8 +133,8 @@ class DriftAgent(DriftClassifier, LiveContextMixin, PromptsMixin):
             messages=self.conversation_history,
         )
 
-        analysis = response.content[0].text.strip()
-        if getattr(response, "stop_reason", None) == "max_tokens":
+        analysis = response.text.strip()
+        if response.truncated:
             logger.warning(
                 "Claude analysis hit the max_tokens cap and is truncated; "
                 "the remediation plan may be incomplete."
@@ -159,7 +168,7 @@ class DriftAgent(DriftClassifier, LiveContextMixin, PromptsMixin):
             messages=self.conversation_history,
         )
 
-        answer = response.content[0].text.strip()
+        answer = response.text.strip()
 
         self.conversation_history.append(
             {
@@ -222,7 +231,7 @@ Respond with:
             messages=[{"role": "user", "content": prompt}],
         )
 
-        return response.content[0].text.strip()
+        return response.text.strip()
 
 
 
