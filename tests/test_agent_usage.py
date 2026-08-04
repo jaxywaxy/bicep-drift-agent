@@ -13,6 +13,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.drift_agent import AgentUsage, DriftAgent
+from agent.llm import LLMResponse
 
 
 def _usage(inp=0, out=0, cw=0, cr=0):
@@ -79,10 +80,11 @@ class AgentUsageTests(unittest.TestCase):
 class CreateMessageRecordingTests(unittest.TestCase):
     def _agent(self):
         agent = DriftAgent(api_key="test-key", model="claude-opus-4-8")
-        agent.client = mock.MagicMock()
-        agent.client.messages.create.return_value = SimpleNamespace(
-            content=[SimpleNamespace(text="do the thing")],
-            usage=_usage(1234, 56),
+        # Stubbed at the SEAM, not at the vendor SDK: above agent/llm/ nothing
+        # should know what an Anthropic response looks like.
+        agent.provider = mock.MagicMock()
+        agent.provider.complete.return_value = LLMResponse(
+            text="do the thing", usage=_usage(1234, 56),
         )
         return agent
 

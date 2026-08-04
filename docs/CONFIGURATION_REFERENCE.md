@@ -541,7 +541,8 @@ The following environment variables are recognised.
 | `DRIFT_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `DRIFT_BICEP_TIMEOUT` | `120` | Seconds allowed for `az bicep build`. Raise for very large templates |
 | `DRIFT_WEBHOOK_TIMEOUT` | `10` | Seconds allowed per webhook POST |
-| `DRIFT_AGENT_MODEL` | `claude-opus-4-8` | Claude model used for the analysis |
+| `DRIFT_AGENT_MODEL` | the provider's own default | Model id for the analysis. Left unset it follows `DRIFT_LLM_PROVIDER`, so choosing a provider does not also force you to name one of its models |
+| `DRIFT_LLM_PROVIDER` | `anthropic` | Which LLM backs the narrative analysis. Only `anthropic` ships today; the seam lives in `agent/llm/` and nothing above it touches a vendor SDK or response shape. An unrecognised value **fails loudly** rather than falling back — running against a provider you did not choose, and reporting it as if you had, is the failure this tool exists to prevent one level up |
 
 ## Notification variables
 

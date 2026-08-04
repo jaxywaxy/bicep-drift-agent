@@ -15,6 +15,7 @@ from types import SimpleNamespace
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from agent.drift_agent import DriftAgent
+from agent.llm import LLMResponse
 from tools.models import Drift, DriftReport
 
 
@@ -45,8 +46,8 @@ class AnalysisPromptTests(unittest.TestCase):
 
         def fake_create(**kwargs):
             captured.update(kwargs)
-            return SimpleNamespace(
-                content=[SimpleNamespace(text="analysis")],
+            return LLMResponse(
+                text="analysis",
                 usage=SimpleNamespace(input_tokens=1, output_tokens=1),
             )
 
@@ -89,8 +90,7 @@ class AnalysisPromptTests(unittest.TestCase):
     def test_original_report_object_not_mutated(self):
         report = _report(4, 1)
         agent = DriftAgent(api_key="test-key")
-        agent._create_message = lambda **kw: SimpleNamespace(
-            content=[SimpleNamespace(text="x")], usage=None)
+        agent._create_message = lambda **kw: LLMResponse(text="x", usage=None)
         agent.analyze_drift(report)
         self.assertEqual(len(report.drifts), 5)
 
