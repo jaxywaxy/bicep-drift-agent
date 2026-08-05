@@ -17,7 +17,19 @@ class AnthropicProvider:
 
     def __init__(self, api_key: str | None = None, **_: Any):
         from anthropic import Anthropic  # local: keeps the SDK out of import paths that never call it
-        self._client = Anthropic(api_key=api_key or os.environ.get("ANTHROPIC_API_KEY"))
+        self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        self._client = Anthropic(api_key=self._api_key)
+
+    def configuration_error(self) -> str | None:
+        """Why this provider cannot run, or None.
+
+        The SDK constructs happily without a key and only fails at call time, so
+        the caller needs to ask. Reported rather than raised: the analysis is
+        optional by design, and a missing key must degrade the run, not abort it.
+        """
+        if not self._api_key:
+            return "ANTHROPIC_API_KEY is not set"
+        return None
 
     @staticmethod
     def explain_error(exc: Exception) -> str | None:

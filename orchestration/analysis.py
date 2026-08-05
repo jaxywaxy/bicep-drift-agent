@@ -134,10 +134,10 @@ def _run_claude_analysis(agent, report_data: dict):
         )
         return summary
 
-    logger.info("Calling Claude API for drift analysis...")
+    logger.info(f"Calling {getattr(getattr(agent, 'provider', None), 'name', 'LLM')} for drift analysis...")
     try:
         agent_analysis = agent.analyze_drift(drift_report)
-        logger.info("✓ Claude analysis completed")
+        logger.info("✓ LLM analysis completed")
         logger.info("DRIFT ANALYSIS")
         logger.info(agent_analysis)
         report_data["agent_analysis"] = agent_analysis

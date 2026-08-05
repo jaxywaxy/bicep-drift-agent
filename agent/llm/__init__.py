@@ -74,6 +74,35 @@ def _load(path: str):
     return getattr(importlib.import_module(module), attr)
 
 
+def build_provider_or_reason(name: str | None = None, **kwargs: Any):
+    """`(provider, None)` when an LLM is usable, else `(None, reason)`.
+
+    Availability is a PROVIDER question. Deciding it by reading one vendor's
+    environment variable meant that selecting Azure OpenAI - whose whole point is
+    having no key - silently produced reports with no analysis at all, and blamed
+    a variable the operator had deliberately not set.
+
+    Never raises. The analysis is optional by design: a misconfiguration must
+    cost the narrative, not the scan. The reason always names the provider, so a
+    skipped analysis can be told apart from a broken one.
+    """
+    chosen = (name or os.environ.get("DRIFT_LLM_PROVIDER") or "anthropic").strip().lower()
+    try:
+        provider = get_provider(name, **kwargs)
+    except Exception as e:
+        return None, f"LLM provider {chosen!r} is unusable: {e}"
+    problem = None
+    check = getattr(provider, "configuration_error", None)
+    if check is not None:
+        try:
+            problem = check()
+        except Exception as e:  # a broken check must not look like a broken provider
+            problem = f"could not verify configuration: {e}"
+    if problem:
+        return None, f"LLM provider {chosen!r} is not configured: {problem}"
+    return provider, None
+
+
 def get_provider(name: str | None = None, **kwargs: Any) -> LLMProvider:
     """Construct the configured provider. Defaults to anthropic."""
     chosen = (name or os.environ.get("DRIFT_LLM_PROVIDER") or "anthropic").strip().lower()
