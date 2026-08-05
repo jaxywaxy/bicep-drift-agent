@@ -196,6 +196,41 @@ repo after the first run with drift, not by looking for a failure.
 
 See `TEAM_NOTIFICATIONS.md` for the issue body format and template variables.
 
+## Step 4b – (Optional) Run the analysis on Azure OpenAI instead of Anthropic
+
+Only the narrative analysis is affected; every deterministic stage is
+provider-independent, and a clean estate skips the call entirely.
+
+The reason to do it is **not cost** — at one call per scan the difference is
+cents. It is that Azure OpenAI authenticates with the workflow's existing OIDC
+identity, so there is **no LLM key anywhere**.
+
+Three repo **variables** switch it, and leaving them unset keeps Anthropic:
+
+| Variable | Value |
+|---|---|
+| `DRIFT_LLM_PROVIDER` | `azure_openai` |
+| `AZURE_OPENAI_ENDPOINT` | `https://<resource>.openai.azure.com/` |
+| `AZURE_OPENAI_DEPLOYMENT` | the **deployment** name, not the model name |
+
+Azure side, once:
+
+1. Grant the workflow's OIDC identity **`Cognitive Services OpenAI User`** on the
+   account. Subscription Contributor is *not* enough — that is control plane;
+   inference is data plane.
+2. Size the deployment capacity. Capacity N = N,000 TPM, one analysis call is
+   ~14K tokens and grows with drift count, and concurrent landing zones share
+   the budget. Check headroom with
+   `az cognitiveservices usage list -l <region>` before assuming a support
+   request is needed — the limit is often far above what is allocated.
+3. Optionally set `disableLocalAuth: true` so keys cannot be used at all.
+
+**Do not set `AZURE_OPENAI_API_KEY`.** It works, but silently takes the key path
+and gives up the only reason to be here. The provider logs a warning if you do.
+
+**Rolling back is instant**: clear `DRIFT_LLM_PROVIDER`. The Anthropic secret is
+still passed, so nothing else changes.
+
 ## Step 5 – Execute Validation
 
 Run the workflow manually:

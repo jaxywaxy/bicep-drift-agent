@@ -218,6 +218,19 @@ jobs:
     env:
       AZURE_SUBSCRIPTION_ID: ${{ needs.load-config.outputs.lz-subscription-id }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # Which LLM writes the narrative analysis. Unset (the default) means
+      # anthropic, so this block is inert until the repo variable is set - and
+      # setting it back to '' is an instant rollback. The Anthropic secret is
+      # deliberately still passed, so flipping either way needs no code change.
+      #
+      # DRIFT_LLM_PROVIDER=azure_openai authenticates with THIS WORKFLOW'S OIDC
+      # identity (Entra), not a key: the identity needs `Cognitive Services
+      # OpenAI User` on the account. Deliberately no AZURE_OPENAI_API_KEY here -
+      # setting one silently downgrades away from Entra, which is the whole
+      # reason to run Azure OpenAI.
+      DRIFT_LLM_PROVIDER: ${{ vars.DRIFT_LLM_PROVIDER || '' }}
+      AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT || '' }}
+      AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT || '' }}
       # Extra IaC deployer identities (object IDs/appIds/UPNs, comma-separated)
       # whose changes are attributed as pipeline deployments instead of manual
       # drift. The scanning identity is always recognised automatically; set
@@ -255,6 +268,11 @@ jobs:
         run: |
           cd drift-tools
           python -m pip install -q -r requirements.txt
+          # Only when selected: the OpenAI SDK is not in requirements.txt
+          # because the default provider never imports it.
+          if [ "${DRIFT_LLM_PROVIDER}" = "azure_openai" ]; then
+            python -m pip install -q openai
+          fi
 
       - name: Run drift checks - ${{ matrix.check.name }}
         id: drift
