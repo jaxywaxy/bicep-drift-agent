@@ -200,3 +200,47 @@ class CoverageMustOnlyDemandWhatTheAgentWasGivenTests(unittest.TestCase):
         # extra_in_azure IS actionable - an unmanaged resource the reader must judge.
         r = _report(drifts=[_drift("rogue", severity="high", dtype="extra_in_azure")])
         self.assertTrue(check_critical_findings_are_mentioned(r, "Nothing to report."))
+
+
+class IdentifiersInsideResourceIdsAreNotFabricationsTests(unittest.TestCase):
+    """My own review of this check called `assignment_id` a false NEGATIVE - a
+    resource id accepted as proof of an identity. Writing the test showed the
+    opposite: `_known_actors` stores the FULL ARM path while `_GUID` extracts
+    BARE guids, so they never match and an analysis quoting a resource id
+    straight from the report is flagged for inventing an actor.
+
+    A false positive is the worse direction. A check that fires on correct
+    output gets muted, and a muted check still looks like coverage - the failure
+    this module's docstring warns about, arrived at from the other side.
+    """
+
+    def _report_with(self, details):
+        return {"drifts": [{"type": "Microsoft.Authorization/roleAssignments",
+                            "name": "r", "drift_type": "extra_in_azure",
+                            "details": details,
+                            "change_origin": {"origin": "manual_change",
+                                              "changed_by": "someone@example.com"}}]}
+
+    ASSIGNMENT = ("/subscriptions/s/providers/Microsoft.Authorization/"
+                  "RoleAssignments/5ea31b9e-618d-4adc-a6a4-ab2fe23c6d87")
+
+    def test_quoting_a_resource_id_from_the_report_is_not_a_fabrication(self):
+        r = self._report_with({"assignment_id": self.ASSIGNMENT})
+        self.assertEqual(
+            check_no_fabricated_actor(r, f"The assignment {self.ASSIGNMENT} is unmanaged."), [],
+            "an identifier taken straight from the report was called invented")
+
+    def test_the_bare_guid_of_a_reported_resource_is_also_accepted(self):
+        r = self._report_with({"assignment_id": self.ASSIGNMENT})
+        self.assertEqual(
+            check_no_fabricated_actor(r, "Assignment 5ea31b9e-618d-4adc-a6a4-ab2fe23c6d87."), [])
+
+    def test_a_guid_that_appears_nowhere_is_still_flagged(self):
+        r = self._report_with({"assignment_id": self.ASSIGNMENT})
+        v = check_no_fabricated_actor(r, "Granted by 00000000-1111-2222-3333-444444444444.")
+        self.assertTrue(v, "the check must still catch a genuinely invented identity")
+
+    def test_a_real_principal_is_still_accepted(self):
+        r = self._report_with({"principal_id": "ef83bff1-c6c1-4cb1-84be-9bd758e8fc41"})
+        self.assertEqual(
+            check_no_fabricated_actor(r, "Held by ef83bff1-c6c1-4cb1-84be-9bd758e8fc41."), [])

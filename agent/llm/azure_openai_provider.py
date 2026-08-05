@@ -21,13 +21,32 @@ With no key it uses `DefaultAzureCredential`, which needs the identity to hold
 without it this is just another API key in a different vault.
 """
 
+import logging
 import os
 from typing import Any
 
 from agent.llm import LLMResponse
 
-_SCOPE = "https://cognitiveservices.azure.com/.default"
+logger = logging.getLogger(__name__)
+
+_PUBLIC_CLOUD_SCOPE = "https://cognitiveservices.azure.com/.default"
 _DEFAULT_API_VERSION = "2024-10-21"
+
+
+def _token_scope() -> str:
+    """Entra audience for the data plane.
+
+    Overridable because US Gov and China clouds use different audiences, and a
+    hardcoded public-cloud scope fails there with an opaque auth error.
+    """
+    return os.environ.get("AZURE_OPENAI_TOKEN_SCOPE") or _PUBLIC_CLOUD_SCOPE
+
+
+def _bearer_token_provider():
+    """Isolated so tests can substitute it without azure-identity doing real
+    credential discovery."""
+    from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+    return get_bearer_token_provider(DefaultAzureCredential(), _token_scope())
 
 
 def _import_sdk():
@@ -72,6 +91,16 @@ class AzureOpenAIProvider:
                 "endpoint (https://<resource>.openai.azure.com/) and "
                 "AZURE_OPENAI_DEPLOYMENT (the DEPLOYMENT name, not the model name)."
             )
+        # Validated HERE, not left to fail at call time. Unset, `default_model`
+        # is "" and DriftAgent's `or` chain cannot rescue it - getattr FINDS the
+        # attribute - so the request goes out with model="" and Azure returns
+        # something that reads like a service fault rather than a missing setting.
+        if not self.default_model:
+            raise ValueError(
+                "AZURE_OPENAI_DEPLOYMENT is not set. It must be the DEPLOYMENT name "
+                "you created in the Azure OpenAI resource, which is not necessarily "
+                "the model name."
+            )
         try:
             AzureOpenAI = _import_sdk()
         except ImportError as e:
@@ -83,14 +112,21 @@ class AzureOpenAIProvider:
         version = api_version or os.environ.get("AZURE_OPENAI_API_VERSION", _DEFAULT_API_VERSION)
         key = api_key or os.environ.get("AZURE_OPENAI_API_KEY")
         if key:
+            # Loud on purpose. Entra is the entire reason to run this provider -
+            # it removes the stored LLM credential - and an inherited env var
+            # would otherwise trade that away in silence.
+            logger.warning(
+                "AZURE_OPENAI_API_KEY is set, so key authentication is being used. "
+                "Unset it to authenticate with Entra ID (workload identity), which "
+                "is the reason to run Azure OpenAI: it removes the stored LLM "
+                "credential entirely."
+            )
             self._client = AzureOpenAI(azure_endpoint=endpoint, api_key=key, api_version=version)
         else:
             # Entra path - the reason this provider exists.
-            from azure.identity import DefaultAzureCredential, get_bearer_token_provider
             self._client = AzureOpenAI(
                 azure_endpoint=endpoint, api_version=version,
-                azure_ad_token_provider=get_bearer_token_provider(
-                    DefaultAzureCredential(), _SCOPE),
+                azure_ad_token_provider=_bearer_token_provider(),
             )
 
     def complete(self, *, model: str, system: str, messages: list[dict],
@@ -101,6 +137,10 @@ class AzureOpenAIProvider:
         # layer would notice.
         payload = [{"role": "system", "content": system}] if system else []
         payload += list(messages or [])
+        # A caller passing its own cap would collide with the one we inject and
+        # raise TypeError on duplicate keyword. Theirs wins.
+        kwargs.pop("max_tokens", None)
+        kwargs.pop("max_completion_tokens", None)
 
         try:
             response = self._client.chat.completions.create(
@@ -114,14 +154,16 @@ class AzureOpenAIProvider:
             # family that cost this project four PRs. So: send the modern
             # parameter, and when the API says otherwise, believe the API.
             other = "max_tokens" if self._cap_param == "max_completion_tokens" else "max_completion_tokens"
-            if self._cap_param in str(e) and "supported" in str(e).lower():
-                self._cap_param = other
-                response = self._client.chat.completions.create(
-                    model=model or self.default_model, messages=payload,
-                    **{self._cap_param: max_tokens}, **kwargs,
-                )
-            else:
+            if self._cap_param not in str(e) or "supported" not in str(e).lower():
                 raise
+            # Commit the flip only once it has actually worked: a retry that also
+            # fails would otherwise leave the instance flipped, so every later
+            # call pays a wasted round trip before flipping back.
+            response = self._client.chat.completions.create(
+                model=model or self.default_model, messages=payload,
+                **{other: max_tokens}, **kwargs,
+            )
+            self._cap_param = other
 
         choices = getattr(response, "choices", None) or []
         first = choices[0] if choices else None

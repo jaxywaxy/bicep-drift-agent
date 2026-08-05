@@ -49,6 +49,14 @@ def _known_actors(report):
             val = (row.get("details") or {}).get(key)
             if val:
                 actors.add(str(val).lower())
+    # A guid the report carries INSIDE a resource id is still an identifier the
+    # report carries. Without this, `_known_actors` holds the full ARM path
+    # while `_GUID` extracts the bare guid, they never match, and an analysis
+    # quoting a resource id verbatim is accused of inventing an actor. A check
+    # that fires on correct output gets muted, and a muted check still looks
+    # like coverage.
+    for value in list(actors):
+        actors.update(m.lower() for m in _GUID.findall(value))
     return actors
 
 
