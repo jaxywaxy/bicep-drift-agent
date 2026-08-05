@@ -1,7 +1,7 @@
 """
 agent/usage.py
 
-Claude API usage accounting + cost estimation for one drift-check run.
+LLM API usage accounting + cost estimation for one drift-check run.
 Pricing is model-prefix keyed; a missing model means tokens are known but
 dollars are not (returns None rather than guessing).
 """
@@ -90,7 +90,7 @@ class AgentUsage:
         cost = self.cost_usd()
         cost_str = f"${cost:.4f}" if cost is not None else "unknown (no price for model)"
         return (
-            f"{self.calls} Claude call(s), {self.input_tokens} in / "
+            f"{self.calls} LLM call(s), {self.input_tokens} in / "
             f"{self.output_tokens} out tokens"
             + (f" (+{self.cache_read_input_tokens} cache-read)" if self.cache_read_input_tokens else "")
             + f", estimated cost {cost_str}"

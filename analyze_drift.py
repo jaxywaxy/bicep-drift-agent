@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent.drift_agent import DriftAgent
+from agent.llm import build_provider_or_reason
 from tools.logger import get_logger, setup_logging
 from tools.rg_selector import rg_label
 
@@ -98,24 +99,27 @@ def main():
     # filesystem-safe label (matching what Phase 1 / run_drift_check wrote).
     report_label = rg_label(resource_group)
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        logger.warning("⚠️  ANTHROPIC_API_KEY not set in environment")
-        logger.info("Skipping Claude analysis. HTML report will be generated with available drift data.")
+    # Whether an LLM is available is a PROVIDER question. Deciding it by reading
+    # ANTHROPIC_API_KEY meant selecting Azure OpenAI - whose entire point is
+    # having no key - silently produced reports with no analysis, blaming a
+    # variable the operator had deliberately not set.
+    provider, llm_unavailable = build_provider_or_reason()
+    if llm_unavailable:
+        logger.warning(f"⚠️  {llm_unavailable}")
+        logger.info("Skipping the narrative analysis. Every deterministic stage still runs.")
         # Output marker to drift file so it's visible in consolidation
-        print("[WARNING] Claude analysis skipped - ANTHROPIC_API_KEY not configured")
+        print(f"[WARNING] LLM analysis skipped - {llm_unavailable}")
     else:
-        logger.info("✓ Phase 2: Analyzing drift with Claude...")
+        logger.info(f"✓ Phase 2: Analyzing drift with {provider.name}...")
 
     try:
-        # Claude is optional. The deterministic drift processing (smart matching,
+        # The LLM is optional. The deterministic drift processing (smart matching,
         # ignore-pattern filtering, property-level detection, lifecycle) ALWAYS runs
-        # so the saved report/HTML match the filtered summary. Only the Claude-powered
-        # steps (analysis narrative, per-drift recommendations, follow-up) are gated
-        # on the API key.
-        agent = DriftAgent(api_key=api_key) if api_key else None
+        # so the saved report/HTML match the filtered summary. Only the LLM-powered
+        # steps (analysis narrative, follow-up) depend on a usable provider.
+        agent = DriftAgent(provider=provider) if provider else None
         if not agent:
-            logger.info("No ANTHROPIC_API_KEY - running drift filtering/detection without Claude analysis")
+            logger.info("No usable LLM provider - running drift filtering/detection without analysis")
 
         # Load the drift report from Phase 1
         report_file = Path(f"reports/{report_label}-drift.json")
@@ -171,7 +175,7 @@ def main():
         # block) and the estimated USD cost of this run's Claude calls. Stored
         # in the report so CI runs leave an auditable cost trail.
         if agent is not None:
-            logger.info(f"Claude usage this run: {agent.usage.summary()}")
+            logger.info(f"LLM usage this run: {agent.usage.summary()}")
             report_data["agent_usage"] = agent.usage.to_dict()
 
         # ALWAYS persist the processed report (filtered drifts + property_drifts +
