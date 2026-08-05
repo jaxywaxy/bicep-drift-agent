@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 class DriftAgent(DriftClassifier, LiveContextMixin, PromptsMixin):
     """Uses Claude to analyse Azure/Bicep drift and suggest remediation."""
 
-    DEFAULT_MODEL = "claude-opus-4-8"
 
 
 
@@ -69,8 +68,10 @@ class DriftAgent(DriftClassifier, LiveContextMixin, PromptsMixin):
             max_drift_items_for_prompt: Safety limit to prevent overly large prompts.
         """
         self.provider = provider or get_provider(api_key=api_key)
+        # The default belongs to the PROVIDER - a Claude model id on this class
+        # was a leftover from when there was only one vendor.
         self.model = (model or os.environ.get("DRIFT_AGENT_MODEL")
-                      or getattr(self.provider, "default_model", self.DEFAULT_MODEL))
+                      or self.provider.default_model)
         self.max_drift_items_for_prompt = max_drift_items_for_prompt
         self.conversation_history: list[dict[str, str]] = []
         self.usage = AgentUsage()

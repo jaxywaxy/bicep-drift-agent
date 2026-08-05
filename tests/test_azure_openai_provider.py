@@ -159,3 +159,129 @@ class SelectingItIsSafeWhenTheSDKIsAbsentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class _FakeSDK:
+    """Stands in for openai.AzureOpenAI, which is not installed here."""
+    last_kwargs = None
+
+    def __init__(self, **kwargs):
+        _FakeSDK.last_kwargs = kwargs
+        self.chat = type("Chat", (), {"completions": None})()
+
+
+class ConfigurationIsValidatedAtConstructionTests(unittest.TestCase):
+    """`AZURE_OPENAI_DEPLOYMENT` was never validated. Unset, `default_model`
+    became "" and DriftAgent's `or` chain could not rescue it - getattr FINDS the
+    attribute, so the fallback never fires - and the call went out with
+    `model=""`. The operator got a confusing failure from Azure instead of the
+    one sentence that fixes it, and our own docs call this the single most common
+    misconfiguration."""
+
+    def _env(self, **over):
+        base = {"AZURE_OPENAI_ENDPOINT": "https://x.openai.azure.com/"}
+        base.update(over)
+        return base
+
+    def test_a_missing_deployment_fails_at_construction(self):
+        import agent.llm.azure_openai_provider as mod
+        with mock.patch.dict("os.environ", self._env(), clear=True), \
+             mock.patch.object(mod, "_import_sdk", return_value=_FakeSDK):
+            with self.assertRaises(ValueError) as cm:
+                AzureOpenAIProvider()
+        self.assertIn("AZURE_OPENAI_DEPLOYMENT", str(cm.exception))
+
+    def test_a_missing_endpoint_still_fails_at_construction(self):
+        import agent.llm.azure_openai_provider as mod
+        with mock.patch.dict("os.environ", {}, clear=True), \
+             mock.patch.object(mod, "_import_sdk", return_value=_FakeSDK):
+            with self.assertRaises(ValueError) as cm:
+                AzureOpenAIProvider()
+        self.assertIn("AZURE_OPENAI_ENDPOINT", str(cm.exception))
+
+    def test_a_configured_deployment_constructs(self):
+        import agent.llm.azure_openai_provider as mod
+        with mock.patch.dict("os.environ", self._env(AZURE_OPENAI_DEPLOYMENT="gpt-5-mini"), clear=True), \
+             mock.patch.object(mod, "_import_sdk", return_value=_FakeSDK):
+            self.assertEqual(AzureOpenAIProvider().default_model, "gpt-5-mini")
+
+    def test_an_injected_client_does_not_require_the_env(self):
+        # Tests and embedders supply their own client; validation must not block
+        # a caller who never touches the SDK path.
+        self.assertEqual(
+            AzureOpenAIProvider(client=object(), deployment="d").default_model, "d")
+
+
+class KeyAuthIsAVisibleDowngradeTests(unittest.TestCase):
+    """Entra is the ENTIRE reason to run this provider - it is what removes a
+    stored LLM credential. An inherited `AZURE_OPENAI_API_KEY` silently took the
+    key branch instead, trading that away with no signal at all."""
+
+    def _build(self, env):
+        import agent.llm.azure_openai_provider as mod
+        with mock.patch.dict("os.environ", env, clear=True), \
+             mock.patch.object(mod, "_import_sdk", return_value=_FakeSDK):
+            return mod
+
+    def test_using_a_key_warns_and_names_what_is_lost(self):
+        env = {"AZURE_OPENAI_ENDPOINT": "https://x/", "AZURE_OPENAI_DEPLOYMENT": "d",
+               "AZURE_OPENAI_API_KEY": "sk-secret"}
+        import agent.llm.azure_openai_provider as mod
+        with mock.patch.dict("os.environ", env, clear=True), \
+             mock.patch.object(mod, "_import_sdk", return_value=_FakeSDK), \
+             self.assertLogs("agent.llm.azure_openai_provider", level="WARNING") as logs:
+            AzureOpenAIProvider()
+        joined = " ".join(logs.output)
+        self.assertIn("AZURE_OPENAI_API_KEY", joined)
+        self.assertNotIn("sk-secret", joined, "the warning must never echo the key itself")
+
+    def test_the_entra_path_is_silent(self):
+        import agent.llm.azure_openai_provider as mod
+        env = {"AZURE_OPENAI_ENDPOINT": "https://x/", "AZURE_OPENAI_DEPLOYMENT": "d"}
+        fake_cred = mock.MagicMock()
+        with mock.patch.dict("os.environ", env, clear=True), \
+             mock.patch.object(mod, "_import_sdk", return_value=_FakeSDK), \
+             mock.patch.object(mod, "_bearer_token_provider", return_value=fake_cred):
+            with self.assertRaises(AssertionError):
+                with self.assertLogs("agent.llm.azure_openai_provider", level="WARNING"):
+                    AzureOpenAIProvider()
+
+
+class RetryStateIsOnlyCommittedOnSuccessTests(unittest.TestCase):
+    """The retry flipped `_cap_param` before knowing the retry worked. If it also
+    failed, the instance was left flipped and every later call paid a wasted
+    round trip before flipping back."""
+
+    def test_a_failed_retry_leaves_the_parameter_unchanged(self):
+        class BothFail:
+            def __init__(self):
+                self.chat = type("C", (), {"completions": self})()
+            def create(self, **kw):
+                raise RuntimeError("400 Unsupported parameter: 'max_completion_tokens' ...")
+        p = AzureOpenAIProvider(client=BothFail(), endpoint="https://x/", deployment="d")
+        before = p._cap_param
+        with self.assertRaises(RuntimeError):
+            p.complete(model="d", system="s", messages=[], max_tokens=10)
+        self.assertEqual(p._cap_param, before, "state was mutated by a retry that failed")
+
+
+class CallerSuppliedTokenCapDoesNotCollideTests(unittest.TestCase):
+    def test_max_tokens_in_kwargs_does_not_raise_TypeError(self):
+        p = _provider()
+        p.complete(model="d", system="s", messages=[], max_tokens=10, max_tokens_override=None)
+        self.assertTrue(p._client.calls)
+
+
+class SovereignCloudsCanOverrideTheScopeTests(unittest.TestCase):
+    """The token scope is hardcoded to public cloud; US Gov and China use
+    different audiences."""
+
+    def test_the_scope_is_configurable(self):
+        import agent.llm.azure_openai_provider as mod
+        with mock.patch.dict("os.environ", {"AZURE_OPENAI_TOKEN_SCOPE": "https://gov.example/.default"}):
+            self.assertEqual(mod._token_scope(), "https://gov.example/.default")
+
+    def test_it_defaults_to_public_cloud(self):
+        import agent.llm.azure_openai_provider as mod
+        with mock.patch.dict("os.environ", {}, clear=True):
+            self.assertIn("cognitiveservices.azure.com", mod._token_scope())
