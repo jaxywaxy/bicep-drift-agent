@@ -231,6 +231,13 @@ and gives up the only reason to be here. The provider logs a warning if you do.
 **Rolling back is instant**: clear `DRIFT_LLM_PROVIDER`. The Anthropic secret is
 still passed, so nothing else changes.
 
+**Running it locally is different.** Repo *variables* exist only inside Actions —
+a local shell does not see them, and silently falls back to the default provider.
+For local runs put the same three values in `.env` (gitignored), which both
+`analyze_drift.py` and `evals/run.py` load. Auth locally is your own `az login`
+identity, so it needs `Cognitive Services OpenAI User` on the account too — the
+workflow's identity having it is not enough.
+
 ## Step 5 – Execute Validation
 
 Run the workflow manually:

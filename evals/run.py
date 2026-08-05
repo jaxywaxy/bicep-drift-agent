@@ -55,6 +55,28 @@ def _to_report(raw: dict):
     )
 
 
+def _current_provider():
+    """The provider this run will actually use.
+
+    Reported up front because the failure that cost two rounds was believing
+    Azure was in play while Anthropic was: GitHub repo VARIABLES exist only
+    inside Actions, so a local shell silently falls back to the default.
+    """
+    from agent.llm import get_provider
+    return get_provider()
+
+
+def _describe_failure(provider, exc: Exception) -> str:
+    """Plain-language cause, asked of the provider - the same explainers the
+    pipeline uses. The raw error is kept when nothing can explain it, rather
+    than swallowed."""
+    from orchestration.analysis import _explain_llm_failure
+    name = getattr(provider, "name", "unknown")
+    hint = _explain_llm_failure(provider, exc)
+    detail = f"{hint} ({type(exc).__name__}: {exc})" if hint else f"{type(exc).__name__}: {exc}"
+    return f"[provider: {name}] {detail}"
+
+
 def _analyse(raw: dict) -> str:
     from agent.drift_agent import DriftAgent
     return DriftAgent().analyze_drift(_to_report(raw))
@@ -108,8 +130,14 @@ def main(argv=None) -> int:
         try:
             analysis = "(dry run - no analysis)" if args.dry_run else _analyse(raw)
         except Exception as e:
-            # A provider failure is not a narrative violation; say which it was.
-            print(f"  PROVIDER ERROR ({type(e).__name__}): {e}")
+            # A provider failure is not a narrative violation; say which provider
+            # and why, or the operator cannot tell a misconfiguration from a bad
+            # analysis.
+            try:
+                provider = _current_provider()
+            except Exception:
+                provider = None
+            print(f"  PROVIDER ERROR  {_describe_failure(provider, e)}")
             total += 1
             continue
 
