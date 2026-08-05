@@ -542,10 +542,11 @@ The following environment variables are recognised.
 | `DRIFT_BICEP_TIMEOUT` | `120` | Seconds allowed for `az bicep build`. Raise for very large templates |
 | `DRIFT_WEBHOOK_TIMEOUT` | `10` | Seconds allowed per webhook POST |
 | `DRIFT_AGENT_MODEL` | the provider's own default | Model id for the analysis. Left unset it follows `DRIFT_LLM_PROVIDER`, so choosing a provider does not also force you to name one of its models |
-| `DRIFT_LLM_PROVIDER` | `anthropic` | Which LLM backs the narrative analysis. Only `anthropic` ships today; the seam lives in `agent/llm/` and nothing above it touches a vendor SDK or response shape. An unrecognised value **fails loudly** rather than falling back — running against a provider you did not choose, and reporting it as if you had, is the failure this tool exists to prevent one level up |
+| `DRIFT_LLM_PROVIDER` (repo **variable** in CI) | `anthropic` | Which LLM backs the narrative analysis. Only `anthropic` ships today; the seam lives in `agent/llm/` and nothing above it touches a vendor SDK or response shape. An unrecognised value **fails loudly** rather than falling back — running against a provider you did not choose, and reporting it as if you had, is the failure this tool exists to prevent one level up |
 | `AZURE_OPENAI_ENDPOINT` | — | Required when `DRIFT_LLM_PROVIDER=azure_openai`. The resource endpoint, `https://<resource>.openai.azure.com/` |
 | `AZURE_OPENAI_DEPLOYMENT` | — | Required for Azure. The **deployment** name, which is not necessarily the model name — this is the single most common misconfiguration and surfaces as `DeploymentNotFound` |
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | Azure data-plane API version |
+| `AZURE_OPENAI_TOKEN_SCOPE` | public cloud | Entra audience for the data plane. Only set it for US Gov or China clouds, whose audiences differ — the default fails there with an opaque auth error |
 | `AZURE_OPENAI_API_KEY` | — | **Omit this.** Left unset, the provider uses `DefaultAzureCredential`, which is the entire reason to run Azure OpenAI: the workload identity CI already holds needs `Cognitive Services OpenAI User` on the account, and no LLM key is stored anywhere. Setting a key works, but trades that away |
 
 ## Notification variables
