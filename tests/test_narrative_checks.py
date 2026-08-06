@@ -27,6 +27,7 @@ from evals.checks import (
     check_no_sign_off,
     check_no_unearned_attribution,
     check_only_allowlisted_sections,
+    check_plan_is_flat,
     check_tldr_does_not_soften_what_the_body_confirms,
     check_does_not_over_unify_across_time,
     run_all_checks,
@@ -396,3 +397,53 @@ class RoleDefinitionGuidIsNotFabricatedTests(unittest.TestCase):
     def test_an_invented_guid_is_still_caught(self):
         self.assertTrue(check_no_fabricated_actor(
             self._report_with_role(), "Granted by 00000000-1111-2222-3333-444444444444."))
+
+
+class PlanIsFlatTests(unittest.TestCase):
+    """Round 2 capped bullets per FINDING and the plan blew the budget anyway:
+    six items with five nested sub-steps each, and `az role assignment show`
+    re-pasted once per assignment. Nesting is where the duplication hid."""
+
+    NESTED = ("## Remediation plan\n"
+              "1. Investigate the Owner assignment\n"
+              "   1. Show the assignment:\n"
+              "   2. Resolve the principal:\n"
+              "2. Remove it\n")
+
+    FLAT = ("## Remediation plan\n"
+            "1. Investigate the Owner assignment, then the two Contributors.\n"
+            "2. Remove any that are unwanted:\n"
+            "   - `az role assignment delete --ids <id>` for each of:\n"
+            "   - 79565f05, 5ea31b9e, e6107770\n")
+
+    def test_nested_sub_steps_are_flagged(self):
+        v = check_plan_is_flat(_report(), self.NESTED)
+        self.assertTrue(v)
+        self.assertIn("nested sub-step", v[0])
+
+    def test_a_flat_plan_with_bullets_passes(self):
+        # Bullets under a step are fine - it is ordered sub-STEPS that nest.
+        self.assertEqual(check_plan_is_flat(_report(), self.FLAT), [])
+
+    def test_indented_numbers_inside_code_do_not_count(self):
+        # A snippet may legitimately contain indented numbering.
+        analysis = ("## Remediation plan\n1. Deploy this:\n\n```bicep\n"
+                    "  1. not a step\n```\n")
+        self.assertEqual(check_plan_is_flat(_report(), analysis), [])
+
+    def test_nesting_outside_the_plan_is_not_the_plans_problem(self):
+        # Findings are governed by the six-bullet cap, not this check.
+        analysis = "## Priority findings\n1. A finding\n   1. nested\n"
+        self.assertEqual(check_plan_is_flat(_report(), analysis), [])
+
+    def test_no_plan_section_is_silent(self):
+        self.assertEqual(check_plan_is_flat(_report(), "## TL;DR\nClean.\n"), [])
+
+
+class PlanDepthPromptTests(unittest.TestCase):
+    def test_prompt_demands_a_flat_plan_and_one_command_per_action(self):
+        from agent.drift_agent import DriftAgent
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("The PLAN IS FLAT", sp)
+        self.assertIn("never sub-steps", sp)
+        self.assertIn("give each command ONCE", sp)
