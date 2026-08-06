@@ -357,6 +357,60 @@ class PlanConsistencyTests(unittest.TestCase):
         self.assertIn("do not annotate", sp)
 
 
+class OutputShapeTests(unittest.TestCase):
+    """The first gpt-5-mini report on the subscription-scope LZ was correct and
+    unreadable: `1)` numbering the markdown parser does not recognise, the
+    request's own question list promoted to headings, every remediation stated
+    three times, and a closing offer to produce the Bicep snippet it should
+    simply have written."""
+
+    def test_prompt_forbids_the_numbering_the_parser_drops(self):
+        # Not cosmetic. python-markdown has no `1)` list marker, so the number
+        # AND the bullets under it fold into one <p> - the entire priority
+        # findings section rendered as prose in the HTML artifact.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("MUST use `1.`, never `1)`", sp)
+        self.assertIn("does not recognise `1)` as a list", sp)
+
+    def test_prompt_requires_a_heading_per_finding(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("own `###` heading naming the resource", sp)
+
+    def test_prompt_fixes_the_four_sections_and_demotes_the_questions(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("Those four sections ARE the document", sp)
+        self.assertIn("a checklist to cover INSIDE them - never headings", sp)
+
+    def test_prompt_forbids_restating_the_same_remediation(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("Say each thing ONCE", sp)
+        self.assertIn("Three sections, three jobs, no repetition", sp)
+
+    def test_prompt_forbids_closing_on_an_offer(self):
+        # The whole point: the run is over when the file is written, so an
+        # offer of further work is the deliverable being withheld.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("writing a FILE, not a chat turn", sp)
+        self.assertIn("NEVER close by offering further work", sp)
+        self.assertIn("That offer IS the remediation, withheld", sp)
+        self.assertIn("WRITE IT into the remediation plan", sp)
+
+    def test_context_labels_the_questions_as_a_checklist(self):
+        # The rule above only holds if the payload agrees with it: a key named
+        # "questions_to_answer" reads as an outline however the prompt words it.
+        report = _report(n_reconciled=0, n_actionable=1)
+        context = AnalysisPromptTests()._agent_and_prompt(report)
+        self.assertIn("questions_to_answer_within_those_sections", context)
+        self.assertNotIn("questions_to_answer", context)
+
+    def test_context_demands_artifacts_not_offers(self):
+        report = _report(n_reconciled=0, n_actionable=1)
+        context = AnalysisPromptTests()._agent_and_prompt(report)
+        requirements = " ".join(context["response_requirements"])
+        self.assertIn("Write out every artifact you reference", requirements)
+        self.assertIn("never on an offer of further work", requirements)
+
+
 class LiveContextTests(unittest.TestCase):
     """details carries only the CHANGED paths. The siblings that bound a
     finding's severity (publicNetworkAccess) or decide whether remediation is

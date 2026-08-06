@@ -1266,9 +1266,14 @@ def _render_property_drift_section(data: dict) -> str:
 
 
 def _render_agent_usage_footer(data: dict) -> str:
-    """One-line Claude usage/cost note for the footer (PR #218 telemetry).
+    """One-line agent usage/cost note for the footer (PR #218 telemetry).
 
     Renders nothing when the run had no API key (no agent_usage block).
+
+    Says "Agent analysis", not "Claude analysis": the provider is selectable
+    (DRIFT_LLM_PROVIDER) and the footer prints the model beside the label, so
+    the hardcoded vendor produced the self-contradicting "Claude analysis
+    (gpt-5-mini)" in a live report.
     """
     usage = data.get("agent_usage")
     if not usage or not usage.get("calls"):
@@ -1277,7 +1282,7 @@ def _render_agent_usage_footer(data: dict) -> str:
     cost = usage.get("estimated_cost_usd")
     cost_str = f"est. ${cost:.4f}" if cost is not None else "cost unknown (no price for model)"
     return (
-        f"<br>Claude analysis ({_esc(models)}): {usage.get('calls', 0)} call(s) · "
+        f"<br>Agent analysis ({_esc(models)}): {usage.get('calls', 0)} call(s) · "
         f"{usage.get('input_tokens', 0):,} in / {usage.get('output_tokens', 0):,} out tokens · {_esc(cost_str)}"
     )
 
@@ -1402,7 +1407,7 @@ def _render_agent_analysis_section(agent_analysis: str) -> str:
     return f"""
             <div class="section agent-analysis">
                 <h2>🛠️ Remediation Analysis</h2>
-                <p>Claude's analysis of the drift, its likely cause, and the order to fix it in:</p>
+                <p>Analysis of the drift, its likely cause, and the order to fix it in:</p>
                 <div class="analysis-content">
                     {analysis_html}
                 </div>

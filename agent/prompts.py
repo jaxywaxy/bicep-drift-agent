@@ -70,7 +70,10 @@ class PromptsMixin:
                     "NOT drift - excluded from findings; do not analyse or caveat them."
                 ),
             } if reconciled_count else None,
-            "questions_to_answer": [
+            # A checklist, not an outline. Named as such because a model given a
+            # bare question list answers it question-by-question under headings,
+            # producing an exam script instead of the four-section report.
+            "questions_to_answer_within_those_sections": [
                 "Which findings are most important?",
                 "Which findings are likely expected Azure-managed resources?",
                 "Which findings indicate unmanaged or manually created resources?",
@@ -85,6 +88,8 @@ class PromptsMixin:
                 "Separate confirmed findings from assumptions.",
                 "Prioritise governance, security, cost, and unmanaged resource drift.",
                 "Suggest concrete next actions.",
+                "Write out every artifact you reference - Bicep snippets, az commands, runbook steps - inside the remediation plan.",
+                "This is a written report, not a conversation: end on the caveats, never on an offer of further work.",
             ],
         }
 
@@ -164,12 +169,12 @@ Plan consistency (a live round produced a plan whose second step failed on a con
 - ORDER the steps, do not merely cross-reference them. The plan is a numbered list an operator works top to bottom; a warning that lives in step 4 does not save the reader from step 3 having already failed. The step that unblocks a deploy must be NUMBERED EARLIER than the deploy it unblocks. "Do this before or separately from step N" is not acceptable when you could simply have put it before step N.
 - Before you write the remediation plan, re-read your own findings and check each step against them. For every resource touched by more than one step, ask: if someone runs these in the order written, does step k succeed given what steps 1..k-1 did and what my findings say is possible? If not, reorder or merge - do not annotate.
 
-Output style:
-- Use markdown.
-- Start with a "## TL;DR" section: 2-4 sentences a busy engineer can read in
-  ten seconds - what drifted, how bad, and the single next action.
-- Then provide priority findings.
-- Then provide remediation plan.
-- Then list caveats or confidence limitations.
+Output style (this text is rendered to HTML by a strict markdown parser, so structure that only LOOKS like markdown reaches the reader as one run-on paragraph):
+- Ordered lists MUST use `1.`, never `1)`. The parser does not recognise `1)` as a list at all. Observed live: a findings list written `1) Owner assignment (high)` with `- Resource:` / `- Why it matters:` lines under it rendered as a single unformatted paragraph, dashes and all - the whole priority-findings section arrived as prose.
+- Give every finding its own `###` heading naming the resource, then its detail lines as a bullet list beneath. A heading survives the parser and lets a reader jump to one resource; a bare numbered line does neither.
+- Start with a "## TL;DR" section: 2-4 sentences a busy engineer can read in ten seconds - what drifted, how bad, and the single next action.
+- Then `## Priority findings`, then `## Remediation plan`, then `## Caveats`. Those four sections ARE the document. The request's `questions_to_answer_within_those_sections` are a checklist to cover INSIDE them - never headings. Observed live: a report answered them one by one under headings like "## Which should be remediated by redeploying Bicep?", which reads as an exam script rather than a report and buries the plan among meta-questions the reader never asked.
+- Say each thing ONCE. Observed live: the same four role assignments carried their remediation inside the finding, again as a numbered plan, and a third time under "what to fix first". A finding says what is wrong and why; the plan says what to do and in what order; the TL;DR says what to do first. Three sections, three jobs, no repetition.
+- You are writing a FILE, not a chat turn. The run ends when this text is written and nobody can reply to it. So NEVER close by offering further work - observed live: "If you want, I can produce the exact Bicep resource snippet for importing one of the role assignments and a one-shot CLI sequence to validate and remove an assignment safely." That offer IS the remediation, withheld. If a Bicep snippet, an az command, or a runbook would help, WRITE IT into the remediation plan. Ask no questions, propose no follow-up, and never describe work you could have done instead of doing it.
 - Be concise, practical, and suitable for an infrastructure team.
 """
