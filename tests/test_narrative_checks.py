@@ -20,8 +20,13 @@ import unittest
 
 from evals.checks import (
     check_critical_findings_are_mentioned,
+    check_findings_do_not_carry_remediation,
+    check_finding_headings_are_labels,
+    check_length_within_budget,
     check_no_fabricated_actor,
+    check_no_sign_off,
     check_no_unearned_attribution,
+    check_only_allowlisted_sections,
     check_tldr_does_not_soften_what_the_body_confirms,
     check_does_not_over_unify_across_time,
     run_all_checks,
@@ -169,8 +174,11 @@ class RunAllChecksTests(unittest.TestCase):
 
     def test_a_good_analysis_passes_everything(self):
         r = _report(drifts=[_drift("st1", actor="jacqui.anker@gmail.com", severity="critical")])
+        # Section names are the mandated four: the shape checks are part of
+        # "passes everything" now, so this fixture has to be a report the prompt
+        # would actually accept.
         good = ("## TL;DR\n`st1` was deleted out of band by jacqui.anker@gmail.com "
-                "and needs restoring.\n\n## Findings\nOne critical deletion.")
+                "and needs restoring.\n\n## Priority findings\nOne critical deletion.")
         self.assertEqual({k: v for k, v in run_all_checks(r, good).items() if v}, {})
 
 
@@ -244,3 +252,147 @@ class IdentifiersInsideResourceIdsAreNotFabricationsTests(unittest.TestCase):
         r = self._report_with({"principal_id": "ef83bff1-c6c1-4cb1-84be-9bd758e8fc41"})
         self.assertEqual(
             check_no_fabricated_actor(r, "Held by ef83bff1-c6c1-4cb1-84be-9bd758e8fc41."), [])
+
+
+class SectionAllowlistTests(unittest.TestCase):
+    """Two live reports promoted the request's own question list to `##`
+    headings, which reads as an exam script and buries the plan among
+    meta-questions nobody asked. It survived the first, softer prompt wording -
+    hence a mechanical check."""
+
+    GOOD = ("## TL;DR\nx\n\n## Priority findings\nx\n\n"
+            "## Remediation plan\nx\n\n## Caveats\nx\n")
+
+    def test_the_four_sections_pass(self):
+        self.assertEqual(check_only_allowlisted_sections(_report(), self.GOOD), [])
+
+    def test_a_subtitle_on_an_allowed_section_still_passes(self):
+        # Observed and acceptable: "## Caveats, confidence, and data-quality
+        # notes". Matching on the phrase, not equality, is what permits it.
+        text = ("## TL;DR\nx\n## Priority findings (by impact)\nx\n"
+                "## Remediation plan (ordered)\nx\n## Caveats, confidence and data quality\nx\n")
+        self.assertEqual(check_only_allowlisted_sections(_report(), text), [])
+
+    def test_the_question_headings_are_flagged(self):
+        for heading in (
+            "## Which findings are likely Azure-managed resources?",
+            "## Which findings indicate unmanaged/manual changes?",
+            "## What should be fixed first",
+        ):
+            with self.subTest(heading=heading):
+                self.assertTrue(
+                    check_only_allowlisted_sections(_report(), self.GOOD + heading + "\nx\n"),
+                    f"{heading!r} should not be an allowed section")
+
+    def test_a_remediation_question_is_not_mistaken_for_the_plan(self):
+        # The trap this check is built around: "remediated"/"remediation"
+        # appear in two banned headings, so only the full phrase can match.
+        for heading in ("## Which should be remediated by redeploying Bicep?",
+                        "## Which should be handled by Azure Policy remediation or exception tracking?"):
+            with self.subTest(heading=heading):
+                self.assertTrue(check_only_allowlisted_sections(_report(), heading + "\nx\n"))
+
+    def test_h3_findings_are_not_treated_as_sections(self):
+        self.assertEqual(
+            check_only_allowlisted_sections(_report(), "## TL;DR\n### Owner on the subscription\nx\n"), [])
+
+
+class FindingHeadingTests(unittest.TestCase):
+    """Live: six headings were the full 120-char ARM path, each followed by a
+    `- Resource ID:` bullet repeating the identical string."""
+
+    ARM = ("### /subscriptions/bd48a22c-91b9-46e6-a2ff-15893e348d83/providers/"
+           "Microsoft.Authorization/RoleAssignments/79565f05-62fc-437a-bc0e-d82baccc6ccb\n"
+           "- Resource ID: /subscriptions/bd48a22c-.../RoleAssignments/79565f05-...\n")
+
+    def test_a_resource_id_heading_is_flagged(self):
+        self.assertTrue(check_finding_headings_are_labels(_report(), self.ARM))
+
+    def test_a_short_label_passes(self):
+        text = "### Owner granted to user 70afebf7 at subscription scope\n- Resource ID: /subscriptions/x\n"
+        self.assertEqual(check_finding_headings_are_labels(_report(), text), [])
+
+    def test_a_long_prose_heading_is_flagged_even_without_an_id(self):
+        self.assertTrue(check_finding_headings_are_labels(_report(), "### " + "word " * 30 + "\n"))
+
+
+class FindingsMustNotCarryRemediationTests(unittest.TestCase):
+    """Live: every finding ended 'Immediate action: verify this principal', the
+    plan said verify, and a third section said verify again."""
+
+    def test_an_action_line_inside_a_finding_is_flagged(self):
+        text = ("### Owner on the subscription\n- Why it matters: full control\n"
+                "- Immediate action: Verify that principal 70afebf7 is expected.\n")
+        self.assertTrue(check_findings_do_not_carry_remediation(_report(), text))
+
+    def test_evidence_only_findings_pass(self):
+        text = ("### Owner on the subscription\n- Resource ID: /subscriptions/x\n"
+                "- Why it matters: Owner at subscription scope grants full control.\n")
+        self.assertEqual(check_findings_do_not_carry_remediation(_report(), text), [])
+
+    def test_the_plan_may_still_say_what_to_do(self):
+        # The rule is about WHERE remediation lives, not that it is forbidden.
+        text = ("### Owner on the subscription\n- Evidence: created 2024-12-03\n\n"
+                "## Remediation plan\n1. Immediate action: verify the principal.\n")
+        self.assertEqual(check_findings_do_not_carry_remediation(_report(), text), [])
+
+
+class LengthBudgetTests(unittest.TestCase):
+    """Adding structure rules without a budget grew the report 27%
+    (4,861 -> 6,195 output tokens) on restatement alone."""
+
+    def test_a_long_report_is_flagged(self):
+        self.assertTrue(check_length_within_budget(_report(), "word " * 1500))
+
+    def test_a_normal_report_passes(self):
+        self.assertEqual(check_length_within_budget(_report(), "word " * 800), [])
+
+    def test_fenced_code_does_not_count(self):
+        # Critical: the prompt REQUIRES writing the Bicep snippet inline rather
+        # than offering it. A budget that punished that would pull the two rules
+        # against each other.
+        analysis = "word " * 900 + "\n```bicep\n" + "resource x 'y' = {}\n" * 400 + "```\n"
+        self.assertEqual(check_length_within_budget(_report(), analysis), [])
+
+    def test_the_budget_grows_with_the_finding_count(self):
+        big = _report(drifts=[_drift(f"r{i}", dtype="extra_in_azure") for i in range(20)])
+        self.assertEqual(check_length_within_budget(big, "word " * 1900), [])
+        self.assertTrue(check_length_within_budget(_report(), "word " * 1900))
+
+    def test_reconciled_rows_do_not_buy_extra_budget(self):
+        # matched_unresolvable is not a finding, so it must not raise the
+        # allowance - on real estates it outnumbered actionable drift ~30:3.
+        noise = _report(drifts=[_drift(f"r{i}", dtype="matched_unresolvable") for i in range(20)])
+        self.assertTrue(check_length_within_budget(noise, "word " * 1900))
+
+
+class SignOffTests(unittest.TestCase):
+    def test_end_of_report_is_flagged(self):
+        self.assertTrue(check_no_sign_off(_report(), "## Caveats\nLogs expired.\n\nEnd of report."))
+
+    def test_ending_on_a_caveat_passes(self):
+        self.assertEqual(check_no_sign_off(_report(), "## Caveats\nActivity logs had expired."), [])
+
+
+class RoleDefinitionGuidIsNotFabricatedTests(unittest.TestCase):
+    """Caught against the real 2026-08-06 subscription report: `_known_actors`
+    read a hand-listed set of detail keys, which missed `role_definition_guid`,
+    so an analysis correctly naming the custom role it was shown was accused of
+    inventing an identity. A check that fires on correct output gets muted."""
+
+    ROLE = "53ca6127-db72-4b80-b1b0-d745d6d5456d"
+
+    def _report_with_role(self):
+        row = _drift("custom-role-assignment", dtype="extra_in_azure")
+        row["details"] = {"role_name": self.ROLE, "role_definition_guid": self.ROLE,
+                          "principal_id": "70afebf7-5bdd-45d9-9cfc-534af9a95589"}
+        return _report(drifts=[row])
+
+    def test_citing_the_custom_role_guid_is_not_a_fabrication(self):
+        self.assertEqual(
+            check_no_fabricated_actor(self._report_with_role(), f"Custom role {self.ROLE} is assigned."),
+            [], "a GUID the report carries in details was called invented")
+
+    def test_an_invented_guid_is_still_caught(self):
+        self.assertTrue(check_no_fabricated_actor(
+            self._report_with_role(), "Granted by 00000000-1111-2222-3333-444444444444."))

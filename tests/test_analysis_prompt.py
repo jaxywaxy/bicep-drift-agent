@@ -372,19 +372,46 @@ class OutputShapeTests(unittest.TestCase):
         self.assertIn("MUST use `1.`, never `1)`", sp)
         self.assertIn("does not recognise `1)` as a list", sp)
 
-    def test_prompt_requires_a_heading_per_finding(self):
+    def test_prompt_requires_a_short_heading_not_the_resource_id(self):
+        # Round 2: headings became the full 120-char resource ID, and the first
+        # bullet under each repeated it verbatim - twice the width, no extra fact.
         sp = DriftAgent._get_system_prompt()
-        self.assertIn("own `###` heading naming the resource", sp)
+        self.assertIn("own `###` heading, and make that heading a SHORT LABEL", sp)
+        self.assertIn("NEVER put the resource ID in the heading", sp)
+        self.assertIn("exactly ONE bullet beneath the heading", sp)
 
-    def test_prompt_fixes_the_four_sections_and_demotes_the_questions(self):
+    def test_prompt_makes_the_four_sections_an_allowlist(self):
+        # Round 1 said the four sections "ARE the document" and the model still
+        # emitted five extra `##` question headings. Naming them individually and
+        # calling it an allowlist is the escalation.
         sp = DriftAgent._get_system_prompt()
-        self.assertIn("Those four sections ARE the document", sp)
-        self.assertIn("a checklist to cover INSIDE them - never headings", sp)
+        self.assertIn("are an ALLOWLIST", sp)
+        self.assertIn("a checklist to cover INSIDE them, never headings", sp)
+        for banned in (
+            "## Which findings are likely Azure-managed resources?",
+            "## Which findings should be remediated by redeploying Bicep?",
+            "## What should be fixed first",
+        ):
+            self.assertIn(banned, sp)
 
-    def test_prompt_forbids_restating_the_same_remediation(self):
+    def test_prompt_keeps_remediation_out_of_the_findings(self):
         sp = DriftAgent._get_system_prompt()
         self.assertIn("Say each thing ONCE", sp)
+        self.assertIn("it does NOT say what to do about it", sp)
         self.assertIn("Three sections, three jobs, no repetition", sp)
+
+    def test_prompt_budgets_the_length(self):
+        # The round-1 rules added structure but no budget, and the report grew
+        # 27% (4,861 -> 6,195 output tokens) by restating itself.
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("LENGTH is a feature", sp)
+        self.assertIn("600-900 words", sp)
+        self.assertIn("at most six bullets under any finding", sp)
+
+    def test_prompt_forbids_a_sign_off(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("No sign-off", sp)
+        self.assertIn("End of report", sp)
 
     def test_prompt_forbids_closing_on_an_offer(self):
         # The whole point: the run is over when the file is written, so an
