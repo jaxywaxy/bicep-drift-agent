@@ -188,6 +188,9 @@ _MAX_HEADING_CHARS = 90
 _REMEDIATION_IN_FINDING = re.compile(
     r"^\s*[-*]?\s*\**\s*(immediate|recommended|suggested)\s+action\b", re.I | re.M)
 _SIGN_OFFS = ("end of report", "end of analysis", "that concludes", "this concludes")
+# An INDENTED ordered marker - `  1.` or `   1)` - i.e. a step inside a step.
+# Matched only within the plan section, and never inside a fenced block.
+_NESTED_ORDERED = re.compile(r"^[ \t]+\d+[.)]\s+\S", re.M)
 # Headroom over the prompt's 600-900 target: this fires on the pathological
 # case, not on a report that ran slightly long. Fenced code is excluded, so
 # writing a Bicep snippet inline - which the prompt REQUIRES - never costs here.
@@ -198,6 +201,16 @@ _BUDGET_FREE_FINDINGS = 6
 
 def _actionable(report):
     return [r for r in _rows(report) if r.get("drift_type") not in _NOT_A_FINDING]
+
+
+def _plan_section(analysis):
+    """Text under the `## Remediation plan` heading, up to the next `##`."""
+    m = re.search(r"^##(?!#)\s*.*remediation plan.*$", analysis, re.M | re.I)
+    if not m:
+        return ""
+    rest = analysis[m.end():]
+    nxt = re.search(r"^##(?!#)", rest, re.M)
+    return rest[: nxt.start()] if nxt else rest
 
 
 def _finding_blocks(analysis):
@@ -273,6 +286,25 @@ def check_no_sign_off(report, analysis):
     return [f"ends with a sign-off ({s!r})" for s in _SIGN_OFFS if s in tail]
 
 
+def check_plan_is_flat(report, analysis):
+    """The remediation plan is a list an operator works top to bottom.
+
+    Live: the round-2 rules capped bullets per FINDING and the plan blew the
+    budget anyway - six items with five nested sub-steps each. Nesting is also
+    where duplication hides, because each branch re-pastes the same command.
+
+    Only the plan section is inspected: a nested list under a finding is already
+    governed by the six-bullet cap, and code blocks legitimately indent.
+    """
+    plan = _plan_section(analysis)
+    if not plan:
+        return []
+    nested = _NESTED_ORDERED.findall(_FENCE.sub(" ", plan))
+    if nested:
+        return [f"remediation plan has {len(nested)} nested sub-step(s); it must be flat"]
+    return []
+
+
 CHECKS = (
     check_no_fabricated_actor,
     check_no_unearned_attribution,
@@ -284,6 +316,7 @@ CHECKS = (
     check_findings_do_not_carry_remediation,
     check_length_within_budget,
     check_no_sign_off,
+    check_plan_is_flat,
 )
 
 
