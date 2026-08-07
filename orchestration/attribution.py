@@ -12,7 +12,7 @@ import os
 from orchestration.reconciliation import _find_deployed_resource
 from tools.activity_log import deployed_name_from_event_id, detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource
 from tools.change_origin import build_resource_lifecycle, classify_change_origin, event_explains_drift, select_relevant_activity
-from tools.config import AUTHORIZED_DEPLOYERS
+from tools.config import AUTHORIZED_DEPLOYERS, module_owners, ownership_default_owner
 from tools.rg_selector import is_glob
 from tools.logger import get_logger
 from tools.ownership import classify_owner
@@ -444,6 +444,33 @@ def _claim_policy_required_tags(report_data: dict) -> int:
     return claimed
 
 
+def _owner_key(resource_type, resource_name) -> tuple:
+    """Case-insensitive (type, name) key. Azure echoes types back in a different
+    case than the template declares them, so anything case-sensitive here
+    silently finds nothing and every lookup falls through to the type rules."""
+    return (str(resource_type or "").lower(), str(resource_name or "").lower())
+
+
+def _declared_module_index(report_data: dict) -> dict:
+    """Map (type, name) -> the Bicep module that declared it.
+
+    Built from `arm_resources`, where `_module` is stamped during flattening.
+    Placeholder-named resources (uniqueString) are indexed under their expression
+    too, since that is the name a missing_in_azure drift carries.
+    """
+    index = {}
+    for res in report_data.get("arm_resources") or []:
+        module = res.get("_module")
+        if not module:
+            continue
+        rtype = res.get("type")
+        index[_owner_key(rtype, res.get("name"))] = module
+        expr = res.get("bicep_name_expression")
+        if expr:
+            index.setdefault(_owner_key(rtype, expr), module)
+    return index
+
+
 def _split_policy_and_tag_owners(report_data: dict) -> list:
     """Phase 3/4 tail: split policy/system-enforced changes out of the actionable
     drift set and tag each actionable drift with its owner. Runs AFTER the Claude
@@ -471,8 +498,20 @@ def _split_policy_and_tag_owners(report_data: dict) -> list:
     # Phase 4: tag each actionable drift with its owner (platform vs workload).
     # matched_unresolvable entries are informational, not drift - keep them out of
     # the owner counts.
+    #
+    # The declaring module is the ownership evidence, and it lives on the ARM
+    # side: a resource only HAS a module if Bicep declares it, so extra_in_azure
+    # findings have none and correctly fall through to the type rules.
+    declared_modules = _declared_module_index(report_data)
+    default_owner = ownership_default_owner()
+    owners_by_module = module_owners()
     for drift in actionable:
-        drift["owner"] = classify_owner(drift.get("type", ""), drift)
+        drift["owner"] = classify_owner(
+            drift.get("type", ""), drift,
+            module=declared_modules.get(_owner_key(drift.get("type"), drift.get("name"))),
+            module_owners=owners_by_module,
+            default_owner=default_owner,
+        )
     owner_counts = {}
     for drift in actionable:
         if drift.get("drift_type") == "matched_unresolvable":
