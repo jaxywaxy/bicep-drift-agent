@@ -380,6 +380,22 @@ class OutputShapeTests(unittest.TestCase):
         self.assertIn("NEVER put the resource ID in the heading", sp)
         self.assertIn("exactly ONE bullet beneath the heading", sp)
 
+    def test_prompt_states_the_heading_limit_the_eval_enforces(self):
+        # The first CI eval run flagged a 94-char heading against a 90-char cap
+        # the prompt never stated - it said only "SHORT LABEL". A limit that is
+        # enforced but not published is a guessing game, so the number lives in
+        # both places and this keeps them equal.
+        from evals.checks import _MAX_HEADING_CHARS
+        self.assertIn(f"UNDER {_MAX_HEADING_CHARS} CHARACTERS",
+                      DriftAgent._get_system_prompt())
+
+    def test_the_prompts_own_example_heading_obeys_the_limit(self):
+        # An example violating its own rule would teach the wrong thing.
+        from evals.checks import _MAX_HEADING_CHARS
+        example = "39 resources: environment tag rewritten by policy"
+        self.assertIn(example, DriftAgent._get_system_prompt())
+        self.assertLess(len(example), _MAX_HEADING_CHARS)
+
     def test_prompt_makes_the_four_sections_an_allowlist(self):
         # Round 1 said the four sections "ARE the document" and the model still
         # emitted five extra `##` question headings. Naming them individually and
@@ -436,6 +452,19 @@ class OutputShapeTests(unittest.TestCase):
         requirements = " ".join(context["response_requirements"])
         self.assertIn("Write out every artifact you reference", requirements)
         self.assertIn("never on an offer of further work", requirements)
+
+    def test_context_forbids_the_sign_off_the_system_prompt_already_forbids(self):
+        # The system prompt has said 'no "End of report"' verbatim since round 2,
+        # and the first CI eval run caught gpt-5-mini emitting "(end of report)"
+        # on two of three fixtures anyway - while Anthropic obeyed it unprompted.
+        # Repeating a rule the model already ignored buys nothing; response_
+        # requirements is the field that moved this model before, so the rule
+        # goes there too.
+        report = _report(n_reconciled=0, n_actionable=1)
+        context = AnalysisPromptTests()._agent_and_prompt(report)
+        requirements = " ".join(context["response_requirements"])
+        self.assertIn("The last thing you write is the last caveat", requirements)
+        self.assertIn("(end of report)", requirements)
 
 
 class LiveContextTests(unittest.TestCase):
