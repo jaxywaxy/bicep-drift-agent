@@ -21,6 +21,25 @@ jobs:
           fetch-depth: 0
       - name: Run trufflehog (action)
         uses: trufflesecurity/trufflehog@6f3c981e7b77f235fd2702dd74af25fc4b72bf11 # v3.96.0
+        with:
+          # Lob is excluded, and ONLY Lob. A Lob API key is `test_` or `live_`
+          # followed by 35 characters, so any unittest method whose name happens
+          # to be exactly 35 characters after `test_` is an exact match - e.g.
+          # `test_a_bulleted_command_is_still_flagged`, which failed CI on
+          # 2026-08-07 as a *verified* Lob secret (Lob's API appears to accept
+          # any well-formed test-mode key, so verification proves nothing here).
+          #
+          # This is not one unlucky name: 51 existing test methods already have
+          # that shape. They never tripped because the action scans only the
+          # pushed commit range, so each one is a landmine that fires the day its
+          # file is touched. Renaming them all would be absurd and would keep
+          # re-occurring; excluding the detector fixes the class.
+          #
+          # Safe because this project has no Lob integration - no api.lob.com, no
+          # LOB_API_KEY, nothing. The detector can only produce false positives
+          # here. Every other detector, and verification, stay on. If a Lob
+          # dependency is ever added, DELETE THIS LINE.
+          extra_args: --exclude-detectors=lob
 
   pip-audit:
     runs-on: ubuntu-latest
