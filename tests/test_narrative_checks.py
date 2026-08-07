@@ -27,6 +27,7 @@ from evals.checks import (
     check_no_sign_off,
     check_no_unearned_attribution,
     check_only_allowlisted_sections,
+    check_commands_are_fenced,
     check_plan_is_flat,
     check_tldr_does_not_soften_what_the_body_confirms,
     check_does_not_over_unify_across_time,
@@ -447,3 +448,47 @@ class PlanDepthPromptTests(unittest.TestCase):
         self.assertIn("The PLAN IS FLAT", sp)
         self.assertIn("never sub-steps", sp)
         self.assertIn("give each command ONCE", sp)
+
+
+class CommandsAreFencedTests(unittest.TestCase):
+    """Live: `az role assignment show ...` written as an indented line under a
+    `- Command:` bullet rendered as proportional prose folded into the step."""
+
+    def test_a_bare_command_line_is_flagged(self):
+        analysis = ("1. Inspect it.\n   - Command:\n"
+                    "     az role assignment show --ids /subscriptions/x\n")
+        v = check_commands_are_fenced(_report(), analysis)
+        self.assertTrue(v)
+        self.assertIn("az role assignment show", v[0])
+
+    def test_a_fenced_command_passes(self):
+        analysis = "1. Inspect it.\n\n```bash\naz role assignment show --ids /subscriptions/x\n```\n"
+        self.assertEqual(check_commands_are_fenced(_report(), analysis), [])
+
+    def test_an_inline_mention_is_not_a_command_line(self):
+        # Prose referring to a command mid-sentence is fine.
+        analysis = "Removing it needs an explicit `az role assignment delete`, not a redeploy.\n"
+        self.assertEqual(check_commands_are_fenced(_report(), analysis), [])
+
+    def test_a_bulleted_command_is_still_flagged(self):
+        self.assertTrue(check_commands_are_fenced(_report(), "- az group delete --name x\n"))
+
+
+class FenceMustBeAtColumnZeroTests(unittest.TestCase):
+    """Pins the renderer quirk the prompt rule depends on: an INDENTED fence
+    inside a list item is not a code block at all."""
+
+    @staticmethod
+    def _html(md):
+        from tools.html_report import _render_agent_analysis_section
+        return _render_agent_analysis_section(md)
+
+    def test_indented_fence_is_not_a_code_block(self):
+        md = "1. Step\n\n   ```bash\n   az group list\n   ```\n"
+        self.assertNotIn("<pre>", self._html(md))
+
+    def test_column_zero_fence_is_a_code_block_and_numbering_resumes(self):
+        md = "1. Step\n\n```bash\naz group list\n```\n\n2. Next\n"
+        html = self._html(md)
+        self.assertIn("<pre>", html)
+        self.assertIn('<ol start="2">', html)
