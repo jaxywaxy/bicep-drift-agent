@@ -90,6 +90,7 @@ class PromptsMixin:
                 "Suggest concrete next actions.",
                 "Write out every artifact you reference - Bicep snippets, az commands, runbook steps - inside the remediation plan.",
                 "This is a written report, not a conversation: end on the caveats, never on an offer of further work.",
+                "The last thing you write is the last caveat. Nothing follows it - no '(end of report)', no closing summary, no horizontal rule.",
             ],
         }
 

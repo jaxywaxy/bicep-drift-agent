@@ -453,6 +453,19 @@ class OutputShapeTests(unittest.TestCase):
         self.assertIn("Write out every artifact you reference", requirements)
         self.assertIn("never on an offer of further work", requirements)
 
+    def test_context_forbids_the_sign_off_the_system_prompt_already_forbids(self):
+        # The system prompt has said 'no "End of report"' verbatim since round 2,
+        # and the first CI eval run caught gpt-5-mini emitting "(end of report)"
+        # on two of three fixtures anyway - while Anthropic obeyed it unprompted.
+        # Repeating a rule the model already ignored buys nothing; response_
+        # requirements is the field that moved this model before, so the rule
+        # goes there too.
+        report = _report(n_reconciled=0, n_actionable=1)
+        context = AnalysisPromptTests()._agent_and_prompt(report)
+        requirements = " ".join(context["response_requirements"])
+        self.assertIn("The last thing you write is the last caveat", requirements)
+        self.assertIn("(end of report)", requirements)
+
 
 class LiveContextTests(unittest.TestCase):
     """details carries only the CHANGED paths. The siblings that bound a
