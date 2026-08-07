@@ -187,6 +187,11 @@ _FENCE = re.compile(r"```.*?```", re.S)
 _MAX_HEADING_CHARS = 90
 _REMEDIATION_IN_FINDING = re.compile(
     r"^\s*[-*]?\s*\**\s*(immediate|recommended|suggested)\s+action\b", re.I | re.M)
+# A whole line that IS a command - the shape that renders as prose when left
+# unfenced. An inline mention inside a sentence never starts the line, so it
+# does not match; a `- ` or `* ` bullet marker is stripped first.
+_BARE_COMMAND = re.compile(
+    r"^[ \t]*(?:[-*]\s+)?(?:az|bicep|terraform|kubectl|pwsh)\s+\S.*$", re.M)
 _SIGN_OFFS = ("end of report", "end of analysis", "that concludes", "this concludes")
 # An INDENTED ordered marker - `  1.` or `   1)` - i.e. a step inside a step.
 # Matched only within the plan section, and never inside a fenced block.
@@ -286,6 +291,24 @@ def check_no_sign_off(report, analysis):
     return [f"ends with a sign-off ({s!r})" for s in _SIGN_OFFS if s in tail]
 
 
+def check_commands_are_fenced(report, analysis):
+    """A command is only readable if it renders as a framed monospace block.
+
+    Live: the plan wrote `az role assignment show ...` as an indented plain-text
+    line under a `- Command:` bullet. python-markdown folded the whole step -
+    command, bullets and all - into one <li> of proportional prose. Nothing to
+    scan, nothing to copy.
+
+    NOTE the fence must be at column 0. An indented fence inside a list item
+    degrades to an inline code span; this check cannot see that difference, so
+    the prompt states it and `test_indented_fence_is_not_a_code_block` pins the
+    renderer behaviour that makes it true.
+    """
+    outside = _FENCE.sub(" ", analysis)
+    return [f"unfenced command line: {m.group(0).strip()[:60]!r}"
+            for m in _BARE_COMMAND.finditer(outside)]
+
+
 def check_plan_is_flat(report, analysis):
     """The remediation plan is a list an operator works top to bottom.
 
@@ -317,6 +340,7 @@ CHECKS = (
     check_length_within_budget,
     check_no_sign_off,
     check_plan_is_flat,
+    check_commands_are_fenced,
 )
 
 
