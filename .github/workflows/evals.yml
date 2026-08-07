@@ -1,0 +1,101 @@
+name: Narrative evals
+
+# Runs the fixture corpus through a real provider and checks what it WROTE.
+# Everything else in CI checks the input side (finding counts, redaction, payload
+# size); this is the only job that judges the output, which is what makes "did
+# provider B get worse than provider A?" answerable without a human reading
+# reports.
+#
+# MANUAL ONLY, on purpose. It makes real API calls and costs real money (~37K
+# tokens per fixture per provider), so it must not fire on every push. Run it
+# when `agent/prompts.py` changes, before switching DRIFT_LLM_PROVIDER, and
+# after a provider version bump. To make it automatic later, add:
+#
+#   pull_request:
+#     paths: [agent/prompts.py, evals/**]
+#
+# ...and accept the standing spend.
+
+on:
+  workflow_dispatch:
+    inputs:
+      providers:
+        description: Which provider(s) to run
+        type: choice
+        default: both
+        options:
+          - both
+          - azure_openai
+          - anthropic
+
+permissions:
+  contents: read
+  id-token: write # OIDC, for the Azure OpenAI leg's Entra token
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    strategy:
+      # Both legs always run. A provider that fails must not hide the other's
+      # result - comparing them IS the point of the job.
+      fail-fast: false
+      matrix:
+        # One line deliberately: a folded scalar keeps literal newlines inside
+        # the ${{ }} when continuation lines are indented, and the expression
+        # parser is not documented to accept them.
+        provider: ${{ fromJSON(inputs.providers == 'both' && '["azure_openai","anthropic"]' || format('["{0}"]', inputs.providers)) }}
+
+    name: ${{ matrix.provider }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          # Same version the drift pipeline runs on (drift-check-lz-hybrid.yml).
+          python-version: '3.14'
+          cache: pip
+
+      # Entra, not a key. The federated identity already holds "Cognitive
+      # Services OpenAI User" on the account, and DefaultAzureCredential picks up
+      # the az CLI session this establishes. allow-no-subscriptions because the
+      # evals touch no Azure resources - they only need a data-plane token.
+      - name: Azure Login (OIDC)
+        if: matrix.provider == 'azure_openai'
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -q -r requirements.txt
+          # Only when selected: the OpenAI SDK is not in requirements.txt
+          # because the default provider never imports it.
+          if [ "${{ matrix.provider }}" = "azure_openai" ]; then
+            python -m pip install -q openai
+          fi
+
+      - name: Run evals - ${{ matrix.provider }}
+        env:
+          DRIFT_LLM_PROVIDER: ${{ matrix.provider }}
+          # Set only for the leg that uses it. AZURE_OPENAI_API_KEY is
+          # deliberately NEVER set: its presence silently downgrades the Azure
+          # leg from Entra to key auth, which would quietly discard the whole
+          # reason that provider exists.
+          ANTHROPIC_API_KEY: ${{ matrix.provider == 'anthropic' && secrets.ANTHROPIC_API_KEY || '' }}
+          AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT }}
+          AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT }}
+        run: |
+          set -o pipefail
+          python -m evals.run 2>&1 | tee "evals-${{ matrix.provider }}.txt"
+
+      # Kept even when the run fails - a failed leg's output is exactly what you
+      # need to read, and it is the input to comparing the two providers.
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: evals-${{ matrix.provider }}
+          path: evals-${{ matrix.provider }}.txt
+          if-no-files-found: error
