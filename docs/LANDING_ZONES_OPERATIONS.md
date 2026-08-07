@@ -238,6 +238,20 @@ For local runs put the same three values in `.env` (gitignored), which both
 identity, so it needs `Cognitive Services OpenAI User` on the account too — the
 workflow's identity having it is not enough.
 
+**Before you switch, compare the two.** `.github/workflows/evals.yml` ("Narrative
+evals") runs the fixture corpus through both providers and checks what each one
+*wrote* — section shape, length, whether findings carry remediation, whether an
+actor was invented. It is `workflow_dispatch` only, because it makes real API
+calls; run it when `agent/prompts.py` changes, before flipping
+`DRIFT_LLM_PROVIDER`, and after a provider version bump. Each leg uploads its
+output as an artifact so the two can be diffed. The Azure leg uses the same OIDC
+identity as everything else and needs no key; the Anthropic leg reads
+`ANTHROPIC_API_KEY` from secrets.
+
+Note that a prompt tuned against one provider is not automatically neutral: the
+output-shape rules in `agent/prompts.py` were written only after a provider swap
+exposed conventions the previous model had been following without being told.
+
 ## Step 5 – Execute Validation
 
 Run the workflow manually:
