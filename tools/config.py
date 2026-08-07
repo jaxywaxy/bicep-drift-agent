@@ -6,7 +6,11 @@ operators can adjust behavior without changing code. Every value here is wired
 into the code that uses it — see the referenced call sites.
 """
 
+import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # ===== Bicep Compilation =====
 
@@ -32,6 +36,64 @@ the scan itself runs as is ALWAYS treated as a deployer automatically
 (tools/activity_log.py:detect_scanning_identity), so this is only needed when
 a client deploys with a different identity than they scan with."""
 
+# ===== LLM Pricing =====
+
+MODEL_PRICING_ENV = "DRIFT_MODEL_PRICING"
+"""JSON overriding and extending the built-in price table (agent/usage.py).
+
+Maps a model-id PREFIX to [input, output] USD per million tokens:
+
+    {"gpt-5-mini": [0.25, 2.00], "claude-opus-4-8": [5.00, 25.00]}
+
+Prices move and new models appear between releases, and the built-in table only
+ever knew Anthropic's - so a provider swap left the cost line reading "unknown".
+This keeps it current without a code change: set it as a repo variable. Rows
+here beat built-ins, and a model with no row anywhere still reports tokens,
+just not dollars."""
+
+
+def model_pricing_overrides() -> dict[str, tuple[float, float]]:
+    """Parse DRIFT_MODEL_PRICING. Returns {} and warns on anything malformed.
+
+    Read per call rather than cached at import so an operator changing the
+    variable does not need a restart, and so tests can set it.
+
+    A pricing typo must never fail a scan - dollars are a reporting nicety and
+    the drift result is the product. Discarding a bad row leaves the cost
+    "unknown", which is the honest answer; the alternative is charging someone
+    against a number we only half-parsed.
+    """
+    raw = os.environ.get(MODEL_PRICING_ENV, "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError as e:
+        logger.warning("%s is not valid JSON, ignoring it: %s", MODEL_PRICING_ENV, e)
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning("%s must be a JSON object of model-prefix -> [input, output], got %s",
+                       MODEL_PRICING_ENV, type(parsed).__name__)
+        return {}
+
+    out: dict[str, tuple[float, float]] = {}
+    for prefix, prices in parsed.items():
+        if not (isinstance(prefix, str) and prefix.strip()):
+            logger.warning("%s: skipping row with an empty model prefix", MODEL_PRICING_ENV)
+            continue
+        if not (isinstance(prices, (list, tuple)) and len(prices) == 2):
+            logger.warning("%s: skipping %r - expected [input, output] per million tokens",
+                           MODEL_PRICING_ENV, prefix)
+            continue
+        # bool is an int subclass; True as a price is a typo, not a price.
+        if any(isinstance(p, bool) or not isinstance(p, (int, float)) or p < 0 for p in prices):
+            logger.warning("%s: skipping %r - prices must be non-negative numbers, got %r",
+                           MODEL_PRICING_ENV, prefix, list(prices))
+            continue
+        out[prefix.strip()] = (float(prices[0]), float(prices[1]))
+    return out
+
+
 # ===== Logging =====
 
 LOG_LEVEL = os.environ.get("DRIFT_LOG_LEVEL", "INFO").upper()
@@ -54,5 +116,11 @@ def validate_config() -> list[str]:
 
     if LOG_LEVEL not in ("DEBUG", "INFO", "WARNING", "ERROR"):
         warnings.append(f"DRIFT_LOG_LEVEL should be DEBUG/INFO/WARNING/ERROR, got {LOG_LEVEL}")
+
+    # Surface a pricing variable that is set but unusable. It is ignored either
+    # way, but silently ignored means the cost line reads "unknown" and nobody
+    # knows the override was the reason.
+    if os.environ.get(MODEL_PRICING_ENV, "").strip() and not model_pricing_overrides():
+        warnings.append(f"{MODEL_PRICING_ENV} is set but no usable price rows were parsed from it")
 
     return warnings
