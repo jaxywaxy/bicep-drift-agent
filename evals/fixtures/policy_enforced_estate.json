@@ -1,0 +1,2543 @@
+{
+  "_what_this_pins": "The RICH payload: 39 resources whose tags.environment was rewritten by ONE policy Modify effect (drift-inherit-environment), plus one genuinely out-of-band Contributor grant, plus two reconciled runtime-named rows. Taken from a real rg-drift-test scan. This is the only fixture with policy_enforced_properties, and the only one that can catch a narrative splitting one cause into N findings: the word budget scales with the finding count, so 39 near-identical headings stay inside it and no mechanical check would notice. Claude got this right unprompted (one finding, 'LOW x 39 - one story, many resources'); the prompt now says so explicitly, and this fixture is how we tell whether that still holds.",
+  "bicep_file": "/Users/jacquirennie/Desktop/git/drift-test-resources/bicep/main.bicep",
+  "resource_group": "rg-drift-test",
+  "drifts": [
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "name": "Contributor -> unresolved-principal",
+      "drift_type": "missing_in_azure",
+      "details": {
+        "role_name": "Contributor",
+        "role_definition_guid": "b24988ac-6180-42a0-ab88-20f7382dd24c",
+        "principal_id": null,
+        "scope": null,
+        "privileged": true
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Authorization/roleAssignments/Contributor -> unresolved-principal",
+        "events": [],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": null,
+        "last_modified_by": null
+      },
+      "change_origin": {
+        "origin": "unknown",
+        "category": "unknown",
+        "severity": "medium",
+        "expected": false,
+        "timestamp": null,
+        "changed_by": null,
+        "method": null,
+        "policy_name": null,
+        "policy_id": null,
+        "modified_properties": null,
+        "reason": "No activity log entries found (logs may have expired)"
+      },
+      "owner": "platform"
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "name": "asp-test-drift",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Web/serverfarms/asp-test-drift",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:53.525099+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:53.525099+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:53.525099+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:53.525099+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "name": "app-test-drift",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Web/sites/app-test-drift",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:16.885148+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:16.885148+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:16.885148+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:16.885148+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/actionGroups",
+      "name": "ag-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Insights/actiongroups/ag-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:38.082718+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:38.082718+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:38.082718+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:38.082718+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/metricAlerts",
+      "name": "alert-storage-availability",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Insights/metricalerts/alert-storage-availability",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:17:36.005261+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:17:36.005261+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:17:36.005261+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:17:36.005261+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Insights/dataCollectionRules",
+      "name": "dcr-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Insights/dataCollectionRules/dcr-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:41.098502+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:41.098502+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:41.098502+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:41.098502+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/dnsZones",
+      "name": "drifttest.example.com",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/dnszones/drifttest.example.com",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:16:50.489024+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:16:50.489024+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:16:50.489024+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:16:50.489024+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "name": "nsg-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/networkSecurityGroups/nsg-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:52.584574+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:52.584574+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:52.584574+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:52.584574+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/routeTables",
+      "name": "rt-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/routeTables/rt-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:52.647059+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:52.647059+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:52.647059+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:52.647059+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/virtualNetworks/vnet-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:53.053312+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:53.053312+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:53.053312+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:53.053312+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "name": "drifttest.internal",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/privateDnsZones/drifttest.internal",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:58.457559+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:58.457559+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:58.457559+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:58.457559+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.RecoveryServices/vaults",
+      "name": "rsv-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.RecoveryServices/vaults/rsv-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:52.699787+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:52.699787+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:52.699787+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:52.699787+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "name": "id-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:52.902900+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:52.902900+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:52.902900+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:52.902900+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "name": "cae-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.App/managedEnvironments/cae-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:16:15.238240+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:16:15.238240+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:16:15.238240+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:16:15.238240+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "name": "ca-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.App/containerApps/ca-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:16:30.372339+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:16:30.372339+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:16:30.372339+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:16:30.372339+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/ApplicationGatewayWebApplicationFirewallPolicies",
+      "name": "waf-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/applicationGatewayWebApplicationFirewallPolicies/waf-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:54.843597+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:54.843597+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:54.843597+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:54.843597+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/firewallPolicies",
+      "name": "fwpol-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/firewallPolicies/fwpol-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:03.092382+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:03.092382+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:03.092382+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:03.092382+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "name": "asp-func-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Web/serverfarms/asp-func-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:57.360597+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:57.360597+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:57.360597+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:57.360597+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "pip-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/publicIPAddresses/pip-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:50.884390+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:50.884390+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:50.884390+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:50.884390+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/availabilitySets",
+      "name": "avset-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Compute/availabilitySets/avset-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:14:02.451536+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:14:02.451536+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:14:02.451536+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:14:02.451536+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/disks",
+      "name": "disk-drift-data",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Compute/disks/disk-drift-data",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:14:05.779867+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:14:05.779867+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:14:05.779867+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:14:05.779867+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Compute/virtualMachineScaleSets",
+      "name": "vmss-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Compute/virtualMachineScaleSets/vmss-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:14:05.810164+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:14:05.810164+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:14:05.810164+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:14:05.810164+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateEndpoints",
+      "name": "pe-kv-drift-test",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/privateEndpoints/pe-kv-drift-test",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:14:36.515558+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:14:36.515558+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:14:36.515558+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:14:36.515558+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Network/privateDnsZones",
+      "name": "privatelink.vaultcore.azure.net",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/privateDnsZones/privatelink.vaultcore.azure.net",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:15:09.755694+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:15:09.755694+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:15:09.755694+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:15:09.755694+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.cognitiveservices/accounts",
+      "name": "aidrift3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "aidrift[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.CognitiveServices/accounts/aidrift3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:18.717391+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:18.717391+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:18.717391+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:18.717391+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.containerinstance/containergroups",
+      "name": "aci-test-drift-3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "aci-test-drift-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.ContainerInstance/containerGroups/aci-test-drift-3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:50.945799+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:50.945799+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:50.945799+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:50.945799+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.containerregistry/registries",
+      "name": "acrtestdrift3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "acrtestdrift[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.ContainerRegistry/registries/acrtestdrift3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:51.025017+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:51.025017+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:51.025017+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:51.025017+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.dbforpostgresql/flexibleservers",
+      "name": "pgflex-drift-3s7c7wed",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "pgflex-drift-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.DBforPostgreSQL/flexibleServers/pgflex-drift-3s7c7wed",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:52.700604+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:52.700604+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:52.700604+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:52.700604+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.eventgrid/systemtopics",
+      "name": "evgst-storage-3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "evgst-storage-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.EventGrid/systemTopics/evgst-storage-3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:17:31.040407+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:17:31.040407+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:17:31.040407+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:17:31.040407+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.eventgrid/topics",
+      "name": "evgt-drift-3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "evgt-drift-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.EventGrid/topics/evgt-drift-3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:51.151989+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:51.151989+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:51.151989+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:51.151989+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.eventhub/namespaces",
+      "name": "eh-3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "eh-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.EventHub/namespaces/eh-3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:25.736479+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:25.736479+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:25.736479+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:25.736479+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.keyvault/vaults",
+      "name": "kvdrift3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "kvdrift[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.KeyVault/vaults/kvdrift3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:17:33.119194+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:17:33.119194+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:17:33.119194+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:17:33.119194+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.logic/workflows",
+      "name": "drift-wf-3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "drift-wf-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Logic/workflows/drift-wf-3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:51.630442+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:51.630442+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:51.630442+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:51.630442+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.network/trafficmanagerprofiles",
+      "name": "tmdrift3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "tmdrift[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Network/trafficmanagerprofiles/tmdrift3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:16:51.028282+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:16:51.028282+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:16:51.028282+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:16:51.028282+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.operationalinsights/workspaces",
+      "name": "log-3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "log-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.OperationalInsights/workspaces/log-3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:33.111327+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:33.111327+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:33.111327+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:13:33.111327+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.servicebus/namespaces",
+      "name": "sbdrift3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "sbdrift[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.ServiceBus/namespaces/sbdrift3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:53.225191+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:53.225191+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:53.225191+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:53.225191+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.sql/servers",
+      "name": "sqldrift3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "sqldrift[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Sql/servers/sqldrift3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:18:14.708042+00:00",
+            "operation": "modify",
+            "actor": "f302e5a8-943b-4a0f-a652-d788d6a29b16",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Manual change by f302e5a8-943b-4a0f-a652-d788d6a29b16",
+            "origin": "manual_change",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:18:14.708042+00:00",
+        "last_modified_by": "f302e5a8-943b-4a0f-a652-d788d6a29b16"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:18:14.708042+00:00",
+        "changed_by": null,
+        "method": "Unknown",
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "f302e5a8-943b-4a0f-a652-d788d6a29b16",
+        "last_write_at": "2026-08-03T21:18:14.708042+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.sql/servers/databases",
+      "name": "sqldrift3s7c7weddxr3s/driftdb",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "medium",
+      "match_reason": "Same resource type, possible match among multiple candidates",
+      "bicep_name_expression": "sqldrift[86c9cbf6]/driftdb",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Sql/servers/sqldrift3s7c7weddxr3s/databases/driftdb",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:18.329616+00:00",
+            "operation": "modify",
+            "actor": "unknown",
+            "method": "Unknown",
+            "status": "Started",
+            "reason": "Manual change by unknown",
+            "origin": "manual_change",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:13:18.329616+00:00",
+        "last_modified_by": "unknown"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:13:18.329616+00:00",
+        "changed_by": null,
+        "method": "Unknown",
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": null,
+        "last_write_at": "2026-08-03T21:13:18.329616+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.storage/storageaccounts",
+      "name": "sttestdrift3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "sttestdrift[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Storage/storageAccounts/sttestdrift3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:12:53.560178+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:12:53.560178+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:12:53.560178+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:12:53.560178+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.web/sites",
+      "name": "func-drift-3s7c7weddxr3s",
+      "drift_type": "property_drift",
+      "details": {
+        "policy_enforced_summary": "tags.environment: test -> production (imposed by policy assignment 'drift-inherit-environment')"
+      },
+      "is_matched": true,
+      "match_confidence": "medium",
+      "match_reason": "Same resource type, possible match among multiple candidates",
+      "bicep_name_expression": "func-drift-[86c9cbf6]",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.Web/sites/func-drift-3s7c7weddxr3s",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:17:26.474088+00:00",
+            "operation": "modify",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": null,
+        "created_by": null,
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": "2026-08-03T21:17:26.474088+00:00",
+        "last_modified_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "change_origin": {
+        "origin": "policy_modify",
+        "category": "policy",
+        "severity": "low",
+        "expected": true,
+        "timestamp": "2026-08-03T21:17:26.474088+00:00",
+        "changed_by": null,
+        "method": null,
+        "policy_name": "drift-inherit-environment",
+        "policy_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+        "modified_properties": null,
+        "reason": "Tag value imposed in-flight by the Modify effect of inherit-tag assignment 'drift-inherit-environment' at scope /subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test; no other property drifted.",
+        "last_write_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "last_write_at": "2026-08-03T21:17:26.474088+00:00"
+      },
+      "policy_enforced_properties": {
+        "tags.environment": {
+          "desired": "test",
+          "actual": "production",
+          "severity": "warning",
+          "policy_assignment": "drift-inherit-environment",
+          "policy_definition": "cd3aa116-8754-49c9-a813-ad46512ece54",
+          "policy_assignment_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test/providers/Microsoft.Authorization/policyAssignments/drift-inherit-environment",
+          "policy_scope": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourcegroups/rg-drift-test",
+          "policy_effect": "Modify",
+          "reason": "Value imposed by the Modify effect of inherit-tag assignment 'drift-inherit-environment' (inherit tag from resource group, mode: replace). Reconcile the template with the policy - redeploying loses the race on the next write."
+        }
+      }
+    },
+    {
+      "type": "microsoft.cognitiveservices/accounts/projects",
+      "name": "aidrift3s7c7weddxr3s/proj-drifttest",
+      "drift_type": "matched_unresolvable",
+      "details": {},
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "aidrift[86c9cbf6]/proj-drifttest",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.CognitiveServices/accounts/aidrift3s7c7weddxr3s/projects/proj-drifttest",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:18.717391+00:00",
+            "operation": "create",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "Unknown",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": "2026-08-03T21:13:18.717391+00:00",
+        "created_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": null,
+        "last_modified_by": null
+      },
+      "change_origin": {
+        "origin": "authorized_deployment",
+        "category": "authorized",
+        "severity": "low",
+        "expected": false,
+        "timestamp": "2026-08-03T21:13:18.717391+00:00",
+        "changed_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "method": null,
+        "policy_name": null,
+        "policy_id": null,
+        "modified_properties": null,
+        "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "owner": "workload"
+    },
+    {
+      "type": "Microsoft.CognitiveServices/accounts/deployments",
+      "name": "aidrift3s7c7weddxr3s/gpt-5-mini",
+      "drift_type": "matched_unresolvable",
+      "details": {},
+      "is_matched": true,
+      "match_confidence": "high",
+      "match_reason": "Same resource type, unresolvable name in Bicep",
+      "bicep_name_expression": "aidrift[86c9cbf6]/gpt-5-mini",
+      "lifecycle": {
+        "resource_id": "/subscriptions/594e0bd0-2a8d-4419-b281-87869c20fd03/resourceGroups/rg-drift-test/providers/Microsoft.CognitiveServices/accounts/aidrift3s7c7weddxr3s/deployments/gpt-5-mini",
+        "events": [
+          {
+            "timestamp": "2026-08-03T21:13:12.326768+00:00",
+            "operation": "create",
+            "actor": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "method": "ARM Deployment",
+            "status": "Succeeded",
+            "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+            "origin": "authorized_deployment",
+            "policy_name": null,
+            "policy_id": null,
+            "deployment_id": null,
+            "modified_properties": null
+          }
+        ],
+        "created_at": "2026-08-03T21:13:12.326768+00:00",
+        "created_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "deleted_at": null,
+        "deleted_by": null,
+        "last_modified_at": null,
+        "last_modified_by": null
+      },
+      "change_origin": {
+        "origin": "authorized_deployment",
+        "category": "authorized",
+        "severity": "low",
+        "expected": false,
+        "timestamp": "2026-08-03T21:13:12.326768+00:00",
+        "changed_by": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+        "method": null,
+        "policy_name": null,
+        "policy_id": null,
+        "modified_properties": null,
+        "reason": "Deployed by authorized pipeline identity 8edd43ce-a6cb-4dad-a89a-5bb580ebf777"
+      },
+      "owner": "workload"
+    }
+  ]
+}

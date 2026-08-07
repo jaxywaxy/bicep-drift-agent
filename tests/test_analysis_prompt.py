@@ -376,7 +376,7 @@ class OutputShapeTests(unittest.TestCase):
         # Round 2: headings became the full 120-char resource ID, and the first
         # bullet under each repeated it verbatim - twice the width, no extra fact.
         sp = DriftAgent._get_system_prompt()
-        self.assertIn("own `###` heading, and make that heading a SHORT LABEL", sp)
+        self.assertIn("`###` heading that is a SHORT LABEL", sp)
         self.assertIn("NEVER put the resource ID in the heading", sp)
         self.assertIn("exactly ONE bullet beneath the heading", sp)
 
