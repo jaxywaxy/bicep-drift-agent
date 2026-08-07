@@ -291,6 +291,49 @@ def check_no_sign_off(report, analysis):
     return [f"ends with a sign-off ({s!r})" for s in _SIGN_OFFS if s in tail]
 
 
+def _expected_stories(report):
+    """How many distinct CAUSES the report actually contains.
+
+    Rows sharing one `policy_name` are one cause however many resources they
+    touch; everything else counts individually.
+    """
+    policies, loose = set(), 0
+    for row in _actionable(report):
+        name = ((row.get("change_origin") or {}).get("policy_name")) or ""
+        if name:
+            policies.add(name)
+        else:
+            loose += 1
+    return len(policies) + loose
+
+
+# Slack over the cause count: a report may legitimately add a heading the rows do
+# not imply - the previous provider wrote "### No composed/interacting drift".
+# Generous on purpose; this must only fire on real sprawl.
+_STORY_HEADING_SLACK = 3
+
+
+def check_one_story_is_one_finding(report, analysis):
+    """N resources drifted by ONE cause is ONE finding, not N.
+
+    The counterexample is the thing to protect: 39 resources whose tag was
+    rewritten by a single policy Modify effect, reported as one finding - "LOW
+    x 39, one story, many resources" - which IS the insight. Thirty-nine
+    headings repeating one sentence would be strictly worse.
+
+    No other check can see this. The word budget scales with the finding count,
+    so 39 near-identical headings sit comfortably inside it.
+    """
+    expected = _expected_stories(report)
+    if not expected:
+        return []
+    headings = len(_H3.findall(analysis))
+    if headings > expected + _STORY_HEADING_SLACK:
+        return [f"{headings} finding headings for {expected} distinct cause(s); "
+                f"rows sharing one cause must be reported as one finding"]
+    return []
+
+
 def check_commands_are_fenced(report, analysis):
     """A command is only readable if it renders as a framed monospace block.
 
@@ -341,6 +384,7 @@ CHECKS = (
     check_no_sign_off,
     check_plan_is_flat,
     check_commands_are_fenced,
+    check_one_story_is_one_finding,
 )
 
 

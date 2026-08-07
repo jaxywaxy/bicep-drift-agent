@@ -24,6 +24,7 @@ from evals.checks import (
     check_finding_headings_are_labels,
     check_length_within_budget,
     check_no_fabricated_actor,
+    check_one_story_is_one_finding,
     check_no_sign_off,
     check_no_unearned_attribution,
     check_only_allowlisted_sections,
@@ -492,3 +493,64 @@ class FenceMustBeAtColumnZeroTests(unittest.TestCase):
         html = self._html(md)
         self.assertIn("<pre>", html)
         self.assertIn('<ol start="2">', html)
+
+
+def _policy_row(name, policy="drift-inherit-environment"):
+    return {"type": "Microsoft.Web/sites", "name": name, "drift_type": "property_drift",
+            "details": {}, "change_origin": {"origin": "policy_modify", "policy_name": policy,
+                                             "severity": "low", "changed_by": None}}
+
+
+class OneStoryIsOneFindingTests(unittest.TestCase):
+    """39 resources whose tag was rewritten by ONE policy Modify effect is ONE
+    finding - "LOW x 39, one story, many resources" - which is the insight. The
+    word budget cannot catch the alternative: it scales with the finding count,
+    so 39 near-identical headings sit comfortably inside it."""
+
+    def _report39(self):
+        rows = [_policy_row(f"res{i:02d}") for i in range(39)]
+        rows.append(_drift("rogue-grant", dtype="extra_in_azure"))
+        return _report(drifts=rows)
+
+    def test_one_heading_per_row_is_flagged(self):
+        sprawl = "".join(f"### tags.environment on res{i:02d}\n" for i in range(39))
+        v = check_one_story_is_one_finding(self._report39(), sprawl)
+        self.assertTrue(v)
+        self.assertIn("2 distinct cause", v[0])
+
+    def test_grouping_the_policy_rows_passes(self):
+        good = ("### Contributor granted out of band\n"
+                "### Policy-imposed environment tag (LOW x 39)\n")
+        self.assertEqual(check_one_story_is_one_finding(self._report39(), good), [])
+
+    def test_an_extra_narrative_heading_is_within_slack(self):
+        # The previous provider added "### No composed/interacting drift".
+        good = ("### Contributor granted out of band\n"
+                "### Policy-imposed environment tag (LOW x 39)\n"
+                "### No composed/interacting drift\n")
+        self.assertEqual(check_one_story_is_one_finding(self._report39(), good), [])
+
+    def test_distinct_causes_each_earn_a_heading(self):
+        rows = [_policy_row("a", "policy-one"), _policy_row("b", "policy-two"),
+                _policy_row("c", "policy-three"), _policy_row("d", "policy-four"),
+                _policy_row("e", "policy-five"), _policy_row("f", "policy-six")]
+        headings = "".join(f"### cause {i}\n" for i in range(6))
+        self.assertEqual(check_one_story_is_one_finding(_report(drifts=rows), headings), [])
+
+    def test_reconciled_rows_are_not_causes(self):
+        # matched_unresolvable is not a finding, so it must not inflate the budget.
+        rows = [_policy_row("a")] + [_drift(f"r{i}", dtype="matched_unresolvable") for i in range(20)]
+        self.assertTrue(check_one_story_is_one_finding(
+            _report(drifts=rows), "".join(f"### h{i}\n" for i in range(10))))
+
+    def test_a_clean_report_is_silent(self):
+        self.assertEqual(check_one_story_is_one_finding(_report(), "## TL;DR\nClean.\n"), [])
+
+
+class OneStoryPromptTests(unittest.TestCase):
+    def test_prompt_says_one_heading_per_story(self):
+        from agent.drift_agent import DriftAgent
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("One `###` heading per STORY, not per row", sp)
+        self.assertIn("one story, many resources", sp)
+        self.assertIn("Split only where the CAUSE differs", sp)
