@@ -380,6 +380,22 @@ class OutputShapeTests(unittest.TestCase):
         self.assertIn("NEVER put the resource ID in the heading", sp)
         self.assertIn("exactly ONE bullet beneath the heading", sp)
 
+    def test_prompt_states_the_heading_limit_the_eval_enforces(self):
+        # The first CI eval run flagged a 94-char heading against a 90-char cap
+        # the prompt never stated - it said only "SHORT LABEL". A limit that is
+        # enforced but not published is a guessing game, so the number lives in
+        # both places and this keeps them equal.
+        from evals.checks import _MAX_HEADING_CHARS
+        self.assertIn(f"UNDER {_MAX_HEADING_CHARS} CHARACTERS",
+                      DriftAgent._get_system_prompt())
+
+    def test_the_prompts_own_example_heading_obeys_the_limit(self):
+        # An example violating its own rule would teach the wrong thing.
+        from evals.checks import _MAX_HEADING_CHARS
+        example = "39 resources: environment tag rewritten by policy"
+        self.assertIn(example, DriftAgent._get_system_prompt())
+        self.assertLess(len(example), _MAX_HEADING_CHARS)
+
     def test_prompt_makes_the_four_sections_an_allowlist(self):
         # Round 1 said the four sections "ARE the document" and the model still
         # emitted five extra `##` question headings. Naming them individually and

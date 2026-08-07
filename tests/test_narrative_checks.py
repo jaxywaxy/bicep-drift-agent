@@ -401,6 +401,38 @@ class RoleDefinitionGuidIsNotFabricatedTests(unittest.TestCase):
             self._report_with_role(), "Granted by 00000000-1111-2222-3333-444444444444."))
 
 
+class SubscriptionGuidIsNotFabricatedTests(unittest.TestCase):
+    """The THIRD miss of the same shape, caught by the first CI eval run
+    (2026-08-07). The subscription guid sits in `lifecycle.resource_id` of all
+    42 `policy_enforced_estate` rows - 198 occurrences, the most repeated
+    identifier in the fixture - and `_known_actors` walked neither that key nor
+    the row's own `resource_id`, so an analysis quoting the subscription was
+    accused of inventing an identity.
+
+    Two earlier fixes each enumerated one more key. `_known_actors` now reads
+    the whole report, so there is no next key to miss."""
+
+    SUB = "594e0bd0-2a8d-4419-b281-87869c20fd03"
+
+    def _report_with_sub_guid_only_in_lifecycle(self):
+        row = _drift("rg-drift-test-storage")
+        row["lifecycle"] = {"resource_id": f"/subscriptions/{self.SUB}/resourceGroups/rg-drift-test"}
+        return _report(drifts=[row])
+
+    def test_citing_the_subscription_is_not_a_fabrication(self):
+        self.assertEqual(
+            check_no_fabricated_actor(
+                self._report_with_sub_guid_only_in_lifecycle(),
+                f"Run `az account set --subscription {self.SUB}` first."),
+            [], "a GUID the report carries in lifecycle.resource_id was called invented")
+
+    def test_a_guid_nowhere_in_the_report_is_still_caught(self):
+        # The widened denominator must not make the check vacuous.
+        self.assertTrue(check_no_fabricated_actor(
+            self._report_with_sub_guid_only_in_lifecycle(),
+            "Granted by 00000000-1111-2222-3333-444444444444."))
+
+
 class PlanIsFlatTests(unittest.TestCase):
     """Round 2 capped bullets per FINDING and the plan blew the budget anyway:
     six items with five nested sub-steps each, and `az role assignment show`

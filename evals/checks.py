@@ -21,6 +21,7 @@ disabled check is worse than none because it looks like coverage. Shape is not
 prose: heading text, section names and word counts are exact.
 """
 
+import json
 import re
 from datetime import datetime
 
@@ -45,32 +46,29 @@ def _rows(report):
 
 
 def _known_actors(report):
-    actors = set()
-    for row in _rows(report):
-        co = row.get("change_origin") or {}
-        if co.get("changed_by"):
-            actors.add(str(co["changed_by"]).lower())
-        for ev in (row.get("lifecycle") or {}).get("events") or []:
-            if ev.get("actor"):
-                actors.add(str(ev["actor"]).lower())
-        # EVERY value in details, not a hand-listed subset of keys. The list was
-        # created_by/principal_id/assignment_id, which missed
-        # `role_definition_guid` - so an analysis correctly naming the custom
-        # role it was shown got accused of inventing an identity. Caught against
-        # the real 2026-08-06 subscription report. Whatever the report carries,
-        # the narrative may cite; enumerating keys guarantees the next miss.
-        for val in (row.get("details") or {}).values():
-            if isinstance(val, (str, int)):
-                actors.add(str(val).lower())
-    # A guid the report carries INSIDE a resource id is still an identifier the
-    # report carries. Without this, `_known_actors` holds the full ARM path
-    # while `_GUID` extracts the bare guid, they never match, and an analysis
-    # quoting a resource id verbatim is accused of inventing an actor. A check
-    # that fires on correct output gets muted, and a muted check still looks
-    # like coverage.
-    for value in list(actors):
-        actors.update(m.lower() for m in _GUID.findall(value))
-    return actors
+    """Every identifier the report carries, wherever it carries it.
+
+    Deliberately the WHOLE report and not a walk of chosen fields. That approach
+    has now been wrong three times, each fix enumerating one more key while the
+    next real report found the next gap: `role_definition_guid` missing from a
+    hand-listed `details` subset, then guids buried inside resource ids, then
+    the subscription guid in `lifecycle.resource_id` - which is in all 42 rows
+    of `policy_enforced_estate` and got a correct analysis accused of inventing
+    an identity.
+
+    The question here is "did the narrative name an identity the report does not
+    contain?", so the only honest denominator is the report. Anything narrower
+    is a guess about where identities live, and this check firing on correct
+    output is worse than it not existing - a check people learn to ignore still
+    looks like coverage.
+
+    Extracting the same two shapes the narrative side extracts keeps the
+    comparison symmetric; misusing an identity that IS present is a different
+    failure, and `check_no_unearned_attribution` owns it.
+    """
+    blob = json.dumps(report)
+    return ({m.lower() for m in _GUID.findall(blob)}
+            | {m.lower() for m in _EMAIL.findall(blob)})
 
 
 def check_no_fabricated_actor(report, analysis):
