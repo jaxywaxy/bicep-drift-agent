@@ -22,6 +22,12 @@ from .template import (
 
 _PARAM_REF_RE = re.compile(r"parameters\(\s*'([^']+)'\s*\)")
 
+# Bicep names a module's deployment after its symbolic name, usually suffixed to
+# keep it unique: `format('networking-{0}', uniqueString(subscription().id))`.
+# The symbolic name is the first literal; the suffix is a format placeholder.
+_MODULE_LITERAL_RE = re.compile(r"'([^']*)'")
+_MODULE_FORMAT_ARG_RE = re.compile(r"\{\d+\}")
+
 
 def _declared_types(resource: dict) -> set[str]:
     """Every resource TYPE this declaration would deploy.
@@ -138,6 +144,49 @@ def _normalize_resource(resource: dict, parameters: dict, variables: dict = None
     normalized["_raw"] = resource
 
     return normalized
+
+
+def _module_label(name: Any) -> str | None:
+    """The stable part of a module deployment's name, or None.
+
+    This is the module boundary, which usually mirrors the team boundary in a
+    real estate - platform fabric in one module, the workload in another - so it
+    is far better evidence of ownership than the resource TYPE, which is
+    identical whoever deployed it. Consumed by tools/ownership.py.
+
+    Returns None rather than a guess when there is no usable name: an absent
+    label falls through to the next ownership rule, while a wrong one would
+    route drift to a team that does not own it.
+
+    Read from the LITERAL text of the declaration rather than by resolving it.
+    Resolution is the wrong tool here: for an expression it cannot evaluate the
+    resolver substitutes a description - a module named only
+    `uniqueString(subscription().id)` comes back as 'subscription-context' - and
+    a description is not a name. Reading the literal needs no list of sentinel
+    strings to keep current, which is the kind of enumeration that goes stale.
+    """
+    if not isinstance(name, str):
+        return None
+    raw = name.strip()
+    if raw.startswith("[") and raw.endswith("]"):
+        inner = raw[1:-1].strip()
+        # `variables('moduleName')` quotes the IDENTIFIER, not the value. Taking
+        # the literal would label the module 'moduleName'; resolving instead
+        # would reintroduce the sentinel problem above. Decline: an absent label
+        # falls through to the type rules, while a wrong one routes drift to a
+        # team that does not own it.
+        if inner.startswith(("variables(", "parameters(")):
+            return None
+        literal = _MODULE_LITERAL_RE.search(inner)
+        if not literal:
+            return None
+        label = literal.group(1)
+    else:
+        label = raw
+    # Bicep's uniquifying suffix: 'networking-{0}' -> 'networking'. Removing the
+    # token rather than truncating at it also handles '{0}-networking'.
+    label = _MODULE_FORMAT_ARG_RE.sub("", label).strip("-_/ ")
+    return label or None
 
 
 def flatten_resources(arm_template: dict, parameters: dict = None, variables: dict = None,
@@ -258,11 +307,21 @@ def flatten_resources(arm_template: dict, parameters: dict = None, variables: di
                 # widening this does not pull same-sub resources into that path.)
                 if target_rg:
                     target_rg = _resolve_value(target_rg, parameters, variables)
+                # The module this resource was declared in - the ownership
+                # signal. Built as a PATH ('apps/keyvault') rather than
+                # setdefault, because for a module nested inside a module both
+                # levels are meaningful: the outer says which team, the inner
+                # says which component. Recursion sets the inner first, so the
+                # outer prepends.
+                module_label = _module_label(resource.get("name"))
                 for nr in nested_resources:
                     if target_sub:
                         nr.setdefault("_target_subscription", target_sub)
                     if target_rg:
                         nr.setdefault("_target_rg", target_rg)
+                    if module_label:
+                        inner = nr.get("_module")
+                        nr["_module"] = f"{module_label}/{inner}" if inner else module_label
                 flattened.extend(nested_resources)
         else:
             normalized = _normalize_resource(resource, parameters, variables)

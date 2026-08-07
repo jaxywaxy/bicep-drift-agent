@@ -36,6 +36,73 @@ the scan itself runs as is ALWAYS treated as a deployer automatically
 (tools/activity_log.py:detect_scanning_identity), so this is only needed when
 a client deploys with a different identity than they scan with."""
 
+# ===== Ownership =====
+
+OWNERSHIP_MODEL_ENV = "DRIFT_OWNERSHIP_MODEL"
+"""Who owns a resource nothing else classifies: `platform` or `workload`.
+
+Defaults to `workload`, which is the historical behaviour and right for a
+workload landing zone. Set it to `platform` for an enterprise/platform LZ, where
+the platform team owns the whole subscription and the app-team default routes
+every finding to a team that cannot act on it (tools/ownership.py)."""
+
+MODULE_OWNERS_ENV = "DRIFT_MODULE_OWNERS"
+"""JSON mapping a Bicep module glob to an owner, e.g.
+
+    {"networking": "platform", "logging": "platform", "apps": "workload"}
+
+The module a resource is declared in says which codebase - and so which team -
+owns it. That beats classifying by resource TYPE, which is identical whoever
+deployed it. Longest matching pattern wins. Unmapped modules fall through to the
+type rules and then to DRIFT_OWNERSHIP_MODEL."""
+
+
+def ownership_default_owner() -> str:
+    """The owner to fall back on. Invalid values warn and keep the default."""
+    raw = os.environ.get(OWNERSHIP_MODEL_ENV, "").strip().lower()
+    if not raw:
+        return "workload"
+    if raw not in ("platform", "workload"):
+        logger.warning("%s must be 'platform' or 'workload', got %r - using 'workload'",
+                       OWNERSHIP_MODEL_ENV, raw)
+        return "workload"
+    return raw
+
+
+def module_owners() -> dict[str, str]:
+    """Parse DRIFT_MODULE_OWNERS. Returns {} and warns on anything malformed.
+
+    Bad config must not fail a scan, and must not half-apply: a partially
+    honoured ownership map would route some findings correctly and others
+    silently to the wrong team, which is harder to notice than no mapping.
+    """
+    raw = os.environ.get(MODULE_OWNERS_ENV, "").strip()
+    if not raw or raw == "null":
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError as e:
+        logger.warning("%s is not valid JSON, ignoring it: %s", MODULE_OWNERS_ENV, e)
+        return {}
+    if not isinstance(parsed, dict):
+        logger.warning("%s must be a JSON object of module-glob -> owner, got %s",
+                       MODULE_OWNERS_ENV, type(parsed).__name__)
+        return {}
+
+    out: dict[str, str] = {}
+    for pattern, owner in parsed.items():
+        owner_l = str(owner).strip().lower()
+        if not (isinstance(pattern, str) and pattern.strip()):
+            logger.warning("%s: skipping row with an empty module pattern", MODULE_OWNERS_ENV)
+            continue
+        if owner_l not in ("platform", "workload"):
+            logger.warning("%s: skipping %r - owner must be 'platform' or 'workload', got %r",
+                           MODULE_OWNERS_ENV, pattern, owner)
+            continue
+        out[pattern.strip()] = owner_l
+    return out
+
+
 # ===== LLM Pricing =====
 
 MODEL_PRICING_ENV = "DRIFT_MODEL_PRICING"

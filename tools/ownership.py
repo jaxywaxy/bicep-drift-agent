@@ -16,11 +16,32 @@ Nuance handled:
   change is attributed to WORKLOAD even though the NSG is PLATFORM.
 """
 
+import fnmatch
 from collections.abc import Iterable
 from typing import Any
 
 PLATFORM = "platform"
 WORKLOAD = "workload"
+
+
+def _owner_for_module(module: str | None, module_owners: dict | None) -> str | None:
+    """Owner for the module a resource was declared in, or None if unmapped.
+
+    LONGEST pattern wins, so `apps/*` can carve an exception out of `*` without
+    depending on dict order. Ties are broken alphabetically purely so the result
+    is deterministic - two equally-specific patterns disagreeing is a config
+    error, and a stable answer makes it a reproducible one.
+    """
+    if not module or not module_owners:
+        return None
+    matches = [
+        (pattern, owner) for pattern, owner in module_owners.items()
+        if fnmatch.fnmatch(module.lower(), str(pattern).lower())
+    ]
+    if not matches:
+        return None
+    pattern, owner = sorted(matches, key=lambda kv: (-len(kv[0]), kv[0]))[0]
+    return str(owner).lower()
 
 # Default platform-owned resource types (the network fabric a platform team
 # deploys via subscription vending / connectivity). Lowercased for comparison.
@@ -81,6 +102,9 @@ def classify_owner(
     resource_type: str,
     drift: dict[str, Any] | None = None,
     platform_types: Iterable[str] | None = None,
+    module: str | None = None,
+    module_owners: dict | None = None,
+    default_owner: str = WORKLOAD,
 ) -> str:
     """
     Return the owner ("platform" or "workload") for a drift finding.
@@ -91,16 +115,37 @@ def classify_owner(
             NSG-rules nuance). Optional.
         platform_types: optional override/extension of the platform-owned type set
             (from config). If provided, replaces the default set.
+        module: the Bicep module the resource was declared in (`_module`).
+        module_owners: per-LZ mapping of module glob -> owner.
+        default_owner: what to return when nothing else decides. Workload
+            preserves historical behaviour; a platform landing zone sets this to
+            "platform", where the app-team default is simply false.
 
     Rules (in order):
-      1. NSG securityRules (child type) -> workload.
-      2. If the drift is a property change and the only/again changed properties
-         are NSG securityRules -> workload.
+      0. Module mapping, when the operator configured one -> that owner.
+      1. Structural cases: policy assignments, deployment stacks, role
+         assignments (which follow what they grant access TO).
+      2. NSG securityRules, by type or by changed property -> workload.
       3. Resource type in the platform set -> platform.
-      4. Otherwise -> workload (default; app teams own their resources).
+      4. Otherwise -> `default_owner`.
+
+    Rule 0 is FIRST because it is the only rule backed by evidence rather than
+    inference. Resource type cannot decide ownership on its own: the same Key
+    Vault is platform-owned in a connectivity subscription and workload-owned in
+    an app team's spoke, so a type list is a guess that no amount of curation
+    makes right in both places. The module a resource is declared in is a
+    statement about which codebase owns it, which is what ownership means.
     """
     rtype = (resource_type or "").lower()
     types = {t.lower() for t in platform_types} if platform_types else DEFAULT_PLATFORM_TYPES
+
+    # 0. Explicit operator configuration beats every heuristic below, including
+    #    the deliberate carve-outs. An LZ that maps its networking module to
+    #    platform is saying its own NSG rules are not delegated, and it is in a
+    #    better position to know that than a default written here.
+    configured = _owner_for_module(module, module_owners)
+    if configured:
+        return configured
 
     # 0a. Policy assignments/exemptions are governance, full stop - platform.
     if rtype in (
@@ -127,8 +172,12 @@ def classify_owner(
         from .rbac import _scope_target_type
         target_type = _scope_target_type(scope)
         if target_type:
-            return classify_owner(target_type, None, platform_types)
-        return WORKLOAD
+            return classify_owner(target_type, None, platform_types,
+                                  default_owner=default_owner)
+        # An RG-scoped grant on nothing more specific. "App teams grant their own
+        # identities access to their own RG" is a DEFAULT, not a fact, so it
+        # follows default_owner - in a platform LZ every RG is platform's.
+        return default_owner
 
     # 1. Child security-rule resources are app-owned even though the NSG isn't.
     if rtype in WORKLOAD_OVERRIDE_TYPES:
@@ -149,5 +198,9 @@ def classify_owner(
     if rtype in types:
         return PLATFORM
 
-    # 4. Default: workload/app team.
-    return WORKLOAD
+    # 4. Nothing decided. Historically this was always "workload", which reads
+    #    the whole estate as an app team's - exactly backwards for a platform
+    #    landing zone, where every resource group, vault and workspace belongs to
+    #    the platform team and the app-team default routes their drift to a team
+    #    that cannot act on it.
+    return default_owner

@@ -542,6 +542,8 @@ The following environment variables are recognised.
 | `DRIFT_BICEP_TIMEOUT` | `120` | Seconds allowed for `az bicep build`. Raise for very large templates |
 | `DRIFT_WEBHOOK_TIMEOUT` | `10` | Seconds allowed per webhook POST |
 | `DRIFT_MODEL_PRICING` | — | JSON `{"<model-prefix>": [input, output]}` in USD per **million** tokens, overriding and extending the built-in price table (see below) |
+| `DRIFT_OWNERSHIP_MODEL` | `workload` | `platform` or `workload` — who owns a resource nothing else classifies (see [Ownership](#ownership)) |
+| `DRIFT_MODULE_OWNERS` | — | JSON `{"<module-glob>": "platform"\|"workload"}` mapping Bicep modules to owners |
 | `DRIFT_AGENT_MODEL` | the provider's own default | Model id for the analysis. Left unset it follows `DRIFT_LLM_PROVIDER`, so choosing a provider does not also force you to name one of its models |
 | `DRIFT_LLM_PROVIDER` (repo **variable** in CI) | `anthropic` | Which LLM backs the narrative analysis. Only `anthropic` ships today; the seam lives in `agent/llm/` and nothing above it touches a vendor SDK or response shape. An unrecognised value **fails loudly** rather than falling back — running against a provider you did not choose, and reporting it as if you had, is the failure this tool exists to prevent one level up |
 | `AZURE_OPENAI_ENDPOINT` | — | Required when `DRIFT_LLM_PROVIDER=azure_openai`. The resource endpoint, `https://<resource>.openai.azure.com/` |
@@ -549,6 +551,71 @@ The following environment variables are recognised.
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | Azure data-plane API version |
 | `AZURE_OPENAI_TOKEN_SCOPE` | public cloud | Entra audience for the data plane. Only set it for US Gov or China clouds, whose audiences differ — the default fails there with an opaque auth error |
 | `AZURE_OPENAI_API_KEY` | — | **Omit this.** Left unset, the provider uses `DefaultAzureCredential`, which is the entire reason to run Azure OpenAI: the workload identity CI already holds needs `Cognitive Services OpenAI User` on the account, and no LLM key is stored anywhere. Setting a key works, but trades that away |
+
+## Ownership
+
+Every actionable drift is tagged `platform` or `workload`, and notifications
+route on that tag. Get it wrong and the right finding reaches the wrong team.
+
+By default ownership is inferred from the **resource type** — the network fabric
+is platform, everything else is workload. That is correct for a workload landing
+zone and **wrong for a platform one**: on an enterprise LZ the platform team owns
+the whole subscription, so type inference tags its Key Vaults, Cosmos, storage,
+workspaces and even its resource groups as `workload` and pages the app team for
+the platform estate.
+
+Type cannot decide this on its own. The same Key Vault is platform-owned in a
+connectivity subscription and workload-owned in an app team's spoke, so no
+curated type list is right in both places.
+
+Two settings fix it, and both are per-check keys in the landing zone's
+`.github/drift-lz-config.yml`:
+
+```yaml
+checks:
+  - name: Platform Landing Zone
+    path: envs/prod/main.bicep
+    subscription_scoped: true
+    resource_groups: ["*"]
+
+    # Everything the type rules don't classify belongs to the platform team.
+    ownership_model: platform
+
+    # ...except the modules that genuinely are a workload.
+    module_owners:
+      apps: workload
+      storage-apps: workload
+```
+
+Resolution order — the first rule that decides, wins:
+
+| | Rule | Source |
+|---|---|---|
+| 1 | `module_owners` match | evidence: which codebase declares it |
+| 2 | Structural cases (policy assignments, deployment stacks, role assignments) | inherent |
+| 3 | NSG `securityRules` → workload | built-in carve-out |
+| 4 | Resource type in the platform set | heuristic |
+| 5 | `ownership_model` | your declared default |
+
+`module_owners` is first because it is the only rule backed by evidence rather
+than inference — it therefore also overrides the `securityRules` carve-out, since
+an LZ mapping its networking module to `platform` is stating its own rules are
+not delegated, and it knows that better than a default written here.
+
+Notes:
+
+- **Both settings are optional and inert when unset.** An LZ that configures
+  neither behaves exactly as before, so this changes nothing for existing zones.
+- **Module names are Bicep's symbolic names** — `module networking './modules/networking/main.bicep'`
+  matches `networking`. A module nested in a module matches on its path
+  (`apps/keyvault`), and globs work (`storage-*`).
+- **Longest matching pattern wins**, so `apps/*` carves an exception out of `*`
+  regardless of the order the config is written in.
+- **Only resources Bicep declares have a module.** An `extra_in_azure` finding
+  has none by definition and falls through to the rules below.
+- **A malformed `module_owners` is ignored with a warning, never half-applied** —
+  a partially honoured map routes some findings correctly and others silently to
+  the wrong team, which is harder to notice than no map at all.
 
 ## Model pricing
 

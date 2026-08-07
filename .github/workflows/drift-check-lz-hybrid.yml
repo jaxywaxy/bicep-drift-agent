@@ -294,6 +294,16 @@ jobs:
           # scoped to one conditional module: {"deployVirtualHub": true}). Absent
           # -> 'null' and no overrides are applied. JSON, untrusted-input pattern.
           CHECK_PARAMS: ${{ toJson(matrix.check.params) }}
+          # Who owns a resource nothing else classifies. Absent -> '' -> the
+          # historical 'workload' default. A platform/enterprise LZ sets
+          # `ownership_model: platform`, where classifying by resource type reads
+          # the platform team's own subscription as an app team's and routes
+          # every notification to a team that cannot act on it.
+          DRIFT_OWNERSHIP_MODEL: ${{ matrix.check.ownership_model }}
+          # Optional module-glob -> owner map, e.g. {"apps": "workload"}. The
+          # module a resource is declared in says which codebase owns it, which
+          # beats classifying by type. Absent -> 'null' -> no mapping.
+          DRIFT_MODULE_OWNERS: ${{ toJson(matrix.check.module_owners) }}
         run: |
           BICEP_PATH="bicep-$CHECK_NAME/$CHECK_PATH"
           DRIFT_FILE="drift_$CHECK_NAME.txt"
