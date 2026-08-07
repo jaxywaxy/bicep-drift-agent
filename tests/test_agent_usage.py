@@ -77,6 +77,84 @@ class AgentUsageTests(unittest.TestCase):
         self.assertIn("2000 in / 1000 out", u.summary())
 
 
+class PricingOverrideTests(unittest.TestCase):
+    """The built-in table is Anthropic-only, so the provider swap left the cost
+    line reading "unknown". DRIFT_MODEL_PRICING keeps it current without a code
+    change - Azure OpenAI rates vary by region and tier, so there is no single
+    correct row to ship."""
+
+    def _cost(self, model, pricing=None, inp=1_000_000, out=1_000_000):
+        env = {"DRIFT_MODEL_PRICING": pricing} if pricing is not None else {}
+        with mock.patch.dict(os.environ, env, clear=False):
+            if pricing is None:
+                os.environ.pop("DRIFT_MODEL_PRICING", None)
+            u = AgentUsage()
+            u.record(model, _usage(inp, out))
+            return u.cost_usd()
+
+    def test_an_override_prices_a_model_the_table_never_knew(self):
+        self.assertAlmostEqual(
+            self._cost("gpt-5-mini", '{"gpt-5-mini": [0.25, 2.00]}'), 2.25)
+
+    def test_without_an_override_that_model_has_no_price(self):
+        self.assertIsNone(self._cost("gpt-5-mini"),
+                          "an unpriced model must report tokens without dollars, not a guess")
+
+    def test_an_override_beats_a_built_in_row(self):
+        # Prices move; the operator's number must win over the shipped one.
+        self.assertAlmostEqual(
+            self._cost("claude-opus-4-8", '{"claude-opus-4-8": [1.00, 1.00]}'), 2.00)
+
+    def test_longest_matching_prefix_wins(self):
+        # Not cosmetic: with both rows present, first-match would bill mini at
+        # the full model's rate on dict order alone.
+        both = '{"gpt-5": [1.25, 10.00], "gpt-5-mini": [0.25, 2.00]}'
+        self.assertAlmostEqual(self._cost("gpt-5-mini", both), 2.25)
+        self.assertAlmostEqual(self._cost("gpt-5", both), 11.25)
+
+    def test_longest_prefix_wins_regardless_of_declaration_order(self):
+        reversed_order = '{"gpt-5-mini": [0.25, 2.00], "gpt-5": [1.25, 10.00]}'
+        self.assertAlmostEqual(self._cost("gpt-5-mini", reversed_order), 2.25)
+
+    def test_malformed_pricing_leaves_cost_unknown_rather_than_wrong(self):
+        # A pricing typo must never fail a scan, and must never half-parse into
+        # a number someone is billed against.
+        for bad in ('{oops', '[1, 2]', '{"gpt-5-mini": 0.25}',
+                    '{"gpt-5-mini": [0.25]}', '{"gpt-5-mini": ["a", "b"]}',
+                    '{"gpt-5-mini": [-1, 2]}', '{"gpt-5-mini": [true, true]}'):
+            with self.subTest(bad=bad):
+                with self.assertLogs("tools.config", level="WARNING"):
+                    self.assertIsNone(self._cost("gpt-5-mini", bad))
+
+    def test_one_bad_row_does_not_discard_the_good_ones(self):
+        with self.assertLogs("tools.config", level="WARNING"):
+            self.assertAlmostEqual(
+                self._cost("gpt-5-mini", '{"gpt-5-mini": [0.25, 2.00], "bad": [1]}'), 2.25)
+
+    def test_summary_names_the_variable_that_would_fix_it(self):
+        u = AgentUsage()
+        u.record("gpt-5-mini", _usage(10, 10))
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DRIFT_MODEL_PRICING", None)
+            self.assertIn("DRIFT_MODEL_PRICING", u.summary())
+
+
+class PricingConfigValidationTests(unittest.TestCase):
+    def test_a_set_but_unusable_variable_is_surfaced(self):
+        # Silently ignored, the cost reads "unknown" and nobody connects it to
+        # the override they set.
+        from tools.config import validate_config
+        with mock.patch.dict(os.environ, {"DRIFT_MODEL_PRICING": "{oops"}):
+            with self.assertLogs("tools.config", level="WARNING"):
+                warnings = validate_config()
+        self.assertTrue(any("DRIFT_MODEL_PRICING" in w for w in warnings))
+
+    def test_a_valid_variable_produces_no_warning(self):
+        from tools.config import validate_config
+        with mock.patch.dict(os.environ, {"DRIFT_MODEL_PRICING": '{"gpt-5-mini": [0.25, 2.0]}'}):
+            self.assertFalse(any("DRIFT_MODEL_PRICING" in w for w in validate_config()))
+
+
 class CreateMessageRecordingTests(unittest.TestCase):
     def _agent(self):
         agent = DriftAgent(api_key="test-key", model="claude-opus-4-8")

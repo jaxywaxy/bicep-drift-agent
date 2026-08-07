@@ -541,6 +541,7 @@ The following environment variables are recognised.
 | `DRIFT_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `DRIFT_BICEP_TIMEOUT` | `120` | Seconds allowed for `az bicep build`. Raise for very large templates |
 | `DRIFT_WEBHOOK_TIMEOUT` | `10` | Seconds allowed per webhook POST |
+| `DRIFT_MODEL_PRICING` | — | JSON `{"<model-prefix>": [input, output]}` in USD per **million** tokens, overriding and extending the built-in price table (see below) |
 | `DRIFT_AGENT_MODEL` | the provider's own default | Model id for the analysis. Left unset it follows `DRIFT_LLM_PROVIDER`, so choosing a provider does not also force you to name one of its models |
 | `DRIFT_LLM_PROVIDER` (repo **variable** in CI) | `anthropic` | Which LLM backs the narrative analysis. Only `anthropic` ships today; the seam lives in `agent/llm/` and nothing above it touches a vendor SDK or response shape. An unrecognised value **fails loudly** rather than falling back — running against a provider you did not choose, and reporting it as if you had, is the failure this tool exists to prevent one level up |
 | `AZURE_OPENAI_ENDPOINT` | — | Required when `DRIFT_LLM_PROVIDER=azure_openai`. The resource endpoint, `https://<resource>.openai.azure.com/` |
@@ -548,6 +549,46 @@ The following environment variables are recognised.
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | Azure data-plane API version |
 | `AZURE_OPENAI_TOKEN_SCOPE` | public cloud | Entra audience for the data plane. Only set it for US Gov or China clouds, whose audiences differ — the default fails there with an opaque auth error |
 | `AZURE_OPENAI_API_KEY` | — | **Omit this.** Left unset, the provider uses `DefaultAzureCredential`, which is the entire reason to run Azure OpenAI: the workload identity CI already holds needs `Cognitive Services OpenAI User` on the account, and no LLM key is stored anywhere. Setting a key works, but trades that away |
+
+## Model pricing
+
+Every report carries the run's token usage and an estimated cost. The built-in
+price table is **Anthropic-only**, so after switching `DRIFT_LLM_PROVIDER` the
+cost line reads `unknown (no price for model)` — tokens are still counted, but
+there is no rate to multiply them by.
+
+`DRIFT_MODEL_PRICING` supplies one. It maps a model-id **prefix** to
+`[input, output]` in USD per **million** tokens, and overrides the built-in
+table where they overlap:
+
+```bash
+export DRIFT_MODEL_PRICING='{"gpt-5-mini": [0.25, 2.00]}'
+```
+
+In CI, set it as a repository variable so prices can be corrected without a code
+change:
+
+```bash
+gh variable set DRIFT_MODEL_PRICING --body '{"gpt-5-mini": [0.25, 2.00]}'
+```
+
+Notes:
+
+- **No Azure OpenAI rate ships by default, deliberately.** Those prices vary by
+  region and tier, so there is no single correct row — use the rate on your own
+  agreement rather than have the report state a number nobody checked.
+- **Keys are prefixes, and the longest match wins.** Pricing both `gpt-5` and
+  `gpt-5-mini` does the right thing; dated ids like
+  `claude-haiku-4-5-20251001` match their alias row.
+- **A malformed row is discarded with a warning, never half-parsed.** The cost
+  falls back to `unknown`, which is honest; a scan is never failed over a pricing
+  typo, since the drift result is the product and dollars are a reporting
+  nicety. `validate_config()` warns when the variable is set but yields no
+  usable rows, so an ignored override cannot look like a missing one.
+
+For reference, one analysis call on a rich payload (~35,600 in / 2,211 out) costs
+about **$0.013** on `gpt-5-mini` against **$0.233** on Claude Opus — but cost was
+never the argument for the swap; keyless Entra auth was.
 
 ## Notification variables
 

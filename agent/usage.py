@@ -9,12 +9,18 @@ dollars are not (returns None rather than guessing).
 from dataclasses import dataclass, field
 from typing import Any
 
+from tools.config import MODEL_PRICING_ENV, model_pricing_overrides
 
 
 # USD per million tokens (input, output), keyed by model-id prefix so dated
 # full IDs ('claude-haiku-4-5-20251001') match their alias row. Cache reads
 # bill at ~0.1x input, cache writes (5m TTL) at 1.25x input. Prices move -
 # treat a missing model as "tokens known, dollars unknown" rather than guess.
+#
+# Anthropic only, deliberately. Azure OpenAI prices vary by region and tier, so
+# there is no single correct row to ship for gpt-5-mini; set DRIFT_MODEL_PRICING
+# with the rate on your own agreement rather than have the report state a number
+# nobody checked.
 MODEL_PRICING_PER_MTOK = {
     "claude-opus-4-8": (5.00, 25.00),
     "claude-opus-4-7": (5.00, 25.00),
@@ -50,10 +56,19 @@ class AgentUsage:
 
     @staticmethod
     def _pricing_for(model: str):
-        for prefix, prices in MODEL_PRICING_PER_MTOK.items():
-            if model.startswith(prefix):
-                return prices
-        return None
+        """Longest matching prefix wins, operator rows beating built-ins.
+
+        Longest-wins is not cosmetic now that anyone can add a prefix: with both
+        `gpt-5` and `gpt-5-mini` priced, first-match would bill mini at the full
+        model's rate depending on dict order alone. Length is the only ordering
+        that makes the answer independent of how the table was written.
+        """
+        table = {**MODEL_PRICING_PER_MTOK, **model_pricing_overrides()}
+        best_prefix, best_prices = None, None
+        for prefix, prices in table.items():
+            if model.startswith(prefix) and (best_prefix is None or len(prefix) > len(best_prefix)):
+                best_prefix, best_prices = prefix, prices
+        return best_prices
 
     def cost_usd(self) -> float | None:
         """Estimated USD cost, or None when any model used has no price row."""
@@ -88,7 +103,10 @@ class AgentUsage:
 
     def summary(self) -> str:
         cost = self.cost_usd()
-        cost_str = f"${cost:.4f}" if cost is not None else "unknown (no price for model)"
+        # Name the fix in the message: "unknown" alone leaves an operator with
+        # no idea the cost line is one env var away from being right.
+        cost_str = (f"${cost:.4f}" if cost is not None
+                    else f"unknown (no price for model; set {MODEL_PRICING_ENV})")
         return (
             f"{self.calls} LLM call(s), {self.input_tokens} in / "
             f"{self.output_tokens} out tokens"
