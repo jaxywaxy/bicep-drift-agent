@@ -532,7 +532,7 @@ The following environment variables are recognised.
 
 | Variable | Default | Purpose |
 |-----------|---------|---------|
-| `ANTHROPIC_API_KEY` | — | Enables the Claude analysis. When absent, every deterministic stage still runs and the run logs the skip; only the narrative is lost |
+| `ANTHROPIC_API_KEY` | — | Required **only when `DRIFT_LLM_PROVIDER=anthropic`** (the default). Irrelevant under `azure_openai`, which authenticates with Entra. With no usable credential every deterministic stage still runs and the run logs the skip; only the narrative is lost |
 | `ARM_PARAMETERS` | — | JSON blob of parameter overrides. Takes precedence over `.bicepparam` and `parameters.json` |
 | `DRIFT_AUTHORIZED_DEPLOYERS` | — | Additional deployer identities (see below) |
 | `INCLUDE_ROLE_ASSIGNMENTS` | `true` | Set `false` to disable the RBAC sidecar |
@@ -544,8 +544,9 @@ The following environment variables are recognised.
 | `DRIFT_MODEL_PRICING` | — | JSON `{"<model-prefix>": [input, output]}` in USD per **million** tokens, overriding and extending the built-in price table (see below) |
 | `DRIFT_OWNERSHIP_MODEL` | `workload` | `platform` or `workload` — who owns a resource nothing else classifies (see [Ownership](#ownership)) |
 | `DRIFT_MODULE_OWNERS` | — | JSON `{"<module-glob>": "platform"\|"workload"}` mapping Bicep modules to owners |
+| `DRIFT_PLATFORM_TYPES` | built-in set | Comma-separated resource types treated as platform-owned, **replacing** the built-in list. Rarely needed — prefer `DRIFT_MODULE_OWNERS` |
 | `DRIFT_AGENT_MODEL` | the provider's own default | Model id for the analysis. Left unset it follows `DRIFT_LLM_PROVIDER`, so choosing a provider does not also force you to name one of its models |
-| `DRIFT_LLM_PROVIDER` (repo **variable** in CI) | `anthropic` | Which LLM backs the narrative analysis. Only `anthropic` ships today; the seam lives in `agent/llm/` and nothing above it touches a vendor SDK or response shape. An unrecognised value **fails loudly** rather than falling back — running against a provider you did not choose, and reporting it as if you had, is the failure this tool exists to prevent one level up |
+| `DRIFT_LLM_PROVIDER` (repo **variable** in CI) | `anthropic` | `anthropic` or `azure_openai` — **both ship**; see [Choosing a provider](#choosing-a-provider). The seam lives in `agent/llm/` and nothing above it touches a vendor SDK or response shape. An unrecognised value **fails loudly** rather than falling back — running against a provider you did not choose, and reporting it as if you had, is the failure this tool exists to prevent one level up |
 | `AZURE_OPENAI_ENDPOINT` | — | Required when `DRIFT_LLM_PROVIDER=azure_openai`. The resource endpoint, `https://<resource>.openai.azure.com/` |
 | `AZURE_OPENAI_DEPLOYMENT` | — | Required for Azure. The **deployment** name, which is not necessarily the model name — this is the single most common misconfiguration and surfaces as `DeploymentNotFound` |
 | `AZURE_OPENAI_API_VERSION` | `2024-10-21` | Azure data-plane API version |
@@ -617,6 +618,59 @@ Notes:
   a partially honoured map routes some findings correctly and others silently to
   the wrong team, which is harder to notice than no map at all.
 
+## Choosing a provider
+
+Both providers ship. Only the narrative analysis is affected — every
+deterministic stage (compile, live state, smart matching, ignore filtering,
+property drift, attribution, ownership) is provider-independent, and a clean
+estate skips the call entirely.
+
+| | `anthropic` | `azure_openai` |
+|---|---|---|
+| credential | `ANTHROPIC_API_KEY` secret | **none** — Entra via the workflow's existing OIDC identity |
+| extra config | — | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT` |
+| Azure prerequisite | — | `Cognitive Services OpenAI User` on the account (data plane; subscription Contributor is **not** enough) |
+| SDK | `anthropic` (in `requirements.txt`) | `openai` (installed only when selected) |
+
+**The reason to run Azure OpenAI is not cost — it is that there is no LLM key
+anywhere.** At one analysis call per scan the price difference is cents either
+way; the OIDC identity CI already holds does the authentication.
+
+### Switching
+
+Three repo **variables**, and leaving them unset keeps Anthropic:
+
+```bash
+gh variable set DRIFT_LLM_PROVIDER      --body azure_openai
+gh variable set AZURE_OPENAI_ENDPOINT   --body 'https://<resource>.openai.azure.com/'
+gh variable set AZURE_OPENAI_DEPLOYMENT --body '<deployment-name>'
+```
+
+`AZURE_OPENAI_DEPLOYMENT` is the **deployment** name, not the model name. That is
+the most common misconfiguration and surfaces as `DeploymentNotFound`.
+
+**Rolling back is instant**: clear `DRIFT_LLM_PROVIDER`. The Anthropic secret is
+still passed, so nothing else changes.
+
+**Do not set `AZURE_OPENAI_API_KEY`.** It works, and it silently gives up the
+only reason to be here. The provider logs a warning if you do.
+
+### What a provider swap actually costs you
+
+The prompt was implicitly tuned to whichever model it grew up with. When the
+provider first changed, the **domain** rules ported cleanly — the new model
+correctly refused locks-as-prevention and knew a redeploy will not remove a role
+assignment — while the **output-shape** conventions ported not at all, because
+they had never been written down. They are written down now (`agent/prompts.py`),
+but budget a round of shape rules per new vendor and expect the same split.
+
+Do not assess a swap by reading one report. `evals/checks.py` scores a narrative
+mechanically, and `.github/workflows/evals.yml` runs the fixture corpus through
+both providers so the comparison is a number rather than an impression. To
+compare candidate **models** on one provider, point `AZURE_OPENAI_DEPLOYMENT` at
+each in turn and score the same corpus — deployments on a pay-per-token SKU cost
+nothing while idle, so several can sit side by side.
+
 ## Model pricing
 
 Every report carries the run's token usage and an estimated cost. The built-in
@@ -629,15 +683,21 @@ there is no rate to multiply them by.
 table where they overlap:
 
 ```bash
-export DRIFT_MODEL_PRICING='{"gpt-5-mini": [0.25, 2.00]}'
+export DRIFT_MODEL_PRICING='{"gpt-5.6-sol": [5.00, 30.00]}'
 ```
 
 In CI, set it as a repository variable so prices can be corrected without a code
 change:
 
 ```bash
-gh variable set DRIFT_MODEL_PRICING --body '{"gpt-5-mini": [0.25, 2.00]}'
+gh variable set DRIFT_MODEL_PRICING --body '{"gpt-5.6-sol": [5.00, 30.00]}'
 ```
+
+Setting the variable is not enough on its own — it also has to reach the scan.
+It did not for a day: the variable was set, the cost line still read `unknown`,
+and that looked exactly like the designed "no price for this model" behaviour.
+`tests/test_workflow_env_coverage.py` now fails if a tunable the code reads is
+missing from `.github/workflows/drift-check-lz-hybrid.yml`.
 
 Notes:
 
@@ -653,9 +713,29 @@ Notes:
   nicety. `validate_config()` warns when the variable is set but yields no
   usable rows, so an ignored override cannot look like a missing one.
 
-For reference, one analysis call on a rich payload (~35,600 in / 2,211 out) costs
-about **$0.013** on `gpt-5-mini` against **$0.233** on Claude Opus — but cost was
-never the argument for the swap; keyless Entra auth was.
+### Finding the real rate
+
+Azure publishes list prices anonymously, and the meters are under **Foundry
+Models** rather than Cognitive Services:
+
+```bash
+curl -s "https://prices.azure.com/api/retail/prices?api-version=2023-01-01-preview&\$filter=contains(meterName,'5.6%20sol')"
+```
+
+Meter names encode the tier: `ShortCo`/`LongCo` is context length, `Inp`/`Opt`
+input/output, `Cd Inp`/`Cd Wr` cached-read/cache-write, `Std`/`PP` the purchasing
+mode, and `Gl`/`DZ` Global/DataZone. A **GlobalStandard** deployment wants the
+`Std` + `Gl` rows. For `gpt-5.6-sol` in australiaeast those are **$5.00 in /
+$30.00 out** per 1M tokens (short context), with cached input at $0.50.
+
+That is **list price**. The endpoint is anonymous and knows nothing about an EA,
+CSP or MACC discount, so treat it as an upper bound and use your agreement's rate
+if you have one — the whole point of this being configurable is that the report
+should never state a number nobody checked.
+
+One analysis call on a typical payload (~8,500 in / ~2,600 out) is about
+**$0.12** at those rates. Cost was never the argument for running Azure OpenAI;
+keyless Entra auth was.
 
 ## Notification variables
 
@@ -739,7 +819,7 @@ Notes:
 |----------|----------|
 | `BICEP_REPO_TOKEN` | PAT for cross-repo access: checkout of private LZ/bicep repos + publishing drift issues to LZ repos (needs `issues: write` there). Falls back to `github.token` (same-repo only) |
 | `DRIFT_WEBHOOK_*` | Slack/Teams notifications |
-| `ANTHROPIC_API_KEY` | AI-generated recommendations (default provider) |
+| `ANTHROPIC_API_KEY` | Narrative analysis, when `DRIFT_LLM_PROVIDER=anthropic` (the default). Not used by `azure_openai` |
 | *(none — Entra)* | With `DRIFT_LLM_PROVIDER=azure_openai` and no `AZURE_OPENAI_API_KEY`, the analysis needs **no stored secret at all**: it authenticates with the same OIDC workload identity used for every other Azure call. Requires `pip install openai` and the `Cognitive Services OpenAI User` role |
 
 ---

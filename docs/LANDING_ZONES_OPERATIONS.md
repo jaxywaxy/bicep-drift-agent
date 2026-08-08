@@ -59,6 +59,22 @@ Landing zone repositories contain the infrastructure definitions and configurati
 
 Each landing zone is registered in the central index.
 
+> **One repo can hold several landing zones, and they must not be confused.**
+> `subscription_id` lives at the top of a config file, so a second estate in a
+> different subscription needs its **own** config, its own index entry and its
+> own workflow — even when it shares the repo and the template lineage
+> (`envs/dev` and `envs/prod` of the same landing zone, for instance).
+>
+> Do not reach for the `subscription_id` **workflow_dispatch override** to point
+> one at the other's subscription. There is no matching *path* override, so the
+> check still compiles its original template: every declared resource reads as
+> `missing_in_azure` and every deployed one as `extra_in_azure`. The report is
+> not obviously broken — it is confidently wrong, which is worse.
+>
+> Where one subscription hosts more than one registered scope, scope each check
+> with a resource-group glob rather than `"*"`, or each will report the other's
+> resources as unmanaged on every run.
+
 ## Example
 
 ```yaml

@@ -273,6 +273,27 @@ Detected drift is enriched with:
 - Governance context
 - Policy awareness
 
+#### Evidence carried to the analysis
+
+Each finding also carries context the *report already holds* but a per-resource
+diff would not surface. Every field below exists because its absence produced a
+wrong or hedged answer on a live report — the recurring failure mode is not the
+model reasoning badly, it is the payload withholding something the pipeline knew.
+
+| Field | Answers | Why it exists |
+|---|---|---|
+| `live_context` | "what else is true of this resource?" | Sibling properties that did NOT drift. Bounds severity and decides whether a remediation is possible |
+| `unfinished_operation` | "was this deleted, or did a deploy fail?" | The latest lifecycle event that never reached `Succeeded`. A `create / Started` with no completion means the **deployment failed** — a missing Key Vault was reported as an unexplained disappearance when its redeploy had been blocked by a soft-deleted name |
+| `private_endpoints` | "is closing public access safe?" | Endpoints whose `privateLinkServiceId` targets this resource. Indexed from the endpoint, not the target's `privateEndpointConnections`, because only the endpoint reliably carries the link |
+| `related_policy_assignments` | "will this value come back?" | Assignments whose scope contains the resource. **Evidence, not attribution** — the payload has no definition effect, so it is a candidate cause to confirm, never proof |
+
+`related_policy_assignments` exists because attribution recognises only Azure's
+two **built-in** inherit-tag policies (`tools.policy.INHERIT_TAG_DEFINITIONS`). A
+**custom** Modify policy's imposed value therefore arrives as ordinary actionable
+drift attributed to whoever wrote it, and recommending a redeploy for a value the
+policy re-imposes is a loop. Surfacing the assignment lets the narrative name the
+risk without the pipeline having to claim an effect it cannot see.
+
 ### 6. Reporting and Notification
 
 Results are transformed into:
@@ -327,7 +348,7 @@ deliberately one module per resource family.
 | Sidecars | `tools/rbac.py`, `tools/policy.py`, `tools/deployment_stacks.py` | Identity-matched, fail-soft |
 | Attribution | `tools/activity_log.py`, `tools/change_origin.py` | Who, when, how |
 | Output | `tools/html_report.py`, `tools/send_notifications.py`, `tools/publish_lz_issue.py` | |
-| Agent | `agent/` | Claude analysis, prompts as a mixin |
+| Agent | `agent/` | Narrative analysis behind a provider seam (`agent/llm/`), prompts as a mixin |
 
 **`tools/live_state/collectors/` is load-bearing.** A structural test derives the
 set of collected types from that directory and fails if any of them is discarded
@@ -427,7 +448,7 @@ one produces a failure that a passing test suite will not catch.
 | **The JSON report is the single source of truth** | The HTML report, the CI summary and every downstream consumer read it. A drift absent from the final `drifts` array is reported nowhere |
 | **The bracketed `[MISSING]`/`[EXTRA]`/`[DRIFT]`/`[UNVERIFIED]` tokens belong to `_print_drift_summary` alone.** Phase 1's `format_drift_report` deliberately does not use them | Both used to appear in one CI log ~370 lines apart in the identical format, and Phase 1's list was already wrong by then — it named 13 extras of which six were reconciled away by smart matching, including a storage account the final summary correctly reported as *deleted*. Nothing machine-readable parses them (counts come from the JSON, see `tests/test_count_drifts.py`); the cost is that a human cannot answer "extra or deleted?" from the log |
 | **A drift row must be shown WITH the finding that explains it, not merely linked to it** | `orphaned_by_missing_resource_group` was populated correctly while rows were emitted in creation order, so one resource-group deletion read as three unrelated deletions with six role assignments in between. Linkage in the data is not the same as one finding in the report; `verify_lz_report.py` asserts adjacency |
-| **Claude is optional** | Every deterministic stage runs without `ANTHROPIC_API_KEY`; only the narrative is lost |
+| **The narrative is optional** | Every deterministic stage runs with no LLM credential at all; only the narrative is lost. Which provider supplies it is a config choice (`DRIFT_LLM_PROVIDER`), and nothing above `agent/llm/` touches a vendor SDK |
 
 ---
 

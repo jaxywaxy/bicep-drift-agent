@@ -243,6 +243,7 @@ jobs:
       # passed here. Shipped as config, documented as a repo variable, and
       # unplumbed for a day.
       DRIFT_MODEL_PRICING: ${{ vars.DRIFT_MODEL_PRICING || '' }}
+      DRIFT_PLATFORM_TYPES: ${{ vars.DRIFT_PLATFORM_TYPES || '' }}
       # The rest of the documented knobs. Every one of these was readable by the
       # code and settable in docs, and none of them reached a CI scan - the same
       # defect as the pricing variable, found by auditing rather than one at a
