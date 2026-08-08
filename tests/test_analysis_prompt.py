@@ -646,3 +646,106 @@ class RemediationSafetyPromptTests(unittest.TestCase):
         sp = DriftAgent._get_system_prompt()
         self.assertIn("every security-relevant property the template already declares", sp)
         self.assertIn("INTRODUCES drift", sp)
+
+
+class PrivateEndpointEvidenceTests(unittest.TestCase):
+    """live_context carries siblings of the SAME resource, which cannot answer
+    "is closing public access safe?" - that depends on a different resource.
+    Live: a Key Vault whose publicNetworkAccess was flipped to Enabled was
+    analysed with no reference to jacquiprod-pe-kv, which was in live_resources
+    the whole time. The narrative correctly refused to conclude."""
+
+    KV_ID = ("/subscriptions/s/resourceGroups/rg-apps/providers/"
+             "Microsoft.KeyVault/vaults/kv1")
+
+    def _findings(self, live):
+        from agent.drift_agent import DriftAgent
+        from tools.models import Drift, DriftReport
+        rep = DriftReport(bicep_file="m.bicep", resource_group="rg-apps",
+                          live_resources=live,
+                          drifts=[Drift(resource_type="Microsoft.KeyVault/vaults",
+                                        resource_name="kv1", drift_type="property_drift",
+                                        details={}, resource_id=self.KV_ID)])
+        return DriftAgent.__new__(DriftAgent)._build_findings(rep)
+
+    def _pe(self, target):
+        return {"type": "microsoft.network/privateendpoints", "name": "pe-kv",
+                "properties": {"subnet": {"id": "/x/subnets/snet-pe"},
+                               "privateLinkServiceConnections": [
+                                   {"properties": {"privateLinkServiceId": target,
+                                                   "groupIds": ["vault"],
+                                                   "privateLinkServiceConnectionState":
+                                                       {"status": "Approved"}}}]}}
+
+    def test_an_endpoint_targeting_the_resource_is_attached(self):
+        f = self._findings([self._pe(self.KV_ID)])[0]
+        self.assertEqual(f.private_endpoints[0]["name"], "pe-kv")
+        self.assertEqual(f.private_endpoints[0]["status"], "Approved")
+
+    def test_indexed_from_the_endpoint_not_the_target(self):
+        # The target echoes privateEndpointConnections for some types and not
+        # others; only the endpoint reliably carries the link.
+        kv = {"type": "microsoft.keyvault/vaults", "name": "kv1", "id": self.KV_ID,
+              "properties": {}}   # no privateEndpointConnections echo at all
+        f = self._findings([kv, self._pe(self.KV_ID)])[0]
+        self.assertIsNotNone(f.private_endpoints)
+
+    def test_an_endpoint_for_a_different_resource_is_not_attached(self):
+        f = self._findings([self._pe("/subscriptions/s/.../vaults/other")])[0]
+        self.assertIsNone(f.private_endpoints)
+
+    def test_no_endpoints_means_none_not_empty_list(self):
+        self.assertIsNone(self._findings([])[0].private_endpoints)
+
+
+class RelatedPolicyAssignmentEvidenceTests(unittest.TestCase):
+    """Attribution recognises only the two BUILT-IN inherit-tag definitions, so
+    a CUSTOM Modify policy's imposed value arrives as ordinary actionable drift
+    attributed to whoever wrote it. Live: `drift-inherit-environment` rewrote
+    tags.environment on two resources and the pipeline credited the deployer."""
+
+    def _finding(self, resource_id, assignments):
+        from agent.drift_agent import DriftAgent
+        from tools.models import Drift, DriftReport
+        rep = DriftReport(bicep_file="m.bicep", resource_group="rg",
+                          policy_assignments=assignments,
+                          drifts=[Drift(resource_type="Microsoft.Storage/storageAccounts",
+                                        resource_name="stg", drift_type="property_drift",
+                                        details={}, resource_id=resource_id)])
+        return DriftAgent.__new__(DriftAgent)._build_findings(rep)[0]
+
+    ASSIGN = [{"name": "drift-env-tag", "display_name": "environment tag Modify",
+               "scope": "/subscriptions/s/resourceGroups/rg-logging",
+               "enforcement_mode": "Default", "definition_ref": "custom-def"}]
+
+    def test_an_assignment_whose_scope_contains_the_resource_is_attached(self):
+        f = self._finding("/subscriptions/s/resourceGroups/rg-logging/providers/x/stg",
+                          self.ASSIGN)
+        self.assertEqual([a["name"] for a in f.related_policy_assignments], ["drift-env-tag"])
+
+    def test_an_assignment_scoped_to_a_different_rg_is_not_attached(self):
+        # The live case: the rg-apps storage must NOT inherit the rg-logging
+        # assignment, or every finding grows a spurious candidate cause.
+        f = self._finding("/subscriptions/s/resourceGroups/rg-apps/providers/x/stg",
+                          self.ASSIGN)
+        self.assertIsNone(f.related_policy_assignments)
+
+    def test_a_subscription_scoped_assignment_reaches_everything_below(self):
+        subs = [dict(self.ASSIGN[0], scope="/subscriptions/s")]
+        f = self._finding("/subscriptions/s/resourceGroups/anything/providers/x/stg", subs)
+        self.assertIsNotNone(f.related_policy_assignments)
+
+    def test_no_assignments_is_none(self):
+        self.assertIsNone(self._finding("/subscriptions/s/x", []).related_policy_assignments)
+
+
+class EvidencePromptTests(unittest.TestCase):
+    def test_prompt_tells_it_what_a_private_endpoint_settles(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("closing public access is SAFE", sp)
+        self.assertIn("may remove the only route", sp)
+
+    def test_prompt_keeps_policy_assignments_as_evidence_not_attribution(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("`related_policy_assignments` is EVIDENCE, never attribution", sp)
+        self.assertIn("az policy assignment show", sp)

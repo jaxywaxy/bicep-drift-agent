@@ -81,3 +81,24 @@ class DriftFinding:
     # deleted this?" and "your deployment failed"; those have no remediation in
     # common.
     unfinished_operation: dict[str, Any] | None = None
+    # Private endpoints whose privateLinkServiceId targets THIS resource.
+    #
+    # live_context carries sibling properties of the same resource, which cannot
+    # answer "is closing public access safe?" - that depends on a DIFFERENT
+    # resource. Live: a Key Vault whose publicNetworkAccess had been flipped to
+    # Enabled was analysed without any reference to `jacquiprod-pe-kv`, which sat
+    # in live_resources the whole time. The narrative correctly refused to
+    # conclude, saying the report "proves public reachability was enabled but not
+    # that anonymous access is possible" - honest, and one lookup short of the
+    # actual answer.
+    private_endpoints: list[dict[str, Any]] | None = None
+    # Policy assignments whose scope contains this resource.
+    #
+    # EVIDENCE, not attribution: an in-scope assignment is a candidate
+    # explanation for a value that keeps returning, never proof. The report's
+    # own attribution only recognises the two BUILT-IN inherit-tag policies
+    # (tools.policy.INHERIT_TAG_DEFINITIONS), so a CUSTOM Modify policy's
+    # imposed value arrives as ordinary actionable drift attributed to whoever
+    # wrote it. Live: a custom `drift-inherit-environment` assignment rewrote
+    # tags.environment on two resources and the pipeline credited the deployer.
+    related_policy_assignments: list[dict[str, Any]] | None = None

@@ -84,9 +84,15 @@ class DriftClassifier:
         drifts = drift_report.drifts or []
 
         live_by_key = self._index_live_resources(drift_report.live_resources)
+        pe_by_target = self._index_private_endpoints(drift_report.live_resources)
+        assignments = getattr(drift_report, "policy_assignments", None)
         findings = [self._classify_drift(drift) for drift in drifts]
         for finding in findings:
             finding.live_context = self._extract_live_context(finding, live_by_key)
+            if finding.resource_id:
+                finding.private_endpoints = pe_by_target.get(finding.resource_id.lower())
+            finding.related_policy_assignments = self._assignments_in_scope(
+                finding.resource_id, assignments)
 
         severity_order = {
             DriftSeverity.CRITICAL: 0,

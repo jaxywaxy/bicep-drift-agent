@@ -142,7 +142,7 @@ class ThePipelineActuallyCallsItTests(unittest.TestCase):
                 mock.patch.object(run_drift_check, "_diff_states",
                                   return_value=[ResourceDrift(BLOB, "st1/default", "missing_in_azure")]), \
                 mock.patch.object(run_drift_check, "_run_rbac_sidecar"), \
-                mock.patch.object(run_drift_check, "_run_policy_sidecar", return_value={}), \
+                mock.patch.object(run_drift_check, "_run_policy_sidecar", return_value=({}, [])), \
                 mock.patch.object(run_drift_check, "_run_stack_sidecar"), \
                 mock.patch.object(run_drift_check, "format_drift_report", return_value=""), \
                 mock.patch.object(run_drift_check, "_save_phase1_report", side_effect=fake_save):

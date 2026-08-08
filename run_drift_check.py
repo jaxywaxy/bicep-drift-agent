@@ -535,7 +535,7 @@ def _run_policy_sidecar(arm_resources: list[dict], resource_group: str,
     tools.policy.resolve_policy_required_tags); {} when disabled or on failure.
     """
     if not policy_drift_enabled():
-        return {}
+        return {}, []
     logger.info("Step 4c: Checking policy assignments and exemptions...")
     try:
         live_pol, live_exemptions = fetch_policy_resources(
@@ -550,14 +550,19 @@ def _run_policy_sidecar(arm_resources: list[dict], resource_group: str,
         # REQUIRES, so Phase 3 can recognise an in-flight Modify it could never
         # see in the activity log. Costs one extra Resource Graph read (the RG's
         # own tags), not a per-resource call.
+        # The assignments themselves are returned too, not just what they
+        # REQUIRE. Attribution only recognises the two built-in inherit-tag
+        # definitions, so a custom Modify policy is invisible to it; handing the
+        # in-scope assignments to the analysis lets it name a candidate cause for
+        # a value that keeps coming back instead of inferring one from a name.
         return resolve_policy_required_tags(
             live_pol,
             fetch_resource_group_tags(os.environ.get("AZURE_SUBSCRIPTION_ID"),
                                       resource_group),
-        )
+        ), live_pol
     except Exception as e:
         logger.warning(f"Policy drift check failed (continuing without it): {e}")
-    return {}
+    return {}, []
 
 
 def _run_stack_sidecar(live_resources: list[dict], resource_group: str,
@@ -606,7 +611,8 @@ def _save_phase1_report(bicep_file: str, resource_group: str,
                         drifts: list[ResourceDrift],
                         policy_required_tags: dict | None = None,
                         collection_gaps: dict | None = None,
-                        condition_skipped: list | None = None) -> None:
+                        condition_skipped: list | None = None,
+                        policy_assignments: list | None = None) -> None:
     """Persist the raw Phase 1 report.
 
     A subscription-scope scan may use '*' or a glob selector (e.g. 'prefix-*');
@@ -636,6 +642,10 @@ def _save_phase1_report(bicep_file: str, resource_group: str,
                 # of one of these types is a parameter mismatch, not an unmanaged
                 # resource - see _annotate_condition_skipped.
                 "condition_skipped": condition_skipped or [],
+                # In-scope assignments as EVIDENCE for the analysis: an
+                # assignment whose scope contains a resource is a candidate
+                # explanation for a value that returns, never proof.
+                "policy_assignments": policy_assignments or [],
                 "drifts": [
                     {
                         "type": d.resource_type,
@@ -672,8 +682,8 @@ def run(bicep_file: str, resource_group: str):
 
     _run_rbac_sidecar(arm_resources, live_resources, resource_group, deployment_scope,
                       ignore_patterns, drifts)
-    policy_required_tags = _run_policy_sidecar(arm_resources, resource_group,
-                                               deployment_scope, ignore_patterns, drifts)
+    policy_required_tags, policy_assignments = _run_policy_sidecar(
+        arm_resources, resource_group, deployment_scope, ignore_patterns, drifts)
     _run_stack_sidecar(live_resources, resource_group, deployment_scope,
                        ignore_patterns, drifts)
 
@@ -681,7 +691,8 @@ def run(bicep_file: str, resource_group: str):
     logger.info(format_drift_report(drifts, resource_group))
     _save_phase1_report(bicep_file, resource_group, arm_resources, live_resources, drifts,
                         policy_required_tags, collection_gaps=gaps.as_dict(),
-                        condition_skipped=skipped.as_list())
+                        condition_skipped=skipped.as_list(),
+                        policy_assignments=policy_assignments)
 
 
 def _mark_unverified_missing(drifts, gaps) -> int:
