@@ -30,6 +30,8 @@ from evals.checks import (
     check_only_allowlisted_sections,
     check_commands_are_fenced,
     check_fences_start_at_column_zero,
+    check_does_not_delete_the_deployer,
+    check_snippets_use_the_declared_location,
     check_plan_is_flat,
     check_tldr_does_not_soften_what_the_body_confirms,
     check_does_not_over_unify_across_time,
@@ -607,3 +609,81 @@ class OneStoryPromptTests(unittest.TestCase):
         self.assertIn("One `###` heading per STORY, not per row", sp)
         self.assertIn("one story, many resources", sp)
         self.assertIn("Split only where the CAUSE differs", sp)
+
+
+def _deployer_report(deployer="ef83bff1-c6c1-4cb1-84be-9bd758e8fc41"):
+    """A report where one Owner grant belongs to the identity that deploys it -
+    the shape of the first live prod scan."""
+    return _report(drifts=[
+        {"type": "Microsoft.Storage/storageAccounts", "name": "stg1",
+         "drift_type": "matched_unresolvable", "details": {},
+         "change_origin": {"origin": "authorized_deployment", "changed_by": deployer,
+                           "severity": "low"}},
+        {"type": "Microsoft.Authorization/roleAssignments",
+         "name": f"Owner -> ServicePrincipal:{deployer}", "drift_type": "extra_in_azure",
+         "details": {"principal_id": deployer, "role_name": "Owner",
+                     "assignment_id": "/subscriptions/s/providers/Microsoft.Authorization/"
+                                      "RoleAssignments/82af86cc-a782-4dfd-aa65-6da956955a41"},
+         "change_origin": {"origin": "unknown", "changed_by": None, "severity": "medium"}},
+    ])
+
+
+class DoesNotDeleteTheDeployerTests(unittest.TestCase):
+    """Observed live: three subscription Owner grants listed for deletion, one
+    of them the service principal the SAME report credits with five
+    authorized_deployment changes. Running it breaks every future deploy,
+    including the remediation proposed two steps earlier."""
+
+    def test_deleting_the_deployers_grant_is_flagged(self):
+        analysis = ("```bash\naz role assignment delete --ids /subscriptions/s/providers/"
+                    "Microsoft.Authorization/RoleAssignments/82af86cc-a782-4dfd-aa65-6da956955a41\n```")
+        v = check_does_not_delete_the_deployer(_deployer_report(), analysis)
+        self.assertTrue(v)
+        self.assertIn("ef83bff1", v[0])
+
+    def test_flagging_the_grant_without_deleting_it_passes(self):
+        # Questioning a standing Owner is CORRECT - only the bare delete is not.
+        analysis = ("This Owner grant belongs to the deployment pipeline. Narrow it to "
+                    "Contributor or declare it in Bicep rather than removing it.")
+        self.assertEqual(check_does_not_delete_the_deployer(_deployer_report(), analysis), [])
+
+    def test_deleting_an_unrelated_grant_is_not_flagged(self):
+        analysis = ("```bash\naz role assignment delete --ids /subscriptions/s/providers/"
+                    "Microsoft.Authorization/RoleAssignments/00000000-0000-0000-0000-000000000000\n```")
+        self.assertEqual(check_does_not_delete_the_deployer(_deployer_report(), analysis), [])
+
+    def test_no_deployer_in_the_report_means_nothing_to_protect(self):
+        report = _report(drifts=[{"type": "Microsoft.Authorization/roleAssignments",
+                                  "name": "Owner -> User:x", "drift_type": "extra_in_azure",
+                                  "details": {"principal_id": "abc"}, "change_origin": {}}])
+        self.assertEqual(check_does_not_delete_the_deployer(
+            report, "az role assignment delete --ids abc"), [])
+
+
+class SnippetsUseTheDeclaredLocationTests(unittest.TestCase):
+    """A snippet is applied, so a guessed region is a defect. Live: replacement
+    Bicep for an australiaeast estate hardcoded eastus, twice."""
+
+    REPORT = {"drifts": [], "drift_count": 0,
+              "arm_resources": [{"type": "Microsoft.KeyVault/vaults", "name": "kv",
+                                 "location": "australiaeast"}]}
+
+    def test_a_guessed_region_is_flagged(self):
+        v = check_snippets_use_the_declared_location(self.REPORT, "  location: 'eastus'\n")
+        self.assertTrue(v)
+        self.assertIn("australiaeast", v[0])
+
+    def test_the_declared_region_passes(self):
+        self.assertEqual(check_snippets_use_the_declared_location(
+            self.REPORT, "  location: 'australiaeast'\n"), [])
+
+    def test_unknown_locations_are_not_treated_as_declared(self):
+        # Child resources carry location 'unknown'; that must not authorise it.
+        report = {"drifts": [], "arm_resources": [
+            {"type": "x", "name": "y", "location": "unknown"},
+            {"type": "z", "name": "w", "location": "australiaeast"}]}
+        self.assertTrue(check_snippets_use_the_declared_location(report, "location: 'unknown'"))
+
+    def test_a_report_without_arm_resources_cannot_judge(self):
+        self.assertEqual(check_snippets_use_the_declared_location(
+            _report(), "location: 'eastus'"), [])

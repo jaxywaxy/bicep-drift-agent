@@ -92,6 +92,7 @@ def _run_claude_analysis(agent, report_data: dict):
             # change_origin instead of telling the user to pull Activity Logs.
             resource_id=(d.get("lifecycle") or {}).get("resource_id") or d.get("resource_id"),
             change_origin=d.get("change_origin"),
+            lifecycle=d.get("lifecycle"),
         )
         for d in report_data.get("drifts", [])
     ]

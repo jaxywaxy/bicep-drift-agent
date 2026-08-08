@@ -569,3 +569,80 @@ class LiveContextTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UnfinishedOperationTests(unittest.TestCase):
+    """The report held the evidence and the analysis never saw it.
+
+    Live: a Key Vault was missing because its redeploy was blocked by a
+    soft-deleted vault of the same name. The lifecycle carried
+    `create / Started` by the pipeline identity and no completion, but
+    DriftFinding carried only change_origin - which said "unknown, may predate
+    the logs". The analysis repeated that faithfully and then recommended
+    hand-writing a replacement vault, which would have hit the same block.
+    """
+
+    def _finding(self, events):
+        from agent.classification import DriftClassifier
+        from tools.models import Drift
+        return DriftClassifier()._classify_drift(Drift(
+            resource_type="Microsoft.KeyVault/vaults", resource_name="kv-abc123",
+            drift_type="missing_in_azure", details={},
+            lifecycle={"events": events}))
+
+    def test_a_started_create_is_surfaced_as_the_cause(self):
+        f = self._finding([{"operation": "create", "status": "Started",
+                            "actor": "ef83bff1", "timestamp": "2026-08-08T00:04:17Z"}])
+        self.assertIsNotNone(f.unfinished_operation)
+        self.assertEqual(f.unfinished_operation["status"], "Started")
+        self.assertIn("DEPLOYMENT failed", f.unfinished_operation["note"])
+
+    def test_a_succeeded_operation_is_not_flagged(self):
+        self.assertIsNone(self._finding(
+            [{"operation": "delete", "status": "Succeeded", "actor": "a"}]).unfinished_operation)
+
+    def test_the_latest_unfinished_operation_wins(self):
+        f = self._finding([
+            {"operation": "create", "status": "Failed", "timestamp": "2026-08-01T00:00:00Z"},
+            {"operation": "create", "status": "Started", "timestamp": "2026-08-08T00:00:00Z"}])
+        self.assertEqual(f.unfinished_operation["status"], "Started")
+
+    def test_no_lifecycle_is_not_an_error(self):
+        from agent.classification import DriftClassifier
+        from tools.models import Drift
+        f = DriftClassifier()._classify_drift(Drift(
+            resource_type="Microsoft.KeyVault/vaults", resource_name="kv",
+            drift_type="missing_in_azure", details={}))
+        self.assertIsNone(f.unfinished_operation)
+
+    def test_the_orchestrator_threads_lifecycle_onto_the_drift(self):
+        # The field existing on Drift is not enough - the builder has to fill
+        # it, and it read only lifecycle.resource_id before.
+        import inspect
+        from orchestration import analysis
+        self.assertIn("lifecycle=d.get(\"lifecycle\")", inspect.getsource(analysis))
+
+
+class RemediationSafetyPromptTests(unittest.TestCase):
+    """Three defects from the first live prod landing-zone report."""
+
+    def test_prompt_makes_unfinished_operation_outrank_unknown_origin(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("`unfinished_operation` on a finding is the CAUSE", sp)
+        self.assertIn("DEPLOYMENT FAILED", sp)
+
+    def test_prompt_sends_the_reader_to_the_soft_deleted_list(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("az keyvault list-deleted", sp)
+        self.assertIn("purge protection", sp.lower())
+
+    def test_prompt_forbids_deleting_the_deployers_role(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("NEVER recommend deleting a role assignment held by an identity", sp)
+        # Questioning the grant must stay allowed - only the bare delete is out.
+        self.assertIn("narrowing the role", sp)
+
+    def test_prompt_requires_snippets_to_carry_declared_security_properties(self):
+        sp = DriftAgent._get_system_prompt()
+        self.assertIn("every security-relevant property the template already declares", sp)
+        self.assertIn("INTRODUCES drift", sp)

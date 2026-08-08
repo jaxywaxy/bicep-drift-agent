@@ -129,7 +129,35 @@ class DriftClassifier:
             reason=reason,
             details=details,
             change_origin=getattr(drift, "change_origin", None),
+            unfinished_operation=self._unfinished_operation(drift),
         )
+
+    @staticmethod
+    def _unfinished_operation(drift: Drift) -> dict[str, Any] | None:
+        """The latest lifecycle event that did not reach 'Succeeded'.
+
+        Azure logs a long-running write as Started and then Succeeded or Failed.
+        A Started with no completion means the operation is still running or
+        gave up - which for a missing resource usually means the DEPLOYMENT
+        failed, not that anyone deleted anything.
+        """
+        events = (getattr(drift, "lifecycle", None) or {}).get("events") or []
+        for event in reversed(events):
+            status = str(event.get("status") or "").lower()
+            if status and status != "succeeded":
+                return {
+                    "operation": event.get("operation"),
+                    "status": event.get("status"),
+                    "actor": event.get("actor"),
+                    "timestamp": event.get("timestamp"),
+                    "note": (
+                        "This operation never completed. For a resource reported "
+                        "missing, a create that started and did not succeed means "
+                        "the DEPLOYMENT failed - investigate why it failed before "
+                        "treating the resource as deleted or recreating it by hand."
+                    ),
+                }
+        return None
 
     def _honour_attribution(
         self,
