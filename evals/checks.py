@@ -32,6 +32,21 @@ _GUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 _SOFTENERS = ("benign", "no action", "cosmetic", "nothing to do", "safe to ignore",
               "no remediation", "expected and safe")
+# Sentences that DENY a claim rather than make it. Anthropic wrote "the PE has a
+# timestamp, the vault has none, so I cannot claim a single event" - a textbook
+# refusal to over-unify - and the phrase matcher failed it for containing the
+# words. Punishing the exact caution the rule asks for is the fastest way to get
+# a check muted, so the denial is removed before matching.
+_NEGATED_CLAIM = re.compile(
+    r"[^.\n]*\b(?:cannot|can't|could not|couldn't|do not|don't|does not|doesn't|"
+    r"no evidence|not|never|unverified|unable to)\b[^.\n]*[.\n]", re.I)
+
+
+def _strip_negated_claims(text: str) -> str:
+    """Drop sentences that negate, so a refusal is not read as an assertion."""
+    return _NEGATED_CLAIM.sub(" ", text)
+
+
 _UNIFYING = ("single event", "one event", "a single operation", "one action",
              "one operator action", "coherent single")
 _SEPARATING = ("distinct operation", "two operation", "separate operation",
@@ -108,6 +123,30 @@ def check_no_unearned_attribution(report, analysis):
 _NOT_A_FINDING = {"matched_unresolvable"}
 
 
+def _identifies(row) -> list[str]:
+    """Strings any one of which proves the narrative named this finding.
+
+    A sidecar comparator has no ARM name to use, so it synthesises one:
+    `Owner -> ServicePrincipal:8edd43ce-...`. No readable sentence quotes that
+    verbatim, and requiring it failed BOTH providers on a report where each had
+    described the grant properly, by role and principal. Accept any identifier
+    that unambiguously picks the finding out instead.
+    """
+    name = str(row.get("name") or "")
+    details = row.get("details") or {}
+    candidates = [name]
+    for key in ("principal_id", "assignment_id", "role_definition_guid"):
+        if details.get(key):
+            candidates.append(str(details[key]))
+    # The assignment's own guid, so quoting `RoleAssignments/<guid>` rather than
+    # the full ARM path still counts as naming it.
+    if details.get("assignment_id"):
+        candidates.append(str(details["assignment_id"]).rsplit("/", 1)[-1])
+    # The bare guid out of a synthetic name, for the same reason.
+    candidates += _GUID.findall(name)
+    return [c for c in candidates if c]
+
+
 def check_critical_findings_are_mentioned(report, analysis):
     """A critical finding the narrative never names will not be acted on."""
     low = analysis.lower()
@@ -118,9 +157,9 @@ def check_critical_findings_are_mentioned(report, analysis):
         sev = str(((row.get("change_origin") or {}).get("severity") or "")).lower()
         if sev not in ("critical", "high"):
             continue
-        name = str(row.get("name") or "")
-        if name and name.lower() not in low:
-            missing.append(f"{sev} finding {name!r} is never mentioned")
+        identifiers = _identifies(row)
+        if identifiers and not any(i.lower() in low for i in identifiers):
+            missing.append(f"{sev} finding {str(row.get('name'))!r} is never mentioned")
     return missing
 
 
@@ -164,7 +203,7 @@ def check_does_not_over_unify_across_time(report, analysis):
     span = (max(times) - min(times)).total_seconds()
     if span <= _ONE_EVENT_WINDOW_SECONDS:
         return []
-    low = analysis.lower()
+    low = _strip_negated_claims(analysis).lower()
     if any(p in low for p in _UNIFYING) and not any(p in low for p in _SEPARATING):
         return [f"calls a {int(span // 60)}-minute span a single event"]
     return []
@@ -367,6 +406,72 @@ def check_plan_is_flat(report, analysis):
     return []
 
 
+def check_does_not_delete_the_deployer(report, analysis):
+    """Never hand someone a command that revokes the pipeline's own access.
+
+    Observed live: three subscription Owner grants were listed for
+    `az role assignment delete`, one of them the service principal the SAME
+    report credits with five `authorized_deployment` changes. Running it breaks
+    every future deploy - including the remediation proposed two steps earlier.
+
+    Flagging a standing privileged grant is right; a bare delete command for the
+    deployer is not. This checks only the command, so "narrow this role" or
+    "move the grant into Bicep" still passes.
+    """
+    deployers = {
+        str((row.get("change_origin") or {}).get("changed_by") or "").lower()
+        for row in _rows(report)
+        if (row.get("change_origin") or {}).get("origin") == "authorized_deployment"
+    } - {""}
+    if not deployers:
+        return []
+
+    # Every identifier that would name the deployer's grant in a command.
+    targets = {}
+    for row in _rows(report):
+        details = row.get("details") or {}
+        principal = str(details.get("principal_id") or "").lower()
+        if principal and principal in deployers:
+            for ident in (details.get("assignment_id"), principal, row.get("name")):
+                if ident:
+                    targets[str(ident).lower()] = principal
+    if not targets:
+        return []
+
+    out = []
+    for line in analysis.splitlines():
+        low = line.lower()
+        if "role assignment delete" not in low:
+            continue
+        for ident, principal in targets.items():
+            if ident in low:
+                out.append(
+                    f"proposes deleting the role assignment of {principal!r}, which this "
+                    f"report attributes authorized deployments to - that is the pipeline")
+                break
+    return out
+
+
+def check_snippets_use_the_declared_location(report, analysis):
+    """A snippet is applied, so a guessed region is a defect, not a gap.
+
+    Observed live: replacement Bicep for an australiaeast estate hardcoded
+    `location: 'eastus'` twice, in a report that names the real location on
+    every declared resource.
+    """
+    declared = {
+        str(res.get("location") or "").lower()
+        for res in report.get("arm_resources") or []
+    } - {"", "unknown", "none"}
+    if not declared:
+        return []
+    return [
+        f"snippet uses location {loc!r}, but the template declares {sorted(declared)}"
+        for loc in {m.group(1).lower() for m in re.finditer(r"location:\s*'([^']+)'", analysis)}
+        if loc not in declared
+    ]
+
+
 def check_fences_start_at_column_zero(report, analysis):
     """A fence indented inside a list item is not a code block.
 
@@ -405,6 +510,8 @@ CHECKS = (
     check_plan_is_flat,
     check_commands_are_fenced,
     check_fences_start_at_column_zero,
+    check_does_not_delete_the_deployer,
+    check_snippets_use_the_declared_location,
     check_one_story_is_one_finding,
 )
 
