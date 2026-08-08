@@ -238,10 +238,10 @@ exercised them.
 | Activity Log attribution (who / when / how) | Live-proven | 2026-08-01 run — actors and timestamps matched the CI run event-for-event |
 | Policy-enforced split (DINE/Modify vs actionable) | Live-proven | 2026-08-01 run — 5 actionable vs 35 policy-enforced |
 | Smart matching (`uniqueString`/`guid`) | Live-proven | 2026-08-01 run — 34 resources reconciled |
-| Owner routing (platform/workload → channel) | Live-proven | Phase 4, 2026-07-06 |
+| Owner routing (platform/workload → channel) | Live-proven | Phase 4, 2026-07-06; **re-proven 2026-08-08 after the ownership model changed** — `platform-team: 3 event(s)` / `app-team: 2 event(s)`, matching the module split exactly. The July evidence predated `ownership_model`/`module_owners`, which rewires the tag routing keys off |
 | Deployer attribution (`DRIFT_AUTHORIZED_DEPLOYERS`) | Live-proven | 2026-08-01 — an unset variable reclassified two findings, confirming the path |
 | Notifications (Slack/Teams) | Live-proven | Phase 4 owner-routing round |
-| Claude analysis | Live-proven | Present in the 2026-08-01 CI report |
+| Narrative analysis | Live-proven | Present in the 2026-08-01 CI report (Anthropic) and the 2026-08-08 prod runs (Azure OpenAI) |
 | Scope integrity (unreadable RG, empty subscription) | Unit-tested + partial live | The abort path was verified end-to-end against a deleted RG on 2026-08-02; the *recovery* path was not |
 
 ---
@@ -251,13 +251,21 @@ exercised them.
 Stated here rather than left implicit:
 
 - **Backup detection.** Comparators run, have never caught anything live.
+- **Custom Modify policy attribution.** Only Azure's two BUILT-IN inherit-tag
+  definitions are recognised, so a custom Modify policy's imposed value is
+  reported as ordinary actionable drift attributed to whoever wrote it
+  (2026-08-08). The assignment is now surfaced to the narrative as evidence,
+  which is a mitigation, not attribution.
 - **A deleted resource group at subscription scope.** Implemented with tests and
   an orphan-attribution pass; no landing zone has been deleted to prove it.
 - **Row-level attribution for colliding role assignments.** Rows are now distinct,
   but both still fall to the Activity Log type fallback and may adopt the same
   event. Identity is fixed; attribution is not.
 - **The `revert → clean` half of several rounds.** Where a round is cited as
-  detecting drift, re-verifying the *revert* is not always recorded.
+  detecting drift, re-verifying the *revert* is not always recorded. Now
+  recorded for 2026-08-08: five injections reverted and `drift_count` returned
+  to exactly the 3-grant baseline, no residue. Earlier rounds remain unverified
+  on this half.
 
 ---
 
@@ -325,3 +333,53 @@ tests cannot. The guard then failed to catch #7 — it asserted orphans were
 LINKED, never that they were SHOWN together or shown in every section — and was
 itself untested until #388. Both gaps are closed.
 
+
+---
+
+## The 2026-08-08 platform-LZ round — first clean baseline, and a completed injection round
+
+The first round run against a **verified-clean estate**. Two previous attempts at
+grading remediation advice were destroyed when the estate was torn down
+mid-test, so "the report said something wrong" could never be separated from
+"the estate moved". This one held still.
+
+Estate: `azure-landingzone-bicep` `envs/prod` in `sub-lz-bicep`, registered as
+the `landingzone-prod` landing zone.
+
+### Proven
+
+| Property | Evidence |
+|---|---|
+| **Zero false positives on a clean estate** | Fresh deploy → `drift_count: 3`, being exactly the three standing subscription Owner grants. 0 `missing_in_azure`, 0 property drift, 6 `matched_unresolvable` correctly excluded |
+| **Detection of five injected drifts** | 6/6 found, including both storage properties collapsed into ONE finding and both policy-tagged resources |
+| **Revert symmetry** | After reverting, `drift_count` returned to exactly 3 — no residue. Detection and revert agree in both directions, which is what makes a baseline trustworthy across rounds |
+| **Ownership by declaring module** | `{'workload': 16, 'platform': 5}` → `{'platform': 26, 'workload': 2}`, the two survivors being precisely the resources declared in the `apps` module |
+| **Remediation advice correct on a live case** | The agent diagnosed the missing Key Vault as *"a failed deployment, not evidence that somebody deleted it"* and recommended checking for a soft-deleted name collision. Purging the soft-deleted vault unblocked the deploy — the vault and its private endpoint returned |
+| **`private_endpoints` changes the answer** | Same injection, before: *"proves public reachability was enabled but not that anonymous access is possible."* After: *"the approved `jacquiprod-pe-kv` private endpoint provides a working private path. Closing public access is therefore safe … only consumers currently using the public endpoint will break"* |
+| **`related_policy_assignments` used without overclaiming** | *"a candidate explanation for values that return after deployment. The payload does not contain the definition effect"* — then the conditional loop warning |
+
+### Defects found
+
+| # | Defect | Fix |
+|---|---|---|
+| 1 | Module lookup missed every **uniqueString-named** resource: the drift carries the resolved name, the template the expression, and `bicep_name_expression` (the field that bridges them) exists only on drift rows — the index was reading it off `arm_resources`. Five apps-module resources were tagged `platform` | #408 |
+| 2 | The **column-0 fence rule was never checked**. All 22 fences in one report were indented; every check passed and the rendered HTML contained zero `<pre>` blocks | #408 |
+| 3 | Findings could not see their **private endpoints**, so no `publicNetworkAccess` finding could conclude | #412 |
+| 4 | Attribution recognises only the two **built-in** inherit-tag policies, so a **custom** Modify policy's imposed value arrives as ordinary actionable drift attributed to the writer | #412 (evidence) |
+| 5 | **Seven documented tunables never reached a CI scan**, including all three sidecar disable switches. `DRIFT_MODEL_PRICING` was set as a repo variable and did nothing; the cost line read `unknown`, indistinguishable from the designed "no price for this model" | #413 |
+| 6 | `platform_types` had been advertised in its own comment as the config escape hatch since it was written, and no call site ever passed one | this round |
+
+### Two lessons worth keeping
+
+**The limiting factor was the payload, three times out of four.** The Key Vault
+cause, the private endpoint, and the policy candidate were all *in the report*
+and simply not handed to the analysis. Each time the narrative behaved correctly
+within its evidence and said so. Before treating a hedged or wrong answer as a
+model failure, check what the finding actually carried.
+
+**A knob that cannot be turned is worse than no knob**, because the
+documentation says otherwise. Two instances landed on the same day —
+`DRIFT_MODEL_PRICING` unplumbed and `platform_types` unpassed — so
+`tests/test_workflow_env_coverage.py` now fails if a tunable the code reads is
+missing from the reusable workflow. Its scanner has a guard-the-guard test,
+which immediately caught the scanner itself missing `DRIFT_MODEL_PRICING`.

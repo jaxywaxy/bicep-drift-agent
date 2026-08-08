@@ -203,3 +203,38 @@ class ModuleOwnershipTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PlatformTypesOverrideIsReachableTests(unittest.TestCase):
+    """`classify_owner` advertised a platform_types override in its own comment
+    and no call site ever passed one, so the documented escape hatch did not
+    exist. Same family as DRIFT_MODEL_PRICING being set and never plumbed."""
+
+    def test_the_env_var_parses_into_a_type_set(self):
+        import importlib
+        import os
+        from unittest import mock
+        with mock.patch.dict(os.environ,
+                             {"DRIFT_PLATFORM_TYPES": "Microsoft.Storage/storageAccounts, Foo/bar"}):
+            import tools.config as config
+            importlib.reload(config)
+            self.assertEqual(config.platform_types(),
+                             {"microsoft.storage/storageaccounts", "foo/bar"})
+
+    def test_unset_means_use_the_builtin_set(self):
+        import importlib
+        import os
+        from unittest import mock
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("DRIFT_PLATFORM_TYPES", None)
+            import tools.config as config
+            importlib.reload(config)
+            self.assertIsNone(config.platform_types())
+
+    def test_the_orchestrator_actually_passes_it(self):
+        # The field existing is not the same as it reaching classify_owner -
+        # which is exactly how it stayed dead.
+        import inspect
+
+        from orchestration import attribution
+        self.assertIn("platform_types=configured_types", inspect.getsource(attribution))

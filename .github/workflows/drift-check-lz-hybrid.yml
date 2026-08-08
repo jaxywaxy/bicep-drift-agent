@@ -231,6 +231,12 @@ jobs:
       DRIFT_LLM_PROVIDER: ${{ vars.DRIFT_LLM_PROVIDER || '' }}
       AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT || '' }}
       AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT || '' }}
+      # Documented as settable and, until now, unreachable. TOKEN_SCOPE is the
+      # one that bites: the docs tell a US Gov / China cloud operator to set it,
+      # and without this line they would set it, get the public-cloud audience
+      # anyway, and see an opaque auth error.
+      AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION || '' }}
+      AZURE_OPENAI_TOKEN_SCOPE: ${{ vars.AZURE_OPENAI_TOKEN_SCOPE || '' }}
       # Extra IaC deployer identities (object IDs/appIds/UPNs, comma-separated)
       # whose changes are attributed as pipeline deployments instead of manual
       # drift. The scanning identity is always recognised automatically; set
@@ -243,6 +249,7 @@ jobs:
       # passed here. Shipped as config, documented as a repo variable, and
       # unplumbed for a day.
       DRIFT_MODEL_PRICING: ${{ vars.DRIFT_MODEL_PRICING || '' }}
+      DRIFT_PLATFORM_TYPES: ${{ vars.DRIFT_PLATFORM_TYPES || '' }}
       # The rest of the documented knobs. Every one of these was readable by the
       # code and settable in docs, and none of them reached a CI scan - the same
       # defect as the pricing variable, found by auditing rather than one at a

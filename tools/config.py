@@ -108,6 +108,30 @@ def module_owners() -> dict[str, str]:
 
 # ===== LLM Pricing =====
 
+PLATFORM_TYPES_ENV = "DRIFT_PLATFORM_TYPES"
+"""Comma-separated resource types to treat as platform-owned, REPLACING the
+built-in set (tools/ownership.DEFAULT_PLATFORM_TYPES).
+
+`classify_owner` has accepted a `platform_types` override since it was written
+and its own comment advertised it - but no call site ever passed one and nothing
+read it from config, so the documented escape hatch did not exist. Most estates
+want `ownership_model` / `module_owners` instead; this is for the case where the
+TYPE fallback itself is wrong for a client."""
+
+
+def platform_types() -> set[str] | None:
+    """Parse DRIFT_PLATFORM_TYPES; None means "use the built-in set"."""
+    raw = os.environ.get(PLATFORM_TYPES_ENV, "").strip()
+    if not raw:
+        return None
+    types = {t.strip().lower() for t in raw.split(",") if t.strip()}
+    if not types:
+        logger.warning("%s is set but contains no resource types, ignoring it",
+                       PLATFORM_TYPES_ENV)
+        return None
+    return types
+
+
 MODEL_PRICING_ENV = "DRIFT_MODEL_PRICING"
 """JSON overriding and extending the built-in price table (agent/usage.py).
 
