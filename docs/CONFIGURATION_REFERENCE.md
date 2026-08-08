@@ -141,6 +141,7 @@ checks:
 | `subscription_id` | **Required in practice** | Azure subscription ID being scanned. The reusable workflow passes it through as `AZURE_SUBSCRIPTION_ID`, and the scan fails at live-state collection without it. It defaults to empty rather than erroring at config-validation time, so an omission surfaces as a failed scan rather than a clear config error. A `workflow_dispatch` run can override it |
 | `notifications` | No | Notification destinations and routing rules |
 | `checks` | Yes | List of Bicep scans to perform |
+| `resource_group` | — | **Accepted and ignored.** The loader reads it, but the job never exposes it as an output and nothing downstream consumes it. Scan scope comes from each check's `resource_groups`. Setting it has no effect |
 
 ---
 
@@ -176,6 +177,9 @@ checks:
 | `subscription_scoped` | No | Indicates the Bicep deploys at subscription scope |
 | `resource_groups` | Yes | List of resource groups or selectors |
 | `deployment_stack` | No | Deployment stack to evaluate. Omit unless the estate is deployed with `az stack` |
+| `params` | No | JSON object of Bicep parameter overrides for this check, e.g. `{"deployVirtualHub": true}`. Use it to scan a conditional module that is gated off by default — without it those declarations are skipped and their live resources read as unmanaged |
+| `ownership_model` | No | `platform` or `workload`. Who owns a resource nothing else classifies. Default `workload`; a platform landing zone wants `platform` — see [Ownership](#ownership) |
+| `module_owners` | No | Map of Bicep module glob → owner, e.g. `{apps: workload}`. Consulted BEFORE the type rules, because it is evidence rather than inference |
 
 ---
 
