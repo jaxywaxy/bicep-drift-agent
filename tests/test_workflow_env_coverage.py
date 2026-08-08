@@ -25,7 +25,10 @@ WORKFLOW = ROOT / ".github/workflows/drift-check-lz-hybrid.yml"
 # Read from the environment by the scan itself. Secrets and values the workflow
 # synthesises (DRIFT_NOTIFICATIONS, WEBHOOK_SECRETS) are covered too - they are
 # equally useless if unplumbed.
-_NAME = r"(DRIFT_[A-Z_]+|INCLUDE_[A-Z_]+|ARM_PARAMETERS)"
+# AZURE_* included after two Azure OpenAI variables were found documented
+# and unplumbed - the first version of this guard could not see them,
+# which is the same class of blind spot it exists to prevent.
+_NAME = r"(DRIFT_[A-Z_]+|INCLUDE_[A-Z_]+|AZURE_[A-Z_]+|ARM_PARAMETERS)"
 _ENV_READ = (
     # os.environ.get("DRIFT_X") / os.environ["DRIFT_X"]
     re.compile(r"""environ(?:\.get)?[\(\[]["']""" + _NAME + r"""["']"""),
@@ -59,6 +62,7 @@ class WorkflowPassesEveryTunableTests(unittest.TestCase):
         names = _env_vars_the_code_reads()
         self.assertIn("DRIFT_MODEL_PRICING", names)
         self.assertIn("INCLUDE_ROLE_ASSIGNMENTS", names)
+        self.assertIn("AZURE_OPENAI_TOKEN_SCOPE", names)
         self.assertGreater(len(names), 8, f"only found {sorted(names)}")
 
     def test_every_env_var_the_code_reads_is_passed_by_the_workflow(self):

@@ -109,7 +109,11 @@ class AzureOpenAIProvider:
                 "pip install openai"
             ) from e
 
-        version = api_version or os.environ.get("AZURE_OPENAI_API_VERSION", _DEFAULT_API_VERSION)
+        # `or`, not a get-default: an unset repo variable arrives as "" and an
+        # empty api-version reaches Azure as a malformed request rather than
+        # falling back. Same shape as the timeouts in tools/config.py.
+        version = (api_version or os.environ.get("AZURE_OPENAI_API_VERSION", "").strip()
+                   or _DEFAULT_API_VERSION)
         key = api_key or os.environ.get("AZURE_OPENAI_API_KEY")
         if key:
             # Loud on purpose. Entra is the entire reason to run this provider -

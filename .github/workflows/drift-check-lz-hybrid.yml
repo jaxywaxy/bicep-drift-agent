@@ -231,6 +231,12 @@ jobs:
       DRIFT_LLM_PROVIDER: ${{ vars.DRIFT_LLM_PROVIDER || '' }}
       AZURE_OPENAI_ENDPOINT: ${{ vars.AZURE_OPENAI_ENDPOINT || '' }}
       AZURE_OPENAI_DEPLOYMENT: ${{ vars.AZURE_OPENAI_DEPLOYMENT || '' }}
+      # Documented as settable and, until now, unreachable. TOKEN_SCOPE is the
+      # one that bites: the docs tell a US Gov / China cloud operator to set it,
+      # and without this line they would set it, get the public-cloud audience
+      # anyway, and see an opaque auth error.
+      AZURE_OPENAI_API_VERSION: ${{ vars.AZURE_OPENAI_API_VERSION || '' }}
+      AZURE_OPENAI_TOKEN_SCOPE: ${{ vars.AZURE_OPENAI_TOKEN_SCOPE || '' }}
       # Extra IaC deployer identities (object IDs/appIds/UPNs, comma-separated)
       # whose changes are attributed as pipeline deployments instead of manual
       # drift. The scanning identity is always recognised automatically; set
