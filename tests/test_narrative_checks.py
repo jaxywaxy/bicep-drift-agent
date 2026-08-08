@@ -29,6 +29,7 @@ from evals.checks import (
     check_no_unearned_attribution,
     check_only_allowlisted_sections,
     check_commands_are_fenced,
+    check_commands_are_not_repeated,
     check_fences_start_at_column_zero,
     check_does_not_delete_the_deployer,
     check_snippets_use_the_declared_location,
@@ -746,3 +747,37 @@ class ChecksMustNotFireOnCorrectOutputTests(unittest.TestCase):
                "change_origin": {"severity": "high", "origin": "manual_change"}}
         self.assertTrue(check_critical_findings_are_mentioned(
             _report(drifts=[row]), "The Key Vault is missing. Redeploy it."))
+
+
+class CommandsAreNotRepeatedTests(unittest.TestCase):
+    """Where the extra length actually went. On the live prod report gpt-5-mini
+    emitted 21 commands across 8 verbs - `az role assignment ...` seven times,
+    `az resource show` four - against Anthropic's 5. Its FINDINGS were leaner
+    than Anthropic's; the plan carried 31 lines of near-identical shell to 12.
+    The prompt has asked for one invocation since round 2 and nothing measured
+    it."""
+
+    def test_the_same_command_per_id_is_flagged(self):
+        analysis = ("```bash\n"
+                    "az role assignment delete --ids /subscriptions/s/x/A\n"
+                    "az role assignment delete --ids /subscriptions/s/x/B\n"
+                    "az role assignment delete --ids /subscriptions/s/x/C\n```")
+        v = check_commands_are_not_repeated(_report(), analysis)
+        self.assertTrue(v)
+        self.assertIn("written 3 times", v[0])
+
+    def test_one_invocation_with_the_ids_under_it_passes(self):
+        analysis = ("```bash\naz role assignment delete --ids \\\n"
+                    "  /subscriptions/s/x/A /subscriptions/s/x/B /subscriptions/s/x/C\n```")
+        self.assertEqual(check_commands_are_not_repeated(_report(), analysis), [])
+
+    def test_genuinely_different_verbs_are_not_duplicates(self):
+        # what-if then create is a legitimate pair and must survive.
+        analysis = ("```bash\naz deployment group what-if --resource-group rg --template-file t\n"
+                    "az deployment group create --resource-group rg --template-file t\n```")
+        self.assertEqual(check_commands_are_not_repeated(_report(), analysis), [])
+
+    def test_the_same_verb_with_different_flags_is_not_a_duplicate(self):
+        analysis = ("```bash\naz role assignment list --scope /subscriptions/s\n"
+                    "az role assignment show --ids /subscriptions/s/x/A\n```")
+        self.assertEqual(check_commands_are_not_repeated(_report(), analysis), [])
