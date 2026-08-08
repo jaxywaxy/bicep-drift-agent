@@ -340,10 +340,8 @@ def check_commands_are_fenced(report, analysis):
     command, bullets and all - into one <li> of proportional prose. Nothing to
     scan, nothing to copy.
 
-    NOTE the fence must be at column 0. An indented fence inside a list item
-    degrades to an inline code span; this check cannot see that difference, so
-    the prompt states it and `test_indented_fence_is_not_a_code_block` pins the
-    renderer behaviour that makes it true.
+    Whether the fence is at column 0 is `check_fences_start_at_column_zero`'s
+    job - this one only asks whether a command was fenced at all.
     """
     outside = _FENCE.sub(" ", analysis)
     return [f"unfenced command line: {m.group(0).strip()[:60]!r}"
@@ -369,6 +367,30 @@ def check_plan_is_flat(report, analysis):
     return []
 
 
+def check_fences_start_at_column_zero(report, analysis):
+    """A fence indented inside a list item is not a code block.
+
+    python-markdown treats it as an inline code span, so the framed monospace
+    block a reader scans and copies becomes a run of proportional text mid
+    sentence. The prompt has required column 0 since round 2, and this went
+    unchecked because `check_commands_are_fenced` only asks whether backticks
+    exist - it passes on an indented fence.
+
+    That gap was not theoretical. On the first live prod landing-zone report
+    ALL 22 fences were indented three or five spaces, every check passed, and
+    the rendered HTML contained zero <pre> blocks and eleven inline spans - the
+    exact regression the rule exists to prevent, invisible to the eval.
+
+    A rule that is stated but unchecked is worth about as much as one that is
+    checked but unstated, which is the same lesson from the other direction.
+    """
+    return [
+        f"fence indented {len(m.group(1))} spaces at line {analysis[:m.start()].count(chr(10)) + 1}"
+        f" - renders as an inline span, not a code block"
+        for m in re.finditer(r"^([ \t]+)```", analysis, re.M)
+    ]
+
+
 CHECKS = (
     check_no_fabricated_actor,
     check_no_unearned_attribution,
@@ -382,6 +404,7 @@ CHECKS = (
     check_no_sign_off,
     check_plan_is_flat,
     check_commands_are_fenced,
+    check_fences_start_at_column_zero,
     check_one_story_is_one_finding,
 )
 

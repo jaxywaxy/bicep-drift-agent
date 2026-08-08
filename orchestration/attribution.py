@@ -452,23 +452,40 @@ def _owner_key(resource_type, resource_name) -> tuple:
 
 
 def _declared_module_index(report_data: dict) -> dict:
-    """Map (type, name) -> the Bicep module that declared it.
+    """Map (type, declared name) -> the Bicep module that declared it.
 
-    Built from `arm_resources`, where `_module` is stamped during flattening.
-    Placeholder-named resources (uniqueString) are indexed under their expression
-    too, since that is the name a missing_in_azure drift carries.
+    Keyed on the ARM resource's own name, which for a uniqueString-named
+    resource is the unresolved EXPRESSION ('jacquidevstg[86c9cbf6]'), not the
+    deployed name. `_module_for` handles the two forms a drift can carry.
     """
     index = {}
     for res in report_data.get("arm_resources") or []:
         module = res.get("_module")
-        if not module:
-            continue
-        rtype = res.get("type")
-        index[_owner_key(rtype, res.get("name"))] = module
-        expr = res.get("bicep_name_expression")
-        if expr:
-            index.setdefault(_owner_key(rtype, expr), module)
+        if module:
+            index[_owner_key(res.get("type"), res.get("name"))] = module
     return index
+
+
+def _module_for(drift: dict, index: dict) -> str | None:
+    """The declaring module for a drift, or None.
+
+    `bicep_name_expression` is tried FIRST because it is the only field that
+    matches the declaration for a placeholder-named resource: the drift carries
+    the resolved name ('jacquidev-cosmos-m4fg23') while the template declares an
+    expression ('jacquidev-cosmos-take(uniqueString(...), 6)'), and those never
+    compare equal. Matching on `name` alone silently found nothing for every
+    uniqueString-named resource, which on the CAF LZ meant the apps Cosmos, its
+    two children, the apps Key Vault and both storage accounts fell through to
+    the type rules and were tagged platform on a platform-default LZ - the exact
+    misrouting this feature exists to prevent, hidden because the fallback
+    produced a plausible answer.
+    """
+    for name in (drift.get("bicep_name_expression"), drift.get("name")):
+        if name:
+            module = index.get(_owner_key(drift.get("type"), name))
+            if module:
+                return module
+    return None
 
 
 def _split_policy_and_tag_owners(report_data: dict) -> list:
@@ -508,7 +525,7 @@ def _split_policy_and_tag_owners(report_data: dict) -> list:
     for drift in actionable:
         drift["owner"] = classify_owner(
             drift.get("type", ""), drift,
-            module=declared_modules.get(_owner_key(drift.get("type"), drift.get("name"))),
+            module=_module_for(drift, declared_modules),
             module_owners=owners_by_module,
             default_owner=default_owner,
         )

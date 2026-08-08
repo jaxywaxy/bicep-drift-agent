@@ -15,7 +15,11 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from orchestration.attribution import _declared_module_index, _split_policy_and_tag_owners
+from orchestration.attribution import (
+    _declared_module_index,
+    _module_for,
+    _split_policy_and_tag_owners,
+)
 from tools.config import module_owners, ownership_default_owner
 from tools.normalizer.flatten import flatten_resources
 
@@ -88,15 +92,37 @@ class DeclaredModuleIndexTests(unittest.TestCase):
         index = _declared_module_index(report)
         self.assertEqual(index[("microsoft.keyvault/vaults", "kv1")], "apps")
 
-    def test_placeholder_named_resources_are_indexed_under_their_expression(self):
-        # A missing_in_azure drift for a uniqueString-named resource carries the
-        # expression, not the deployed name.
-        report = {"arm_resources": [{
-            "type": "Microsoft.Storage/storageAccounts", "name": "stg[86c9cbf6]",
-            "bicep_name_expression": "stg[86c9cbf6]", "_module": "storage-logs"}]}
-        index = _declared_module_index(report)
-        self.assertEqual(index[("microsoft.storage/storageaccounts", "stg[86c9cbf6]")],
-                         "storage-logs")
+    def test_placeholder_named_resources_resolve_via_the_expression(self):
+        # The drift carries the RESOLVED name; the template declares the
+        # expression. They never compare equal, so matching on `name` alone
+        # found nothing for every uniqueString-named resource.
+        #
+        # The first version of this test put `bicep_name_expression` on the ARM
+        # resource, where it never lives - it is written onto DRIFT rows by
+        # smart_matching. So it passed while the real path was broken, and the
+        # bug surfaced on a live CAF LZ instead. Build both sides the way the
+        # pipeline builds them.
+        index = _declared_module_index({"arm_resources": [{
+            "type": "Microsoft.Storage/storageAccounts",
+            "name": "jacquidevstg[86c9cbf6]",       # the ARM side is the expression
+            "_module": "storage-apps"}]})
+        drift = {"type": "Microsoft.Storage/storageAccounts",
+                 "name": "jacquidevstgm4fg23",       # the drift side is resolved
+                 "bicep_name_expression": "jacquidevstg[86c9cbf6]"}
+        self.assertEqual(_module_for(drift, index), "storage-apps")
+
+    def test_a_plain_named_resource_still_resolves_by_name(self):
+        index = _declared_module_index({"arm_resources": [{
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "name": "jacquidev-law", "_module": "logging"}]})
+        self.assertEqual(
+            _module_for({"type": "Microsoft.OperationalInsights/workspaces",
+                         "name": "jacquidev-law"}, index),
+            "logging")
+
+    def test_an_unmatched_drift_yields_no_module(self):
+        self.assertIsNone(_module_for({"type": "Microsoft.KeyVault/vaults",
+                                       "name": "nope"}, {}))
 
     def test_resources_without_a_module_are_absent_rather_than_null(self):
         report = {"arm_resources": [{"type": "Microsoft.KeyVault/vaults", "name": "kv1"}]}
