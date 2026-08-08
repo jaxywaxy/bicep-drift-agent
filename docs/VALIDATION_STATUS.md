@@ -238,7 +238,7 @@ exercised them.
 | Activity Log attribution (who / when / how) | Live-proven | 2026-08-01 run — actors and timestamps matched the CI run event-for-event |
 | Policy-enforced split (DINE/Modify vs actionable) | Live-proven | 2026-08-01 run — 5 actionable vs 35 policy-enforced |
 | Smart matching (`uniqueString`/`guid`) | Live-proven | 2026-08-01 run — 34 resources reconciled |
-| Owner routing (platform/workload → channel) | Live-proven | Phase 4, 2026-07-06 |
+| Owner routing (platform/workload → channel) | Live-proven | Phase 4, 2026-07-06; **re-proven 2026-08-08 after the ownership model changed** — `platform-team: 3 event(s)` / `app-team: 2 event(s)`, matching the module split exactly. The July evidence predated `ownership_model`/`module_owners`, which rewires the tag routing keys off |
 | Deployer attribution (`DRIFT_AUTHORIZED_DEPLOYERS`) | Live-proven | 2026-08-01 — an unset variable reclassified two findings, confirming the path |
 | Notifications (Slack/Teams) | Live-proven | Phase 4 owner-routing round |
 | Narrative analysis | Live-proven | Present in the 2026-08-01 CI report (Anthropic) and the 2026-08-08 prod runs (Azure OpenAI) |
@@ -251,13 +251,21 @@ exercised them.
 Stated here rather than left implicit:
 
 - **Backup detection.** Comparators run, have never caught anything live.
+- **Custom Modify policy attribution.** Only Azure's two BUILT-IN inherit-tag
+  definitions are recognised, so a custom Modify policy's imposed value is
+  reported as ordinary actionable drift attributed to whoever wrote it
+  (2026-08-08). The assignment is now surfaced to the narrative as evidence,
+  which is a mitigation, not attribution.
 - **A deleted resource group at subscription scope.** Implemented with tests and
   an orphan-attribution pass; no landing zone has been deleted to prove it.
 - **Row-level attribution for colliding role assignments.** Rows are now distinct,
   but both still fall to the Activity Log type fallback and may adopt the same
   event. Identity is fixed; attribution is not.
 - **The `revert → clean` half of several rounds.** Where a round is cited as
-  detecting drift, re-verifying the *revert* is not always recorded.
+  detecting drift, re-verifying the *revert* is not always recorded. Now
+  recorded for 2026-08-08: five injections reverted and `drift_count` returned
+  to exactly the 3-grant baseline, no residue. Earlier rounds remain unverified
+  on this half.
 
 ---
 
