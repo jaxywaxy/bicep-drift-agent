@@ -237,6 +237,28 @@ jobs:
       # the repo variable only when estates are deployed by a DIFFERENT
       # identity than the one this workflow scans with.
       DRIFT_AUTHORIZED_DEPLOYERS: ${{ vars.DRIFT_AUTHORIZED_DEPLOYERS || '' }}
+      # Per-model USD/1M-token rates for the cost line. Unset, the report says
+      # "unknown" rather than guessing - which is the design, but it also meant
+      # the variable could be SET and still do nothing, because it was never
+      # passed here. Shipped as config, documented as a repo variable, and
+      # unplumbed for a day.
+      DRIFT_MODEL_PRICING: ${{ vars.DRIFT_MODEL_PRICING || '' }}
+      # The rest of the documented knobs. Every one of these was readable by the
+      # code and settable in docs, and none of them reached a CI scan - the same
+      # defect as the pricing variable, found by auditing rather than one at a
+      # time. tests/test_workflow_env_coverage.py now fails if a new one is
+      # added to the code and not to this block.
+      #
+      # Passing them unconditionally is only safe because tools/config.py treats
+      # an empty string as unset; an unset repo variable arrives as "", and
+      # int("") used to raise at import.
+      DRIFT_AGENT_MODEL: ${{ vars.DRIFT_AGENT_MODEL || '' }}
+      DRIFT_BICEP_TIMEOUT: ${{ vars.DRIFT_BICEP_TIMEOUT || '' }}
+      DRIFT_WEBHOOK_TIMEOUT: ${{ vars.DRIFT_WEBHOOK_TIMEOUT || '' }}
+      DRIFT_LOG_LEVEL: ${{ vars.DRIFT_LOG_LEVEL || '' }}
+      INCLUDE_ROLE_ASSIGNMENTS: ${{ vars.INCLUDE_ROLE_ASSIGNMENTS || '' }}
+      INCLUDE_POLICY_ASSIGNMENTS: ${{ vars.INCLUDE_POLICY_ASSIGNMENTS || '' }}
+      INCLUDE_DEPLOYMENT_STACKS: ${{ vars.INCLUDE_DEPLOYMENT_STACKS || '' }}
       NODE_OPTIONS: --no-warnings=DEP0005
     steps:
       - name: Azure Login (OIDC)

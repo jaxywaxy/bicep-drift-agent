@@ -14,12 +14,15 @@ logger = logging.getLogger(__name__)
 
 # ===== Bicep Compilation =====
 
-BICEP_BUILD_TIMEOUT = int(os.environ.get("DRIFT_BICEP_TIMEOUT", "120"))
+# `or` not a get-default: CI hands an UNSET repo variable through as an empty
+# string, and int("") raises at import - which would kill every scan rather
+# than fall back. Empty means unset, everywhere in this file.
+BICEP_BUILD_TIMEOUT = int(os.environ.get("DRIFT_BICEP_TIMEOUT", "").strip() or "120")
 """Timeout in seconds for `az bicep build` (tools/compile_bicep.py)."""
 
 # ===== Webhook Notifications =====
 
-WEBHOOK_TIMEOUT_SECONDS = int(os.environ.get("DRIFT_WEBHOOK_TIMEOUT", "10"))
+WEBHOOK_TIMEOUT_SECONDS = int(os.environ.get("DRIFT_WEBHOOK_TIMEOUT", "").strip() or "10")
 """Timeout in seconds for Slack/Teams webhook POSTs (tools/send_notifications.py)."""
 
 # ===== Change-Origin Classification =====
@@ -163,7 +166,7 @@ def model_pricing_overrides() -> dict[str, tuple[float, float]]:
 
 # ===== Logging =====
 
-LOG_LEVEL = os.environ.get("DRIFT_LOG_LEVEL", "INFO").upper()
+LOG_LEVEL = (os.environ.get("DRIFT_LOG_LEVEL", "").strip() or "INFO").upper()
 """Default logging level (DEBUG/INFO/WARNING/ERROR); used by the entry points."""
 
 
