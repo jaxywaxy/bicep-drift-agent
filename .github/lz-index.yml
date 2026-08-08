@@ -22,6 +22,16 @@ landing_zones:
     config_path: .github/drift-lz-config.yml
     workflow: drift-lz-landingzone.yml
 
+  # The PROD platform LZ, in a different subscription to `landingzone` (which is
+  # dev). Same repo and template lineage, separate estate - the two must not be
+  # pointed at each other's subscription, since each template declares its own
+  # prefix and would read the other estate as entirely missing plus entirely
+  # extra.
+  landingzone-prod:
+    repo: jaxywaxy/azure-landingzone-bicep
+    config_path: .github/drift-lz-prod-config.yml
+    workflow: drift-lz-prod.yml
+
   spoke-drifttest:
     repo: jaxywaxy/azure-landingzone-bicep
     config_path: .github/drift-lz-spoke-config.yml
