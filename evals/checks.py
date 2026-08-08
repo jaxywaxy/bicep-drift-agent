@@ -406,6 +406,46 @@ def check_plan_is_flat(report, analysis):
     return []
 
 
+_CMD_LINE = re.compile(r"^\s*(az [^\n]+)$", re.M)
+
+
+def _command_shape(cmd: str) -> str:
+    """A command reduced to its verb and FLAGS, with argument values dropped.
+
+    `az role assignment delete --ids /subscriptions/.../A` and the same line for
+    B share a shape. That is the duplication worth catching: one invocation with
+    the ids listed under it says the same thing in a fraction of the space.
+    `what-if` and `create` keep different shapes, so a legitimate pair survives.
+    """
+    tokens, out, seen_flag = cmd.split(), [], False
+    for token in tokens:
+        if token.startswith("-"):
+            seen_flag = True
+            out.append(token.split("=", 1)[0])
+        elif not seen_flag:
+            out.append(token)          # still in the verb ('az role assignment delete')
+    return " ".join(out)
+
+
+def check_commands_are_not_repeated(report, analysis):
+    """One invocation per command, with the ids listed under it.
+
+    The prompt has said this since round 2 and nothing measured it. On the live
+    prod report gpt-5-mini emitted 21 commands across 8 distinct verbs - `az
+    role assignment ...` seven times, `az resource show` four - where Anthropic
+    used 5. That is where the extra length went: the findings were actually
+    LEANER than Anthropic's, and the remediation plan carried 31 lines of
+    near-identical shell against 12.
+    """
+    shapes = {}
+    for cmd in _CMD_LINE.findall(analysis):
+        shapes.setdefault(_command_shape(" ".join(cmd.split())), []).append(cmd)
+    return [
+        f"`{shape}` written {len(uses)} times - give it once and list the arguments under it"
+        for shape, uses in shapes.items() if len(uses) > 1
+    ]
+
+
 def check_does_not_delete_the_deployer(report, analysis):
     """Never hand someone a command that revokes the pipeline's own access.
 
@@ -510,6 +550,7 @@ CHECKS = (
     check_plan_is_flat,
     check_commands_are_fenced,
     check_fences_start_at_column_zero,
+    check_commands_are_not_repeated,
     check_does_not_delete_the_deployer,
     check_snippets_use_the_declared_location,
     check_one_story_is_one_finding,
