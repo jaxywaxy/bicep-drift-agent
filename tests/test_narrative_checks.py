@@ -29,6 +29,7 @@ from evals.checks import (
     check_no_unearned_attribution,
     check_only_allowlisted_sections,
     check_commands_are_fenced,
+    check_fences_start_at_column_zero,
     check_plan_is_flat,
     check_tldr_does_not_soften_what_the_body_confirms,
     check_does_not_over_unify_across_time,
@@ -525,6 +526,26 @@ class FenceMustBeAtColumnZeroTests(unittest.TestCase):
         html = self._html(md)
         self.assertIn("<pre>", html)
         self.assertIn('<ol start="2">', html)
+
+    def test_the_check_catches_what_the_renderer_drops(self):
+        # The renderer quirk above was pinned but nothing CHECKED for it, so on
+        # the first live prod report all 22 fences were indented, every check
+        # passed, and the HTML had zero <pre> blocks. A rule stated but
+        # unchecked is worth as little as one checked but unstated.
+        md = "1. Step\n\n   ```bash\n   az group list\n   ```\n"
+        violations = check_fences_start_at_column_zero(_report(), md)
+        self.assertTrue(violations)
+        self.assertIn("inline span", violations[0])
+
+    def test_a_column_zero_fence_passes(self):
+        md = "1. Step\n\n```bash\naz group list\n```\n"
+        self.assertEqual(check_fences_start_at_column_zero(_report(), md), [])
+
+    def test_every_indented_fence_is_reported_not_just_the_first(self):
+        # Both the opening and closing fence of each block count; the operator
+        # needs the line numbers to find them.
+        md = "1. a\n\n  ```bash\n  x\n  ```\n\n2. b\n\n  ```bash\n  y\n  ```\n"
+        self.assertEqual(len(check_fences_start_at_column_zero(_report(), md)), 4)
 
 
 def _policy_row(name, policy="drift-inherit-environment"):
