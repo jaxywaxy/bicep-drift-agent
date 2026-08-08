@@ -67,3 +67,17 @@ class DriftFinding:
     # refuses to assert it, producing "unverified" hedges about facts the report
     # already holds.
     live_context: dict[str, Any] | None = None
+    # The most recent lifecycle operation that did NOT succeed, if any.
+    #
+    # The report holds this and the analysis never saw it. On the first live
+    # prod scan a Key Vault was missing because the redeploy had been BLOCKED by
+    # a soft-deleted vault of the same name: the lifecycle carried
+    # `create / Started` by the pipeline identity and no completion. Given only
+    # change_origin, the analysis said the cause was "unknown, may predate the
+    # logs" - faithful to what it was handed, and wrong - then recommended
+    # hand-writing a replacement vault, which would have failed the same way.
+    #
+    # A create that started and never finished is the difference between "who
+    # deleted this?" and "your deployment failed"; those have no remediation in
+    # common.
+    unfinished_operation: dict[str, Any] | None = None
