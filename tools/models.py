@@ -34,6 +34,10 @@ class Drift:
     # what (from lifecycle/change_origin) instead of asking for Activity Logs.
     resource_id: str | None = None
     change_origin: dict[str, Any] | None = None
+    # The report's lifecycle block. change_origin summarises WHO; the events
+    # carry the operation and its STATUS, which is how a failed deployment is
+    # told apart from a deletion - see DriftFinding.unfinished_operation.
+    lifecycle: dict[str, Any] | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""

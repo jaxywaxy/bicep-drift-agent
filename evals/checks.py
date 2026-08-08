@@ -367,6 +367,72 @@ def check_plan_is_flat(report, analysis):
     return []
 
 
+def check_does_not_delete_the_deployer(report, analysis):
+    """Never hand someone a command that revokes the pipeline's own access.
+
+    Observed live: three subscription Owner grants were listed for
+    `az role assignment delete`, one of them the service principal the SAME
+    report credits with five `authorized_deployment` changes. Running it breaks
+    every future deploy - including the remediation proposed two steps earlier.
+
+    Flagging a standing privileged grant is right; a bare delete command for the
+    deployer is not. This checks only the command, so "narrow this role" or
+    "move the grant into Bicep" still passes.
+    """
+    deployers = {
+        str((row.get("change_origin") or {}).get("changed_by") or "").lower()
+        for row in _rows(report)
+        if (row.get("change_origin") or {}).get("origin") == "authorized_deployment"
+    } - {""}
+    if not deployers:
+        return []
+
+    # Every identifier that would name the deployer's grant in a command.
+    targets = {}
+    for row in _rows(report):
+        details = row.get("details") or {}
+        principal = str(details.get("principal_id") or "").lower()
+        if principal and principal in deployers:
+            for ident in (details.get("assignment_id"), principal, row.get("name")):
+                if ident:
+                    targets[str(ident).lower()] = principal
+    if not targets:
+        return []
+
+    out = []
+    for line in analysis.splitlines():
+        low = line.lower()
+        if "role assignment delete" not in low:
+            continue
+        for ident, principal in targets.items():
+            if ident in low:
+                out.append(
+                    f"proposes deleting the role assignment of {principal!r}, which this "
+                    f"report attributes authorized deployments to - that is the pipeline")
+                break
+    return out
+
+
+def check_snippets_use_the_declared_location(report, analysis):
+    """A snippet is applied, so a guessed region is a defect, not a gap.
+
+    Observed live: replacement Bicep for an australiaeast estate hardcoded
+    `location: 'eastus'` twice, in a report that names the real location on
+    every declared resource.
+    """
+    declared = {
+        str(res.get("location") or "").lower()
+        for res in report.get("arm_resources") or []
+    } - {"", "unknown", "none"}
+    if not declared:
+        return []
+    return [
+        f"snippet uses location {loc!r}, but the template declares {sorted(declared)}"
+        for loc in {m.group(1).lower() for m in re.finditer(r"location:\s*'([^']+)'", analysis)}
+        if loc not in declared
+    ]
+
+
 def check_fences_start_at_column_zero(report, analysis):
     """A fence indented inside a list item is not a code block.
 
@@ -405,6 +471,8 @@ CHECKS = (
     check_plan_is_flat,
     check_commands_are_fenced,
     check_fences_start_at_column_zero,
+    check_does_not_delete_the_deployer,
+    check_snippets_use_the_declared_location,
     check_one_story_is_one_finding,
 )
 
