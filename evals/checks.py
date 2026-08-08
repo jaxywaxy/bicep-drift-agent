@@ -32,6 +32,21 @@ _GUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 _SOFTENERS = ("benign", "no action", "cosmetic", "nothing to do", "safe to ignore",
               "no remediation", "expected and safe")
+# Sentences that DENY a claim rather than make it. Anthropic wrote "the PE has a
+# timestamp, the vault has none, so I cannot claim a single event" - a textbook
+# refusal to over-unify - and the phrase matcher failed it for containing the
+# words. Punishing the exact caution the rule asks for is the fastest way to get
+# a check muted, so the denial is removed before matching.
+_NEGATED_CLAIM = re.compile(
+    r"[^.\n]*\b(?:cannot|can't|could not|couldn't|do not|don't|does not|doesn't|"
+    r"no evidence|not|never|unverified|unable to)\b[^.\n]*[.\n]", re.I)
+
+
+def _strip_negated_claims(text: str) -> str:
+    """Drop sentences that negate, so a refusal is not read as an assertion."""
+    return _NEGATED_CLAIM.sub(" ", text)
+
+
 _UNIFYING = ("single event", "one event", "a single operation", "one action",
              "one operator action", "coherent single")
 _SEPARATING = ("distinct operation", "two operation", "separate operation",
@@ -108,6 +123,30 @@ def check_no_unearned_attribution(report, analysis):
 _NOT_A_FINDING = {"matched_unresolvable"}
 
 
+def _identifies(row) -> list[str]:
+    """Strings any one of which proves the narrative named this finding.
+
+    A sidecar comparator has no ARM name to use, so it synthesises one:
+    `Owner -> ServicePrincipal:8edd43ce-...`. No readable sentence quotes that
+    verbatim, and requiring it failed BOTH providers on a report where each had
+    described the grant properly, by role and principal. Accept any identifier
+    that unambiguously picks the finding out instead.
+    """
+    name = str(row.get("name") or "")
+    details = row.get("details") or {}
+    candidates = [name]
+    for key in ("principal_id", "assignment_id", "role_definition_guid"):
+        if details.get(key):
+            candidates.append(str(details[key]))
+    # The assignment's own guid, so quoting `RoleAssignments/<guid>` rather than
+    # the full ARM path still counts as naming it.
+    if details.get("assignment_id"):
+        candidates.append(str(details["assignment_id"]).rsplit("/", 1)[-1])
+    # The bare guid out of a synthetic name, for the same reason.
+    candidates += _GUID.findall(name)
+    return [c for c in candidates if c]
+
+
 def check_critical_findings_are_mentioned(report, analysis):
     """A critical finding the narrative never names will not be acted on."""
     low = analysis.lower()
@@ -118,9 +157,9 @@ def check_critical_findings_are_mentioned(report, analysis):
         sev = str(((row.get("change_origin") or {}).get("severity") or "")).lower()
         if sev not in ("critical", "high"):
             continue
-        name = str(row.get("name") or "")
-        if name and name.lower() not in low:
-            missing.append(f"{sev} finding {name!r} is never mentioned")
+        identifiers = _identifies(row)
+        if identifiers and not any(i.lower() in low for i in identifiers):
+            missing.append(f"{sev} finding {str(row.get('name'))!r} is never mentioned")
     return missing
 
 
@@ -164,7 +203,7 @@ def check_does_not_over_unify_across_time(report, analysis):
     span = (max(times) - min(times)).total_seconds()
     if span <= _ONE_EVENT_WINDOW_SECONDS:
         return []
-    low = analysis.lower()
+    low = _strip_negated_claims(analysis).lower()
     if any(p in low for p in _UNIFYING) and not any(p in low for p in _SEPARATING):
         return [f"calls a {int(span // 60)}-minute span a single event"]
     return []

@@ -687,3 +687,62 @@ class SnippetsUseTheDeclaredLocationTests(unittest.TestCase):
     def test_a_report_without_arm_resources_cannot_judge(self):
         self.assertEqual(check_snippets_use_the_declared_location(
             _report(), "location: 'eastus'"), [])
+
+
+class ChecksMustNotFireOnCorrectOutputTests(unittest.TestCase):
+    """Both false positives were found by running the two providers over the
+    same live report. Anthropic scored two failures and BOTH were check bugs -
+    the narrative was right each time. A check that fires on correct output gets
+    muted, and a muted check still looks like coverage."""
+
+    def test_a_refusal_to_unify_is_not_an_over_unification(self):
+        # Anthropic wrote exactly this, which is the caution the rule asks for.
+        report = _report(drifts=[
+            _drift("a", ts="2026-07-16T22:20:00+00:00"),
+            _drift("b", ts="2026-08-08T00:04:17+00:00"),
+        ])
+        careful = ("The PE has a timestamp, the vault has none, so I cannot "
+                   "claim a single event.")
+        self.assertEqual(check_does_not_over_unify_across_time(report, careful), [])
+
+    def test_actually_claiming_it_is_still_caught(self):
+        report = _report(drifts=[
+            _drift("a", ts="2026-07-16T22:20:00+00:00"),
+            _drift("b", ts="2026-08-08T00:04:17+00:00"),
+        ])
+        self.assertTrue(check_does_not_over_unify_across_time(
+            report, "These were a single event by one operator."))
+
+    def test_a_role_assignment_counts_as_named_by_its_principal(self):
+        # A sidecar synthesises `Owner -> ServicePrincipal:<guid>` because there
+        # is no ARM name. No readable sentence quotes that, and requiring it
+        # failed BOTH providers on grants they had described properly.
+        row = {"type": "Microsoft.Authorization/roleAssignments",
+               "name": "Owner -> ServicePrincipal:8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+               "drift_type": "extra_in_azure",
+               "details": {"principal_id": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+                           "assignment_id": "/subscriptions/s/providers/Microsoft."
+                                            "Authorization/RoleAssignments/6146e6aa"},
+               "change_origin": {"severity": "high", "origin": "manual_change"}}
+        analysis = ("A subscription-scope **Owner** grant is held by service principal "
+                    "`8edd43ce-a6cb-4dad-a89a-5bb580ebf777` and is not in the template.")
+        self.assertEqual(check_critical_findings_are_mentioned(_report(drifts=[row]), analysis), [])
+
+    def test_the_assignment_id_also_counts(self):
+        row = {"type": "Microsoft.Authorization/roleAssignments",
+               "name": "Owner -> ServicePrincipal:8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+               "drift_type": "extra_in_azure",
+               "details": {"assignment_id": "/subscriptions/s/providers/Microsoft."
+                                            "Authorization/RoleAssignments/6146e6aa"},
+               "change_origin": {"severity": "high", "origin": "manual_change"}}
+        self.assertEqual(check_critical_findings_are_mentioned(
+            _report(drifts=[row]), "Remove RoleAssignments/6146e6aa after review."), [])
+
+    def test_a_grant_the_narrative_ignores_entirely_is_still_caught(self):
+        row = {"type": "Microsoft.Authorization/roleAssignments",
+               "name": "Owner -> ServicePrincipal:8edd43ce-a6cb-4dad-a89a-5bb580ebf777",
+               "drift_type": "extra_in_azure",
+               "details": {"principal_id": "8edd43ce-a6cb-4dad-a89a-5bb580ebf777"},
+               "change_origin": {"severity": "high", "origin": "manual_change"}}
+        self.assertTrue(check_critical_findings_are_mentioned(
+            _report(drifts=[row]), "The Key Vault is missing. Redeploy it."))
