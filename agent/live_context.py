@@ -49,6 +49,58 @@ class LiveContextMixin:
     )
 
     @staticmethod
+    def _index_private_endpoints(live_resources) -> dict[str, list[dict[str, Any]]]:
+        """Map a target resource id -> the private endpoints pointing AT it.
+
+        Indexed from the endpoint's own `privateLinkServiceId` rather than the
+        target's `privateEndpointConnections`, because only the endpoint is
+        guaranteed to carry the link: the target echoes it for some resource
+        types and not others, and a missing echo would silently drop the very
+        evidence this exists to supply.
+        """
+        index: dict[str, list[dict[str, Any]]] = {}
+        for resource in live_resources or []:
+            if not isinstance(resource, dict):
+                continue
+            if "privateendpoints" not in str(resource.get("type") or "").lower():
+                continue
+            props = resource.get("properties") or {}
+            for conn in props.get("privateLinkServiceConnections") or []:
+                cprops = conn.get("properties") or {}
+                target = str(cprops.get("privateLinkServiceId") or "").lower()
+                if not target:
+                    continue
+                index.setdefault(target, []).append({
+                    "name": resource.get("name"),
+                    "subnet": ((props.get("subnet") or {}).get("id") or "").rsplit("/", 1)[-1],
+                    "group_ids": cprops.get("groupIds"),
+                    "status": ((cprops.get("privateLinkServiceConnectionState") or {})
+                               .get("status")),
+                })
+        return index
+
+    @staticmethod
+    def _assignments_in_scope(resource_id: str | None,
+                              assignments) -> list[dict[str, Any]] | None:
+        """Policy assignments whose scope is an ancestor of this resource.
+
+        Scope containment is a prefix test on the ARM id, which is what Azure's
+        own scoping means: an assignment at /subscriptions/X applies to
+        everything beneath it, one at a resource group only to that group.
+        """
+        if not resource_id or not assignments:
+            return None
+        rid = str(resource_id).lower()
+        matched = [
+            {"name": a.get("name"), "display_name": a.get("display_name"),
+             "scope": a.get("scope"), "enforcement_mode": a.get("enforcement_mode"),
+             "definition_ref": a.get("definition_ref")}
+            for a in assignments
+            if a.get("scope") and rid.startswith(str(a["scope"]).lower())
+        ]
+        return matched or None
+
+    @staticmethod
     def _index_live_resources(live_resources) -> dict[str, dict[str, Any]]:
         """Index live resources by resource ID and by (type, name).
 

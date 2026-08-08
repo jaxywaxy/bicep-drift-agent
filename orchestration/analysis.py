@@ -112,6 +112,7 @@ def _run_claude_analysis(agent, report_data: dict):
         # "publicNetworkAccess not in the payload" and "I don't have
         # sku.capacity" about values sitting in this very report.
         live_resources=report_data.get("live_resources"),
+        policy_assignments=report_data.get("policy_assignments"),
     )
 
     if not agent:

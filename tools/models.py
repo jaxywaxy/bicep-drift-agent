@@ -54,6 +54,10 @@ class DriftReport:
     # State snapshots
     arm_resources: list[Resource] | None = None
     live_resources: list[Resource] | None = None
+    # In-scope policy assignments, as fetched by the policy sidecar. Given to
+    # the agent as EVIDENCE that a value may be re-imposed - see
+    # DriftFinding.related_policy_assignments.
+    policy_assignments: list[dict[str, Any]] | None = None
 
     # Analysis results
     drifts: list[Drift] | None = None
