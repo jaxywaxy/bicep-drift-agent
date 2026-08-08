@@ -128,6 +128,84 @@ deploying identity's own writes are misclassified as manual changes.
 
 ---
 
+## The platform landing-zone estate
+
+`rg-drift-test` cannot exercise everything. Three capabilities are only
+observable on a **subscription-scoped landing zone composed of Bicep modules**,
+because they are properties of that shape rather than of any resource type:
+
+| Capability | Why `rg-drift-test` cannot show it |
+|---|---|
+| Ownership by declaring module | Needs a module-composed template; the fixture estate is flat |
+| Platform-vs-workload routing on a platform LZ | Needs an estate whose owner is *not* the type-heuristic default |
+| Private-endpoint evidence on a drifted resource | Needs a resource with a live PE terminating on it |
+
+Estate: `azure-landingzone-bicep`, `envs/prod`, deployed to `sub-lz-bicep` and
+registered as the `landingzone-prod` landing zone. Deploy with the repo's own
+`prod.yml` workflow rather than a local `az deployment sub create` — it runs as
+the pipeline identity, so `authorized_deployment` attribution is exercised the
+way a real run sees it.
+
+### The five-injection set
+
+Chosen so the *correct remediation differs per case*, which is what tests advice
+rather than detection. All are free-tier and reversible.
+
+| # | Injection | Correct remediation | The plausible wrong answer |
+|---|---|---|---|
+| 1 | Create an NSG not in the template | Explicit `az network nsg delete` — **a redeploy does nothing** | "redeploy to remove it" |
+| 2 | Add an allow-any RDP rule to a declared NSG | A redeploy **does** remove it: `securityRules` is a declared set | Treating it like #1 |
+| 3 | Storage `allowBlobPublicAccess=true` + `httpsOnly=false` | Redeploy. Two properties, ONE resource, so one finding | Splitting it into two findings |
+| 4 | Key Vault `publicNetworkAccess=Enabled` | Redeploy — and the private endpoint makes closing it safe | Hedging, or missing the PE |
+| 5 | A custom Modify policy that rewrites a declared tag | **Reverting is futile** — fix the template or the policy | "redeploy to restore the tag" |
+
+**1 versus 2 is the discriminating pair.** Both read as "an NSG thing appeared"
+and their correct fixes are opposites.
+
+**TLS 1.0/1.1 is no longer injectable.** Azure retired it platform-wide on
+2026-02-03 and silently coerces to TLS1_2; `httpsOnly=false` is the working
+substitute for a transport-security downgrade.
+
+**Force a Modify effect with a resource WRITE, not a remediation task.** A
+compliance scan can take tens of minutes; touching a tag on the resource applies
+the effect in seconds, and is how the effect fires in production anyway.
+
+### Estate state, 2026-08-08
+
+Verified against Azure at the time of writing, because this page tells you what
+to deploy and a stale claim here wastes a round:
+
+| Estate | State |
+|---|---|
+| `jacquiprod-*` (prod LZ, `sub-lz-bicep`) | **Partial** — `rg-platform` and `rg-networking` only. `rg-apps` and `rg-logging` were deleted 03:43-04:02; a `rg-networking` delete was attempted and FAILED, which is why it survives |
+| `jacquidev-*` (dev LZ, `bd48a22c`) | **Gone** |
+| `rg-drift-test` | **Gone** |
+
+Any round starts by redeploying. A partially-deleted estate is the worst
+starting point of the three, because a scan against it returns plausible-looking
+`missing_in_azure` findings that are all true and none of them the thing under
+test.
+
+Key Vault names block redeployment after teardown: the name is reserved for the
+soft-delete retention window, and `take(uniqueString(resourceGroup().id), 6)` is
+deterministic, so recreating the resource group regenerates the identical name.
+`az keyvault list-deleted` then `purge` (or `recover`) before redeploying, or the
+deployment fails with the vault half-created — which is exactly the
+`create / Started` with no completion that `unfinished_operation` exists to
+explain.
+
+### The estate must hold still
+
+Two attempts at this round produced nothing because the estate was torn down
+mid-test — which makes "the report said something wrong" indistinguishable from
+"the estate moved". The procedure above already says baseline first and re-scan
+last; the point worth adding is that **a round whose estate changes underneath
+it is void, not inconclusive.** Take the clean baseline immediately before
+injecting, and treat any finding outside the injected set as a false positive
+with nowhere to hide.
+
+---
+
 ## Pending injections
 
 The current backlog, highest value first. Each corresponds to a *live-clean* or

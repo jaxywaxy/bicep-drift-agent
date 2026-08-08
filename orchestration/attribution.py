@@ -12,7 +12,8 @@ import os
 from orchestration.reconciliation import _find_deployed_resource
 from tools.activity_log import deployed_name_from_event_id, detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource
 from tools.change_origin import build_resource_lifecycle, classify_change_origin, event_explains_drift, select_relevant_activity
-from tools.config import AUTHORIZED_DEPLOYERS, module_owners, ownership_default_owner
+from tools.config import (AUTHORIZED_DEPLOYERS, module_owners,
+                          ownership_default_owner, platform_types)
 from tools.rg_selector import is_glob
 from tools.logger import get_logger
 from tools.ownership import classify_owner
@@ -522,12 +523,14 @@ def _split_policy_and_tag_owners(report_data: dict) -> list:
     declared_modules = _declared_module_index(report_data)
     default_owner = ownership_default_owner()
     owners_by_module = module_owners()
+    configured_types = platform_types()
     for drift in actionable:
         drift["owner"] = classify_owner(
             drift.get("type", ""), drift,
             module=_module_for(drift, declared_modules),
             module_owners=owners_by_module,
             default_owner=default_owner,
+            platform_types=configured_types,
         )
     owner_counts = {}
     for drift in actionable:

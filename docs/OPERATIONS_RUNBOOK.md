@@ -352,10 +352,32 @@ Use this checklist when onboarding a new landing zone.
 - [ ] Confirm resource group selectors are correct.
 - [ ] Configure notification targets.
 - [ ] Configure `.drift-ignore`, if required.
+- [ ] Set `DRIFT_MODEL_PRICING` for the model in use, if the cost line matters.
 - [ ] Run a manual scan.
 - [ ] Review the generated report.
+- [ ] Confirm the report's cost line shows a figure, not `unknown`.
 - [ ] Confirm notifications are delivered.
 - [ ] Enable the scheduled workflow.
+
+### On the cost line
+
+The built-in price table is Anthropic-only, so any other model reports
+`unknown (no price for model)` until a rate is supplied:
+
+```bash
+gh variable set DRIFT_MODEL_PRICING --body '{"<model-prefix>": [input, output]}'
+```
+
+USD per **million** tokens. Two failure modes look identical in the report and
+are worth telling apart — the variable being **unset**, and the variable being
+set but **not reaching the scan**. The second is not hypothetical: the repo
+variable existed for a day while no workflow passed it through, and the cost read
+`unknown` exactly as if no rate had been given. `tests/test_workflow_env_coverage.py`
+now fails if a tunable the code reads is missing from the reusable workflow, but
+if a cost line is unexpectedly blank, check the plumbing as well as the value.
+
+Full detail, including how to look up Azure list prices: see
+[Model pricing](CONFIGURATION_REFERENCE.md#model-pricing).
 
 ---
 

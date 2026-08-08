@@ -59,6 +59,22 @@ Landing zone repositories contain the infrastructure definitions and configurati
 
 Each landing zone is registered in the central index.
 
+> **One repo can hold several landing zones, and they must not be confused.**
+> `subscription_id` lives at the top of a config file, so a second estate in a
+> different subscription needs its **own** config, its own index entry and its
+> own workflow — even when it shares the repo and the template lineage
+> (`envs/dev` and `envs/prod` of the same landing zone, for instance).
+>
+> Do not reach for the `subscription_id` **workflow_dispatch override** to point
+> one at the other's subscription. There is no matching *path* override, so the
+> check still compiles its original template: every declared resource reads as
+> `missing_in_azure` and every deployed one as `extra_in_azure`. The report is
+> not obviously broken — it is confidently wrong, which is worse.
+>
+> Where one subscription hosts more than one registered scope, scope each check
+> with a resource-group glob rather than `"*"`, or each will report the other's
+> resources as unmanaged on every run.
+
 ## Example
 
 ```yaml
@@ -230,6 +246,28 @@ and gives up the only reason to be here. The provider logs a warning if you do.
 
 **Rolling back is instant**: clear `DRIFT_LLM_PROVIDER`. The Anthropic secret is
 still passed, so nothing else changes.
+
+**Set the price, or the cost line goes dark.** Every report carries the run's
+token usage and an estimated cost, priced from a built-in table that is
+Anthropic-only. The moment you switch — or change deployment — the report reads
+`unknown (no price for model)`: tokens still counted, no rate to multiply by.
+
+```bash
+gh variable set DRIFT_MODEL_PRICING --body '{"gpt-5.6-sol": [5.00, 30.00]}'
+```
+
+The key is a model-id **prefix**, the pair is `[input, output]` in USD per
+**million** tokens, and the longest matching prefix wins. No Azure OpenAI rate
+ships by default on purpose: rates vary by region, tier and agreement, so the
+report should never state a number nobody checked. See
+[Model pricing](CONFIGURATION_REFERENCE.md#model-pricing) for finding the real
+rate — Azure publishes list prices anonymously, under **Foundry Models** rather
+than Cognitive Services.
+
+A malformed value is discarded with a warning and the cost falls back to
+`unknown`; a pricing typo never fails a scan. `validate_config()` warns when the
+variable is set but yields no usable rows, so an ignored override cannot look
+like a missing one.
 
 **Running it locally is different.** Repo *variables* exist only inside Actions —
 a local shell does not see them, and silently falls back to the default provider.
