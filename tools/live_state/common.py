@@ -162,6 +162,31 @@ class ScopeNotFoundError(Exception):
     """
 
 
+ARM_SCOPE = "https://management.azure.com/.default"
+
+
+def acquire_arm_token() -> str | None:
+    """One ARM bearer token for the callers that own no credential.
+
+    The Resource Graph path already shares a single credential across its
+    collector fan-out (see resource_graph._augment_untracked_resources). The
+    collectors driven from run_drift_check sit a layer above that and have no
+    credential to inherit, so they route through here instead of each building
+    their own DefaultAzureCredential - every construction re-walks the whole
+    credential chain, which under CI OIDC is a fresh federated-token read and
+    AAD round-trip per collector.
+
+    Returns None rather than raising: a token we could not acquire makes the
+    caller's resources unverified, which is the caller's decision to record.
+    """
+    try:
+        from azure.identity import DefaultAzureCredential
+        return DefaultAzureCredential().get_token(ARM_SCOPE).token
+    except Exception as e:
+        logger.warning(f"Could not acquire ARM token: {e}")
+        return None
+
+
 def resource_group_exists(
     resource_group: str, sub_id: str, token: str | None = None
 ) -> bool | None:
@@ -311,6 +336,7 @@ class CollectionGaps:
 
 # Re-exports for the package-internal typing marker.
 __all__ = [
+    "ARM_SCOPE",
     "_ALL_RG_SELECTORS",
     "_RG_NAME_RE",
     "CollectionGaps",
@@ -320,6 +346,7 @@ __all__ = [
     "_has_unresolved",
     "_is_rg_glob",
     "_kql_rg_filter",
+    "acquire_arm_token",
     "_qualify_child_resource_names",
     "_rg_of",
     "retry_with_backoff",

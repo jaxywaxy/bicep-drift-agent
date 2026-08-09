@@ -233,23 +233,3 @@ Respond with:
         )
 
         return response.text.strip()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

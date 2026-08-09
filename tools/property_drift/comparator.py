@@ -69,31 +69,6 @@ class PropertyComparator:
     _list_is_subset = staticmethod(_primitives.list_is_subset)
     _has_unresolved_expressions = staticmethod(_primitives.has_unresolved_expressions)
 
-    # Types whose networkAcls default to open when never configured: Azure
-    # returns null/absent, while templates commonly spell out the equivalent
-    # explicit default. Injecting the default on the DEPLOYED side (only) makes
-    # those compare equal without suppressing real ACL drift. Bicep-side is
-    # never injected: an unspecified bicep property is simply not compared.
-
-    # Security sentinels: properties whose ABSENCE from the template is itself a
-    # security posture ("no authorized IP ranges", "local accounts enabled"). The
-    # generic comparison iterates bicep keys only, so a key someone sets on the
-    # live resource out-of-band is invisible when the template omits it — e.g.
-    # API server authorizedIPRanges added via `az aks update`. For these paths,
-    # an omitted template key is treated as demanding the documented Azure
-    # default, and a live value deviating from that default is drift. Paths are
-    # matched case-insensitively against the flattened dicts; a path the
-    # template DOES declare (itself or any child) is left to the generic
-    # comparison. Keyed by lowercased resource type -> {lowercased path: default}.
-
-
-    # Properties Resource Graph does not project for a SPECIFIC type, so they
-    # always diff as desired-vs-null. Type-scoped (unlike WRITE_ONLY_PROPERTIES)
-    # because the path is too generic to suppress globally: e.g. a Virtual WAN's
-    # `properties.type` (Standard/Basic) is absent from the Resource Graph
-    # projection, but a bare "properties.type" would wrongly swallow it on any
-    # other resource type. Keyed by lowercased resource type.
-
     @staticmethod
     def compare_properties(
         bicep_properties: dict[str, Any],
@@ -337,43 +312,3 @@ class PropertyComparator:
         diffs = PropertyComparator._elevate_monitoring_severity(rtype, diffs)
         diffs = PropertyComparator._elevate_backup_severity(rtype, diffs)
         return PropertyComparator._elevate_workspace_table_severity(rtype, diffs)
-
-
-
-
-
-
-
-
-
-
-    # Placeholder the normalizer emits for an unresolvable uniqueString() inside
-    # a value, e.g. 'aidrift[86c9cbf6]'. The resource NAME gets smart-match
-    # remapped, but the same placeholder inside a PROPERTY value (a
-    # customSubDomainName set to the resource name) reaches the comparator
-    # as-is and must not be compared literally against the resolved live value.
-
-
-
-
-
-
-    # Alert/action-group resources are "silent failure" types: a disabled alert
-    # or a severed notification path looks fine until an incident. These paths
-    # are critical ONLY for these types, so they cannot go in the global
-    # substring CRITICAL_PROPERTIES - e.g. "properties.enabled" would also match
-    # Key Vault's "properties.enabledForDeployment".
-
-
-
-    # Alert types whose linkage (scopes + action-group refs) is a cross-resource
-    # reference. metricAlerts/activityLogAlerts/scheduledQueryRules point at the
-    # thing they watch (scopes) and the thing they notify (actions.actionGroups);
-    # actionGroups/components have no such outward links, so they are excluded.
-    # Flattened property paths that carry those references. actions is a plain
-    # list on metricAlerts and a dict (actions.actionGroups) on activity/query.
-
-
-
-
-

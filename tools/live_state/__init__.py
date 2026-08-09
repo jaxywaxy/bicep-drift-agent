@@ -74,6 +74,7 @@ from .common import (  # noqa: F401
     _qualify_child_resource_names,
     _rg_of,
     arm_urlopen,
+    acquire_arm_token,
     resource_group_exists,
     retry_with_backoff,
     ScopeNotFoundError,
@@ -96,6 +97,7 @@ __all__ = [
     "qualify_extension_resource_names",
     "qualify_diagnostic_setting_names",
     "retry_with_backoff",
+    "acquire_arm_token",
     "resource_group_exists",
     "ScopeNotFoundError",
 ]

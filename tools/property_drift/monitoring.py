@@ -16,12 +16,18 @@ from . import primitives as _primitives
 from . import severity as _severity
 
 
+# Alert types whose linkage (scopes + action-group refs) is a cross-resource
+# reference. metricAlerts/activityLogAlerts/scheduledQueryRules point at the
+# thing they watch (scopes) and the thing they notify (actions.actionGroups);
+# actionGroups/components have no such outward links, so they are excluded.
 LINKAGE_TYPES = frozenset({
     "microsoft.insights/metricalerts",
     "microsoft.insights/activitylogalerts",
     "microsoft.insights/scheduledqueryrules",
 })
 
+# Flattened property paths that carry those references. actions is a plain list
+# on metricAlerts and a dict (actions.actionGroups) on activity/query.
 LINKAGE_PATHS = frozenset({
     "properties.scopes",
     "properties.actions",

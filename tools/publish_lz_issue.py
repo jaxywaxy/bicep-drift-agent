@@ -29,11 +29,14 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from .http_util import urlopen_checked
     from .send_notifications import events_from_report
 except ImportError:
+    # Run as a bare script (`python3 tools/publish_lz_issue.py`), which is how
+    # the workflow invokes it. Python already puts the script's own directory
+    # on sys.path, so these resolve without help - and inserting it explicitly
+    # would leak every tools/ module into the top-level namespace on IMPORT too.
     from http_util import urlopen_checked
     from send_notifications import events_from_report
 
