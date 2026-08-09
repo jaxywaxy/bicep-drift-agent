@@ -94,7 +94,7 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     if args.report:
-        raw = json.loads(pathlib.Path(args.report).read_text())
+        raw = json.loads(pathlib.Path(args.report).read_text(encoding="utf-8"))
         analysis = raw.get("agent_analysis") or ""
         if not analysis:
             print(f"{args.report} has no agent_analysis to check "
@@ -123,7 +123,7 @@ def main(argv=None) -> int:
 
     total = 0
     for path in paths:
-        raw = json.loads(path.read_text())
+        raw = json.loads(path.read_text(encoding="utf-8"))
         print(f"\n=== {path.stem} ===")
         if raw.get("_what_this_pins"):
             print(f"  pins: {raw['_what_this_pins']}")
