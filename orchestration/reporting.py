@@ -148,7 +148,7 @@ def _strip_internal_details(report_data: dict) -> None:
 def _finalize_drift_count(report_data: dict) -> int:
     """Recompute drift_count as ACTIONABLE drift and store it.
 
-    Phase 1 (run_drift_check) stamps drift_count = len(raw drifts). Phase 2/3
+    Phase 1 (orchestration.phase1) stamps drift_count = len(raw drifts). Phase 2/3
     then reconcile - relabelling unresolvable-named extras to
     matched_unresolvable and moving entries into ignored_drifts /
     policy_enforced_drifts - which shortens the drifts array, so the count must

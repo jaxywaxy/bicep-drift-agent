@@ -572,7 +572,7 @@ class SeveralDeployedPrincipalsCollideTests(unittest.TestCase):
 class TheDeployerTierIsWiredIntoThePipelineTests(unittest.TestCase):
     """Every test above passes `authorized_deployers` by hand, which proves the
     comparator and NOT the wiring - deleting the kwarg from the call site in
-    run_drift_check._run_rbac_sidecar leaves them all green. Same trap the
+    phase1._run_rbac_sidecar leaves them all green. Same trap the
     project has hit repeatedly, so this one drives the real step.
     """
 
@@ -580,7 +580,7 @@ class TheDeployerTierIsWiredIntoThePipelineTests(unittest.TestCase):
 
     def _call_step(self, env_value):
         import importlib
-        import run_drift_check as rdc
+        from orchestration import phase1 as rdc
 
         captured = {}
 

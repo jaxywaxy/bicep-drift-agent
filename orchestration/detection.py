@@ -10,7 +10,7 @@ import json
 import sys
 
 from pathlib import Path
-from run_drift_check import run as run_phase1
+from orchestration.phase1 import run as run_phase1
 from tools.live_state import ScopeNotFoundError
 from tools.logger import get_logger
 
