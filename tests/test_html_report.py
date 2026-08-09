@@ -160,6 +160,36 @@ class HtmlReportRenderTests(unittest.TestCase):
         self.assertNotIn("<img src=x", h)
         self.assertIn("&lt;script&gt;", h)
 
+    def test_analysis_link_targets_are_defanged(self):
+        # Escaping '<' does NOT cover markdown's own link syntax, which needs
+        # none: '[go](javascript:...)' rendered as a live anchor. Every variant
+        # below is what python-markdown actually emits for model output - case
+        # folding, an HTML entity and an embedded newline all reach the href.
+        for target in ("javascript:alert(1)",
+                       "JaVaScRiPt:alert(1)",
+                       "&#106;avascript:alert(1)",
+                       "java\nscript:alert(1)",
+                       "data:text/html;base64,PHNjcmlwdD48L3NjcmlwdD4=",
+                       "vbscript:msgbox(1)"):
+            with self.subTest(target=target):
+                h = _render(agent_analysis=f"## Plan\n\n[go]({target})")
+                self.assertIn('href="#"', h)
+                for scheme in ("javascript", "data:", "vbscript"):
+                    self.assertNotIn(f'href="{scheme}', h.lower())
+
+    def test_analysis_legitimate_links_survive(self):
+        # Guards the guard: defanging everything would be equally wrong - the
+        # narrative cites portal and docs URLs.
+        h = _render(agent_analysis=(
+            "## Plan\n\n[portal](https://portal.azure.com/#home) and "
+            "[docs](http://aka.ms/x) and [mail](mailto:ops@example.com) "
+            "and [rel](./report.html) and [anchor](#tldr)"
+        ))
+        for kept in ('href="https://portal.azure.com/#home"', 'href="http://aka.ms/x"',
+                     'href="mailto:ops@example.com"', 'href="./report.html"',
+                     'href="#tldr"'):
+            self.assertIn(kept, h)
+
     def test_analysis_code_block_quotes_not_double_escaped(self):
         # Regression: html.escape() before markdown turned '"' into &quot;,
         # then markdown escaped the '&' inside code -> literal &quot; shown in

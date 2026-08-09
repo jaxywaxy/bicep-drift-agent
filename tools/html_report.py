@@ -1378,6 +1378,42 @@ def _neutralize_raw_html(text: str) -> str:
     )
 
 
+# Schemes a link in the narrative may carry. Everything else is neutralised:
+# `javascript:` and `data:` are the two that execute, and no legitimate
+# remediation plan needs either.
+_SAFE_URI_SCHEMES = frozenset({"http", "https", "mailto"})
+_URI_ATTR_RE = re.compile(r'\s(href|src)\s*=\s*"([^"]*)"', re.IGNORECASE)
+_URI_SCHEME_RE = re.compile(r"^([a-z][a-z0-9+.\-]*):", re.IGNORECASE)
+
+
+def _uri_is_safe(value: str) -> bool:
+    """Does this attribute value carry an allowed scheme (or none at all)?
+
+    Normalises what a scheme can hide behind before deciding: HTML entities
+    ('&#106;avascript:'), embedded control characters ('java\\nscript:'),
+    surrounding whitespace, and casing - python-markdown passes all four
+    straight into the href. A value with no scheme is relative, so safe.
+    """
+    cleaned = re.sub(r"[\s\x00-\x1f]", "", html.unescape(value))
+    match = _URI_SCHEME_RE.match(cleaned)
+    return match.group(1).lower() in _SAFE_URI_SCHEMES if match else True
+
+
+def _neutralize_unsafe_uris(rendered_html: str) -> str:
+    """Defang link targets the markdown renderer built from model output.
+
+    _neutralize_raw_html stops raw tags, but markdown's OWN link syntax needs
+    no '<': `[go](javascript:...)` becomes a live anchor. The narrative quotes
+    live resource names and tag values, which are written by anyone with write
+    access to the scanned subscription - including whoever made the drift being
+    reported - so a name is not a trustworthy link target.
+    """
+    return _URI_ATTR_RE.sub(
+        lambda m: m.group(0) if _uri_is_safe(m.group(2)) else f' {m.group(1)}="#"',
+        rendered_html,
+    )
+
+
 def _render_agent_analysis_section(agent_analysis: str) -> str:
     """Render the consolidated remediation analysis (Claude's single narrative).
 
@@ -1396,14 +1432,18 @@ def _render_agent_analysis_section(agent_analysis: str) -> str:
     command rendered literally as &quot; in the report. Only '<' (the sole
     character that can open a tag) is escaped, and only OUTSIDE code regions;
     this also lets '>' blockquotes render instead of showing as &gt;.
+
+    Link TARGETS are then defanged after rendering (_neutralize_unsafe_uris):
+    markdown's own '[text](target)' syntax needs no '<', so escaping alone
+    leaves `javascript:`/`data:` anchors live.
     """
     if not agent_analysis:
         return ""
 
-    analysis_html = markdown.markdown(
+    analysis_html = _neutralize_unsafe_uris(markdown.markdown(
         _neutralize_raw_html(agent_analysis),
         extensions=["tables", "fenced_code", "sane_lists"],
-    )
+    ))
     return f"""
             <div class="section agent-analysis">
                 <h2>🛠️ Remediation Analysis</h2>
