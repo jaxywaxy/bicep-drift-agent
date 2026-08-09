@@ -625,7 +625,21 @@ def resolve_expression(expr: str, parameters: dict, variables: dict = None) -> s
     # below - that fallback only substitutes variables()/parameters() and hands
     # back the surrounding source text, which is how a storage account came to
     # be reported under the name "toLower(format('{0}st{1}{2}', ...))".
-    if inner.startswith(("toLower(", "toUpper(", "replace(", "if(")):
+    #
+    # The runtime-value ones (uniqueString/take/substring/copyIndex) belong here
+    # too, even though they do NOT reduce to an exact value: they reduce to the
+    # '[hex]' PLACEHOLDER, which is a shape the rest of the pipeline can reason
+    # about. Left off this list they reached the fallback as raw source text,
+    # and `var suffix = take(uniqueString(resourceGroup().id), 6)` - the ordinary
+    # way to name a globally-unique resource - produced the vault name
+    # 'jacquidev-kvp-take(uniqueString(resourceGroup().id), 6)'. Raw text is not
+    # merely ugly: could_be_same_resource falls back to a 3-character shared
+    # affix for any name containing '(', so 'jacquidev-kv-take(...)' adopted the
+    # deletion event of its sibling 'jacquidev-kvp-e4zzsl' and the apps vault's
+    # own deletion left the report entirely. The placeholder form compares end
+    # to end and tells the two apart.
+    if inner.startswith(("toLower(", "toUpper(", "replace(", "if(",
+                         "uniqueString(", "take(", "substring(", "copyIndex(")):
         resolved = _resolve_function_call(inner, parameters, variables)
         if resolved != inner:
             return resolved
