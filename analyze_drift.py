@@ -52,7 +52,7 @@ from orchestration.attribution import (
     _build_lifecycle_and_split,  # noqa: F401  (re-exported for tests)
     _recover_deployed_name,  # noqa: F401  (re-exported for tests)
 )
-from orchestration.analysis import _run_claude_analysis
+from orchestration.analysis import _run_claude_analysis, classify_drifts
 from orchestration.reporting import (
     _finalize_drift_count,
     _strip_internal_details,
@@ -148,6 +148,12 @@ def main():
         # sees a bare tag drift and recommends "fix the parameter and redeploy",
         # which loses the race on the very next write (live report 2026-07-27).
         _claim_policy_required_tags(report_data)
+
+        # Risk severity + category for every row. Deterministic and unconditional:
+        # the classifier needs no LLM, but lived only inside DriftAgent, so its
+        # verdict was computed for the prompt and then discarded (and not computed
+        # at all without a provider). AFTER attribution - it honours change_origin.
+        classify_drifts(report_data)
 
         # Claude analysis of the attributed drift set (only when a key is available).
         agent_analysis = _run_claude_analysis(agent, report_data)

@@ -326,6 +326,45 @@ _REPORT_CSS = """            * {
                 border: 1px solid #ccc;
             }
 
+            /* Risk severity, deliberately a HOTTER palette than the origin
+               chips beside it: origin is provenance, this is consequence, and
+               the two were previously conflated into one grey "Unknown". */
+            .badge.severity-critical {
+                background: #b71c1c;
+                color: #fff;
+                border: 1px solid #7f0000;
+            }
+
+            .badge.severity-high {
+                background: #ffebee;
+                color: #b71c1c;
+                border: 1px solid #e53935;
+            }
+
+            .badge.severity-medium {
+                background: #fff3e0;
+                color: #e65100;
+                border: 1px solid #fb8c00;
+            }
+
+            .badge.severity-low {
+                background: #fffde7;
+                color: #f57f17;
+                border: 1px solid #fdd835;
+            }
+
+            .badge.severity-informational {
+                background: #e3f2fd;
+                color: #1565c0;
+                border: 1px solid #64b5f6;
+            }
+
+            .badge.severity-unknown {
+                background: #f5f5f5;
+                color: #999;
+                border: 1px solid #ddd;
+            }
+
             .lifecycle-timeline {
                 margin-top: 15px;
                 padding: 12px;
@@ -689,6 +728,7 @@ def generate_html_report(
         change_origin = drift.get("change_origin", {})
         origin_badge = _get_origin_badge(change_origin)
         owner_badge = _get_owner_badge(drift.get("owner"))
+        severity_badge = _get_severity_badge(drift.get("severity"))
 
         # Get lifecycle info
         lifecycle = drift.get("lifecycle", {})
@@ -699,6 +739,7 @@ def generate_html_report(
             <td><strong>{html.escape(drift['type'])}</strong></td>
             <td><code>{html.escape(drift['name'])}</code></td>
             <td>{type_badge}</td>
+            <td>{severity_badge}</td>
             <td>{owner_badge}</td>
             <td>{origin_badge}</td>
             <td>
@@ -825,6 +866,30 @@ def _get_owner_badge(owner) -> str:
     if owner == "workload":
         return '<span class="badge owner-workload" title="Owned by the application/workload team">📦 Workload</span>'
     return '<span class="badge origin-unknown">—</span>'
+
+
+_SEVERITY_ICONS = {
+    "critical": "🚨", "high": "🔴", "medium": "🟠",
+    "low": "🟡", "informational": "ℹ️",
+}
+
+
+def _get_severity_badge(severity: str | None) -> str:
+    """RISK severity for the row - what this resource is, not who touched it.
+
+    Its own column because the Origin badge cannot carry it: a finding with no
+    Activity Log entry has origin AND category 'unknown', so it renders a grey
+    "Unknown" however serious the resource is. Live 2026-08-09: a standing
+    subscription-scope Owner grant absent from Bicep, classified HIGH, showed
+    as grey Unknown - the only severity in the report was change_origin's
+    MEDIUM, which is a statement about attribution confidence.
+    """
+    key = str(severity or "").lower()
+    if key not in _SEVERITY_ICONS:
+        return '<span class="badge severity-unknown">—</span>'
+    return (f'<span class="badge severity-{html.escape(key)}" '
+            f'title="Risk severity: {html.escape(key)}">'
+            f'{_SEVERITY_ICONS[key]} {html.escape(key.title())}</span>')
 
 
 def _get_origin_badge(change_origin: dict) -> str:
@@ -1119,6 +1184,7 @@ def _render_drift_section(total: int, drift_rows: str) -> str:
                     <th>Resource Type</th>
                     <th>Resource Name</th>
                     <th>Drift Type</th>
+                    <th>Severity</th>
                     <th>Owner</th>
                     <th>Change Origin</th>
                     <th>Details</th>

@@ -7,6 +7,7 @@ is by far the most expensive step, so it is skipped for clean estates - every
 deterministic phase still runs without it (Claude is optional).
 """
 
+from agent.classification import DriftClassifier
 from orchestration.reporting import _drift_type_counts
 from tools.logger import get_logger
 from tools.models import Drift, DriftReport
@@ -69,17 +70,11 @@ def _explain_llm_failure(provider, exc: Exception) -> str:
     return "LLM analysis unavailable this run"
 
 
-def _run_claude_analysis(agent, report_data: dict):
-    """Build the DriftReport and, if an agent is available, run Claude analysis.
+def _build_drift_report(report_data: dict) -> DriftReport:
+    """The typed view of the JSON report, shared by classification and the LLM.
 
-    Returns the analysis text (also stored in report_data['agent_analysis']), or
-    None when no API key is configured OR the Claude call fails. A Claude failure
-    is NON-FATAL and swallowed here: the deterministic pipeline (smart matching,
-    ignore filtering, property drift, lifecycle) has already reconciled the
-    report, and the caller must still persist THAT - re-raising aborted Phase 2
-    before the persist and shipped the raw, un-reconciled Phase 1 dump (every
-    uniqueString-named resource false-flagged extra_in_azure; seen live when the
-    API key ran out of credit).
+    Extracted so severity classification and the analysis call cannot drift
+    apart in what they consider a drift: both read the same Drift objects.
     """
     drifts = [
         Drift(
@@ -98,7 +93,7 @@ def _run_claude_analysis(agent, report_data: dict):
     ]
 
     missing, extra, modified = _drift_type_counts(drifts)
-    drift_report = DriftReport(
+    return DriftReport(
         bicep_file=report_data["bicep_file"],
         resource_group=report_data["resource_group"],
         drifts=drifts,
@@ -114,6 +109,51 @@ def _run_claude_analysis(agent, report_data: dict):
         live_resources=report_data.get("live_resources"),
         policy_assignments=report_data.get("policy_assignments"),
     )
+
+
+def classify_drifts(report_data: dict) -> None:
+    """Stamp each drift row with a RISK severity and category, in place.
+
+    DETERMINISTIC - runs on every scan, with or without an LLM. The classifier
+    is a dependency-free mixin (no client, no network); it was reachable only
+    through DriftAgent, so a scan with no provider produced no severity at all
+    and a scan WITH one computed a severity that never left the prompt. Live
+    2026-08-09: an un-IaC'd subscription-scope Owner grant was rated HIGH by
+    this very function and rendered as a grey "Unknown" badge, because the row
+    carried nothing but `change_origin`.
+
+    Two severities now ride on a row and they answer different questions.
+    `change_origin.severity` is about PROVENANCE - how confident we are about
+    who did it - and defaults to MEDIUM whenever the Activity Log is silent.
+    `severity` here is about RISK: what the resource is and what changed. The
+    first must never be able to soften the second, which is why they stay
+    separate fields instead of one being folded into the other (cf. #343 -
+    a provenance claim applied to a declared-state fact).
+
+    Must run AFTER attribution: _honour_attribution reads change_origin, and
+    the #327 invariant is that a CRITICAL property is never downgraded.
+    """
+    classifier = DriftClassifier()
+    for row, drift in zip(report_data.get("drifts", []), _build_drift_report(report_data).drifts or []):
+        finding = classifier._classify_drift(drift)
+        row["severity"] = finding.severity.value
+        row["category"] = finding.category.value
+
+
+def _run_claude_analysis(agent, report_data: dict):
+    """Build the DriftReport and, if an agent is available, run Claude analysis.
+
+    Returns the analysis text (also stored in report_data['agent_analysis']), or
+    None when no API key is configured OR the Claude call fails. A Claude failure
+    is NON-FATAL and swallowed here: the deterministic pipeline (smart matching,
+    ignore filtering, property drift, lifecycle) has already reconciled the
+    report, and the caller must still persist THAT - re-raising aborted Phase 2
+    before the persist and shipped the raw, un-reconciled Phase 1 dump (every
+    uniqueString-named resource false-flagged extra_in_azure; seen live when the
+    API key ran out of credit).
+    """
+    drift_report = _build_drift_report(report_data)
+    drifts = drift_report.drifts or []
 
     if not agent:
         return None
