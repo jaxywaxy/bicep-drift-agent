@@ -17,6 +17,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tools.activity_log import could_be_same_resource
 from tools.normalizer import flatten_resources
 from tools.property_drift import PropertyComparator
 
@@ -101,8 +102,9 @@ class ModuleVariableResolutionTests(unittest.TestCase):
     `var name = 'driftAppPlan${suffix}'`, suffix passed from a parent
     uniqueString, previously resolved against the module's own defaults only -
     where suffix is None - and baked in the literal 'driftAppPlanNone', which
-    false-flagged as a missing/extra pair. It must instead keep the uniqueString
-    marker so smart matching pairs it to the live resource.
+    false-flagged as a missing/extra pair. It must instead keep a runtime marker
+    so smart matching pairs it to the live resource - today the canonical
+    '[hex]' placeholder rather than the raw uniqueString() source text.
     """
 
     def _template(self, plan_var: str) -> dict:
@@ -136,18 +138,42 @@ class ModuleVariableResolutionTests(unittest.TestCase):
             }],
         }
 
-    def test_bare_format_name_keeps_the_uniquestring_marker(self):
-        resources = flatten_resources(self._template("[format('driftAppPlan{0}', parameters('suffix'))]"))
-        plan = next(r for r in resources if r["type"] == "Microsoft.Web/serverfarms")
-        self.assertNotIn("None", plan["name"])
-        self.assertIn("uniquestring", plan["name"].lower())
+    def _plan_name(self, plan_var: str) -> str:
+        resources = flatten_resources(self._template(plan_var))
+        return next(r["name"] for r in resources
+                    if r["type"] == "Microsoft.Web/serverfarms")
+
+    def test_bare_format_name_keeps_a_matchable_runtime_marker(self):
+        # The invariant is that the name stays PAIRABLE with whatever the
+        # uniqueString resolved to live - not that any particular text survives.
+        # It asserted the literal 'uniquestring' until take()/uniqueString()
+        # joined the resolvable transforms and the marker became the canonical
+        # '[hex]' placeholder, which is the form smart matching and
+        # could_be_same_resource are built around.
+        name = self._plan_name("[format('driftAppPlan{0}', parameters('suffix'))]")
+        self.assertNotIn("None", name)          # the original defect
+        self.assertRegex(name, r"^driftAppPlan\[[0-9a-f]{8}\]$")
+        self.assertTrue(could_be_same_resource(name, "driftAppPlan3s7c7wed"))
 
     def test_matches_the_tolower_wrapped_sibling_behavior(self):
         # The toLower-wrapped form was always kept unresolvable; the bare form
-        # must now behave the same rather than collapsing to a literal.
-        resources = flatten_resources(self._template("[toLower(format('driftplan{0}', parameters('suffix')))]"))
-        plan = next(r for r in resources if r["type"] == "Microsoft.Web/serverfarms")
-        self.assertIn("uniquestring", plan["name"].lower())
+        # must behave the same rather than collapsing to a literal.
+        name = self._plan_name("[toLower(format('driftplan{0}', parameters('suffix')))]")
+        self.assertNotIn("None", name)
+        self.assertRegex(name, r"^driftplan\[[0-9a-f]{8}\]$")
+
+    def test_the_marker_still_separates_prefix_siblings(self):
+        # Why the placeholder form matters beyond legibility: raw expression
+        # text sends could_be_same_resource to its 3-character shared-affix
+        # fallback, where 'jacquidev-kv-...' adopted the deletion event of
+        # 'jacquidev-kvp-e4zzsl'. Resolved, the trailing '-' is literal and the
+        # two are distinguishable.
+        raw = "jacquidev-kv-take(uniqueString(resourceGroup().id), 6)"
+        self.assertTrue(could_be_same_resource(raw, "jacquidev-kvp-e4zzsl"))
+        self.assertFalse(could_be_same_resource("jacquidev-kv-[86c9cbf6]",
+                                                "jacquidev-kvp-e4zzsl"))
+        self.assertTrue(could_be_same_resource("jacquidev-kvp-[86c9cbf6]",
+                                               "jacquidev-kvp-e4zzsl"))
 
 
 class CreateModeWriteOnlyTests(unittest.TestCase):
