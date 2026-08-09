@@ -8,7 +8,7 @@ to detect configuration changes outside of IaC.
 
 Split from the old single-file tools/property_drift.py into a package by
 existing class boundaries:
-- models: MatchConfidenceScores, PropertyDiff, ResourceDrift, ResourceIndexer
+- models: MatchConfidenceScores, PropertyDiff, ResourceComparison, ResourceIndexer
 - extractor: PropertyExtractor (Bicep and Azure property extraction)
 - matcher: ResourceMatcher (name / prefix / contextual / fuzzy / positional)
 - comparator: PropertyComparator (all comparison, severity, sentinel logic)
@@ -29,7 +29,7 @@ from .matcher import ResourceMatcher  # noqa: F401
 from .models import (  # noqa: F401
     MatchConfidenceScores,
     PropertyDiff,
-    ResourceDrift,
+    ResourceComparison,
     ResourceIndexer,
 )
 from .validators import ConfigurationValidator  # noqa: F401
@@ -40,7 +40,7 @@ __all__ = [
     "PropertyExtractor",
     "ResourceMatcher",
     "PropertyDiff",
-    "ResourceDrift",
+    "ResourceComparison",
     "ConfigurationValidator",
     "ResourceIndexer",
     "MatchConfidenceScores",
