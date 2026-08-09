@@ -36,6 +36,7 @@ from tools.deployment_stacks import (
 )
 from tools.diff_states import ResourceDrift, diff_states, format_drift_report
 from tools.get_live_state import (
+    acquire_arm_token,
     CollectionGaps,
     fetch_cross_subscription_resources,
     fetch_declared_defender_pricings,
@@ -410,15 +411,23 @@ def _fetch_live_state(resource_group: str, deployment_scope: str, arm_resources:
 
     logger.info(f"✓ {len(live_resources)} resource(s) deployed in Azure (scope: {deployment_scope})")
 
-    live_resources.extend(fetch_cross_subscription_resources(arm_resources))
+    # These three sit above the Resource Graph fan-out, which shares one
+    # credential across its own collectors. They have none to inherit, so they
+    # share this one instead of building a credential chain each. None is fine:
+    # every collector below falls back to acquiring its own.
+    arm_token = acquire_arm_token()
+
+    live_resources.extend(fetch_cross_subscription_resources(arm_resources, token=arm_token))
     qualify_extension_resource_names(arm_resources)
     live_resources.extend(fetch_declared_defender_pricings(
-        arm_resources, os.environ.get("AZURE_SUBSCRIPTION_ID")
+        arm_resources, os.environ.get("AZURE_SUBSCRIPTION_ID"), token=arm_token
     ))
     # Bicep-driven like the pricings above, and for the same reason: a workspace
     # carries the whole built-in table catalogue (679 on the drift-test
     # workspace), so we ask for the declared tables by name rather than listing.
-    live_resources.extend(fetch_declared_workspace_tables(arm_resources, live_resources))
+    live_resources.extend(fetch_declared_workspace_tables(
+        arm_resources, live_resources, token=arm_token
+    ))
     return live_resources
 
 

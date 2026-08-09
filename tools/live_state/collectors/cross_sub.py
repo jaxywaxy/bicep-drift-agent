@@ -19,14 +19,15 @@ from ..common import _has_unresolved
 logger = logging.getLogger(__name__)
 
 
-def fetch_cross_subscription_resources(arm_resources: list[dict]) -> list[dict]:
+def fetch_cross_subscription_resources(
+    arm_resources: list[dict], token: str | None = None
+) -> list[dict]:
     """Fetch bicep resources whose module targets ANOTHER subscription."""
     targets = [r for r in arm_resources if r.get("_target_subscription")]
     if not targets:
         return []
     scanned_sub = os.environ.get("AZURE_SUBSCRIPTION_ID", "")
     fetched: list[dict] = []
-    token = None
     for r in targets:
         sub = r["_target_subscription"]
         rg = r.get("_target_rg")

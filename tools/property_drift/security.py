@@ -14,6 +14,11 @@ from . import primitives as _primitives
 from . import severity as _severity
 
 
+# Types whose networkAcls default to open when never configured: Azure returns
+# null/absent, while templates commonly spell out the equivalent explicit
+# default. Injecting the default on the DEPLOYED side (only) makes those compare
+# equal without suppressing real ACL drift. Bicep-side is never injected: an
+# unspecified bicep property is simply not compared.
 NETWORK_ACL_DEFAULT_TYPES = {
     "microsoft.keyvault/vaults",
     "microsoft.storage/storageaccounts",
@@ -28,6 +33,16 @@ DEFAULT_OPEN_NETWORK_ACLS = {
     "virtualNetworkRules": [],
 }
 
+# Properties whose ABSENCE from the template is itself a security posture ("no
+# authorized IP ranges", "local accounts enabled"). The generic comparison
+# iterates bicep keys only, so a key someone sets on the live resource
+# out-of-band is invisible when the template omits it - e.g. API server
+# authorizedIPRanges added via `az aks update`. For these paths, an omitted
+# template key is treated as demanding the documented Azure default, and a live
+# value deviating from that default is drift. Paths are matched
+# case-insensitively against the flattened dicts; a path the template DOES
+# declare (itself or any child) is left to the generic comparison. Keyed by
+# lowercased resource type -> {lowercased path: default}.
 SECURITY_SENTINELS = {
     "microsoft.containerservice/managedclusters": {
         "properties.apiserveraccessprofile.authorizedipranges": [],

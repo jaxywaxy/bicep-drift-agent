@@ -253,6 +253,12 @@ WRITE_ONLY_PROPERTIES = {
     "properties.createmode",
 }
 
+# Properties Resource Graph does not project for a SPECIFIC type, so they always
+# diff as desired-vs-null. Type-scoped (unlike WRITE_ONLY_PROPERTIES) because the
+# path is too generic to suppress globally: e.g. a Virtual WAN's
+# `properties.type` (Standard/Basic) is absent from the Resource Graph
+# projection, but a bare "properties.type" would wrongly swallow it on any other
+# resource type. Keyed by lowercased resource type.
 NEVER_PROJECTED_BY_TYPE = {
     "microsoft.network/virtualwans": ("properties.type",),
 }
@@ -265,6 +271,11 @@ MONITORING_TYPES = frozenset({
     "microsoft.insights/components",
 })
 
+# Alert/action-group resources are "silent failure" types: a disabled alert or a
+# severed notification path looks fine until an incident. These paths are
+# critical ONLY for these types, so they cannot go in the global substring
+# CRITICAL_PROPERTIES - e.g. "properties.enabled" would also match Key Vault's
+# "properties.enabledForDeployment".
 MONITORING_CRITICAL_SUBSTRINGS = (
     "properties.enabled",           # alert / action group switched off
     "receivers",                    # a notification path removed or changed

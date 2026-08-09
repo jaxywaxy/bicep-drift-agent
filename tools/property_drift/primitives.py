@@ -38,6 +38,11 @@ def flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
     return dict(items)
 
 
+# The placeholder the normalizer emits for an unresolvable uniqueString() inside
+# a value, e.g. 'aidrift[86c9cbf6]'. The resource NAME gets smart-match remapped,
+# but the same placeholder inside a PROPERTY value (a customSubDomainName set to
+# the resource name) reaches the comparator as-is and must not be compared
+# literally against the resolved live value.
 def placeholder_value_matches(bicep_val: str, deployed_val: str) -> bool:
     """True when a placeholder-bearing bicep string is consistent with the
     deployed value: the fixed parts around each [hex] placeholder must
