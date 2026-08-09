@@ -41,7 +41,6 @@ jobs:
     with:
       landing_zone: ${{ inputs.landing_zone || 'landingzone' }}
       override_subscription: ''
-      override_resource_group: ''
     secrets:
       BICEP_REPO_TOKEN: ${{ secrets.BICEP_REPO_TOKEN }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
