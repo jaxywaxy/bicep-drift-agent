@@ -1,3 +1,13 @@
+# VERIFICATION ONLY - not customer infrastructure.
+#
+# Targets a fixture estate that is deployed for a verification round and torn
+# down afterwards (see docs/TEST_ESTATE.md). A failing run here usually means
+# the estate is absent, not that drift was found.
+#
+# Manual dispatch only. Do NOT add a schedule: a scheduled scan of an estate
+# that is normally torn down produces a daily failure that trains people to
+# ignore red.
+
 name: Spoke Connectivity Drift Check
 
 env:
@@ -8,11 +18,6 @@ on:
     inputs:
       subscription_id:
         description: 'Azure subscription ID (defaults to config file subscription)'
-        required: false
-        default: ''
-        type: string
-      resource_group:
-        description: 'RG selector override, or "*" for the whole subscription'
         required: false
         default: ''
         type: string
@@ -27,7 +32,6 @@ jobs:
     with:
       landing_zone: spoke-drifttest
       override_subscription: ${{ github.event.inputs.subscription_id }}
-      override_resource_group: ${{ github.event.inputs.resource_group }}
     # Explicit secrets (least privilege) instead of `secrets: inherit`, which
     # would hand the reusable workflow every repo secret. Mirrors the map the
     # hybrid workflow declares; also shrinks its toJSON(secrets) blob to just these.

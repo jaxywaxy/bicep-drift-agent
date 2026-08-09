@@ -11,11 +11,6 @@ on:
         required: false
         default: ''
         type: string
-      resource_group:
-        description: 'RG selector override, or "*" for the whole subscription'
-        required: false
-        default: ''
-        type: string
 
 permissions:
   id-token: write
@@ -27,7 +22,6 @@ jobs:
     with:
       landing_zone: landingzone
       override_subscription: ${{ github.event.inputs.subscription_id }}
-      override_resource_group: ${{ github.event.inputs.resource_group }}
     secrets:
       BICEP_REPO_TOKEN: ${{ secrets.BICEP_REPO_TOKEN }}
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}

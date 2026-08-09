@@ -17,6 +17,9 @@
 #       workflow: drift-lz-lz-name.yml               # Workflow file to run
 
 landing_zones:
+  # ===================== PRODUCTION LANDING ZONES =====================
+  # Real estates. Everything here is customer infrastructure.
+
   landingzone:
     repo: jaxywaxy/azure-landingzone-bicep
     config_path: .github/drift-lz-config.yml
@@ -31,6 +34,15 @@ landing_zones:
     repo: jaxywaxy/azure-landingzone-bicep
     config_path: .github/drift-lz-prod-config.yml
     workflow: drift-lz-prod.yml
+
+  # ======================= VERIFICATION ONLY ==========================
+  # Fixture estates used to promote a capability from live-clean to
+  # live-proven (see docs/TEST_ESTATE.md). NOT customer infrastructure:
+  # they are deployed for a round and torn down after, so a failing scan
+  # here usually means the estate is absent, not that drift was found.
+  #
+  # Their workflows are manual-dispatch only and several are disabled
+  # between rounds. Do not add a schedule to any of them.
 
   spoke-drifttest:
     repo: jaxywaxy/azure-landingzone-bicep
@@ -60,17 +72,5 @@ landing_zones:
     config_path: .github/drift-lz-database-config.yml
     workflow: drift-lz-database.yml
 
-  frontend:
-    repo: myorg/frontend-bicep
-    config_path: .github/drift-lz-config.yml
-    workflow: drift-lz-frontend.yml
 
-  backend:
-    repo: myorg/backend-bicep
-    config_path: .github/drift-lz-config.yml
-    workflow: drift-lz-backend.yml
 
-  database:
-    repo: myorg/database-bicep
-    config_path: .github/drift-lz-config.yml
-    workflow: drift-lz-database.yml

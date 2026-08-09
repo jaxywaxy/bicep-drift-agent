@@ -9,8 +9,13 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
-  schedule:
-    - cron: '0 9 * * *'  # Example: daily at 9am UTC - change as needed
+  # NO SCHEDULE HERE, DELIBERATELY. This file is a template, and a template
+  # that executes is not a template: with a live cron it ran daily against the
+  # placeholder `myteam` landing zone, failed seven times and had to be disabled
+  # by hand. Uncomment this in YOUR COPY, not here.
+  #
+  # schedule:
+  #   - cron: '0 9 * * *'   # e.g. daily at 09:00 UTC
   workflow_dispatch:
 
 permissions:

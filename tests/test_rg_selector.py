@@ -8,7 +8,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from tools.rg_selector import is_glob, needs_expansion, resolve_resource_groups
+from tools.rg_selector import is_glob, resolve_resource_groups
 
 AVAILABLE = ["rg-hub", "rg-conn-dns", "rg-conn-fw", "rg-app-spoke", "rg-data-spoke"]
 
@@ -19,10 +19,6 @@ class IsGlobTests(unittest.TestCase):
         self.assertTrue(is_glob("rg-conn-*"))
         self.assertTrue(is_glob("rg-?-spoke"))
         self.assertFalse(is_glob("rg-hub"))
-
-    def test_needs_expansion(self):
-        self.assertTrue(needs_expansion(["rg-hub", "rg-conn-*"]))
-        self.assertFalse(needs_expansion(["rg-hub", "rg-data-spoke"]))
 
 
 class ResolveTests(unittest.TestCase):

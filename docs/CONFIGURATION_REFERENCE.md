@@ -141,7 +141,7 @@ checks:
 | `subscription_id` | **Required in practice** | Azure subscription ID being scanned. The reusable workflow passes it through as `AZURE_SUBSCRIPTION_ID`, and the scan fails at live-state collection without it. It defaults to empty rather than erroring at config-validation time, so an omission surfaces as a failed scan rather than a clear config error. A `workflow_dispatch` run can override it |
 | `notifications` | No | Notification destinations and routing rules |
 | `checks` | Yes | List of Bicep scans to perform |
-| `resource_group` | — | **Accepted and ignored.** The loader reads it, but the job never exposes it as an output and nothing downstream consumes it. Scan scope comes from each check's `resource_groups`. Setting it has no effect |
+| `resource_group` | — | **Not supported.** Scan scope comes from each check's `resource_groups`. The loader used to read a root-level key and a matching `resource_group` dispatch override, neither of which reached the scan; both were removed rather than left looking functional |
 
 ---
 

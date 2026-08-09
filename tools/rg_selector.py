@@ -44,11 +44,6 @@ def rg_label(selector) -> str:
     return selector
 
 
-def needs_expansion(patterns: list[str]) -> bool:
-    """True if any selector is a wildcard/glob and the caller must enumerate RGs."""
-    return any(is_glob(p) for p in patterns)
-
-
 def resolve_resource_groups(patterns: list[str], available: list[str]) -> list[str]:
     """Expand ``resource_groups`` selectors against the available RGs.
 
