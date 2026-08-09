@@ -3,14 +3,14 @@ tools/property_drift/detector.py
 
 Top-level drift orchestrator: run cross-resource validators (orphaned disks,
 VMs without NICs, VM data-disk changes), match Bicep <-> deployed resources,
-property-compare each matched pair, then emit missing/extra ResourceDrifts
-for the un-matched sides.
+property-compare each matched pair, then emit missing/extra
+ResourceComparisons for the un-matched sides.
 """
 
 from .comparator import PropertyComparator
 from .extractor import PropertyExtractor
 from .matcher import ResourceMatcher
-from .models import ResourceDrift
+from .models import ResourceComparison
 from .validators import ConfigurationValidator
 
 
@@ -31,7 +31,7 @@ class DriftDetector:
     def detect_drift(
         bicep_resources: list[dict],
         deployed_resources: list[dict],
-    ) -> list[ResourceDrift]:
+    ) -> list[ResourceComparison]:
         """Detect all drift between Bicep and deployed resources.
 
         Includes:
@@ -66,7 +66,7 @@ class DriftDetector:
 
             if diffs:
                 drifts.append(
-                    ResourceDrift(
+                    ResourceComparison(
                         resource_type=bicep_res.get("type", ""),
                         resource_name=bicep_res.get("name", ""),
                         bicep_name=bicep_res.get("name", ""),
@@ -81,7 +81,7 @@ class DriftDetector:
         for bicep_res in bicep_resources:
             if id(bicep_res) not in matched_bicep:
                 drifts.append(
-                    ResourceDrift(
+                    ResourceComparison(
                         resource_type=bicep_res.get("type", ""),
                         resource_name=bicep_res.get("name", ""),
                         bicep_name=bicep_res.get("name", ""),
@@ -96,7 +96,7 @@ class DriftDetector:
         for deployed_res in deployed_resources:
             if id(deployed_res) not in matched_deployed:
                 drifts.append(
-                    ResourceDrift(
+                    ResourceComparison(
                         resource_type=deployed_res.get("type", ""),
                         resource_name=deployed_res.get("name", ""),
                         bicep_name="",
@@ -110,7 +110,7 @@ class DriftDetector:
         return drifts
 
     @staticmethod
-    def generate_summary(drifts: list[ResourceDrift]) -> dict[str, int]:
+    def generate_summary(drifts: list[ResourceComparison]) -> dict[str, int]:
         """Generate summary of drift types."""
         return {
             "total": len(drifts),

@@ -89,8 +89,28 @@ class PropertyDiff:
 
 
 @dataclass
-class ResourceDrift:
-    """Drift information for a single resource."""
+class ResourceComparison:
+    """The outcome of comparing ONE declared resource to its deployed match.
+
+    Not necessarily drift - `drift_type` includes "unchanged". This is the
+    property comparator's internal currency; the pipeline's currency is
+    `tools.diff_states.ResourceDrift`, which this is reduced into.
+
+    The two carry the SAME field name with DIFFERENT vocabularies, so they are
+    not interchangeable despite both having resource_type/resource_name/
+    drift_type:
+
+        here                        diff_states.ResourceDrift
+        "missing"                   "missing_in_azure"
+        "extra"                     "extra_in_azure"
+        "modified"                  "property_drift"
+        "unchanged"                 (not represented - never emitted)
+
+    Mixing them is silent rather than loud: count_drifts.COUNTED_TYPES keys off
+    those strings, so a value from the wrong vocabulary drops out of the count
+    instead of raising. This class was called ResourceDrift too until the names
+    were split apart.
+    """
     resource_type: str
     resource_name: str
     bicep_name: str      # Name from Bicep template

@@ -4,17 +4,17 @@ tools/property_drift/validators.py
 Cross-resource configuration checks that go beyond property-level diff:
 orphaned managed disks, VMs with no NICs, VM data-disk add/remove/modify.
 These operate over the whole deployed set (not per-match) and emit their own
-ResourceDrift records with change_type='critical_config_error' or 'modified'.
+ResourceComparison records with change_type='critical_config_error' or 'modified'.
 """
 
-from .models import PropertyDiff, ResourceDrift, ResourceIndexer
+from .models import PropertyDiff, ResourceComparison, ResourceIndexer
 
 
 class ConfigurationValidator:
     """Validate resource configurations for critical issues."""
 
     @staticmethod
-    def check_orphaned_disks(deployed_resources: list[dict]) -> list[ResourceDrift]:
+    def check_orphaned_disks(deployed_resources: list[dict]) -> list[ResourceComparison]:
         """Detect orphaned disks (OS and data disks not attached to any VM).
 
         This is a critical issue because:
@@ -48,7 +48,7 @@ class ConfigurationValidator:
 
             if not is_attached:
                 drifts.append(
-                    ResourceDrift(
+                    ResourceComparison(
                         resource_type="Microsoft.Compute/disks",
                         resource_name=disk_name,
                         bicep_name="",
@@ -70,7 +70,7 @@ class ConfigurationValidator:
         return drifts
 
     @staticmethod
-    def check_vms_without_nics(deployed_resources: list[dict]) -> list[ResourceDrift]:
+    def check_vms_without_nics(deployed_resources: list[dict]) -> list[ResourceComparison]:
         """Detect VMs without network interfaces (critical configuration error)."""
         drifts = []
 
@@ -92,7 +92,7 @@ class ConfigurationValidator:
 
             if not has_nics:
                 drifts.append(
-                    ResourceDrift(
+                    ResourceComparison(
                         resource_type="Microsoft.Compute/virtualMachines",
                         resource_name=vm_name,
                         bicep_name="",
@@ -117,7 +117,7 @@ class ConfigurationValidator:
     def check_data_disk_changes(
         bicep_resources: list[dict],
         deployed_resources: list[dict],
-    ) -> list[ResourceDrift]:
+    ) -> list[ResourceComparison]:
         """Detect data disk additions, removals, and modifications on VMs.
 
         Data disk changes are important configuration drifts because they affect
@@ -147,7 +147,7 @@ class ConfigurationValidator:
                     disk_name = deployed_disk.get("name", f"DataDisk-LUN{lun}")
                     disk_size = deployed_disk.get("diskSizeGB", "unknown")
                     drifts.append(
-                        ResourceDrift(
+                        ResourceComparison(
                             resource_type="Microsoft.Compute/virtualMachines",
                             resource_name=vm_name,
                             bicep_name=vm_name,
@@ -170,7 +170,7 @@ class ConfigurationValidator:
                 if lun not in deployed_by_lun:
                     disk_name = bicep_disk.get("name", f"DataDisk-LUN{lun}")
                     drifts.append(
-                        ResourceDrift(
+                        ResourceComparison(
                             resource_type="Microsoft.Compute/virtualMachines",
                             resource_name=vm_name,
                             bicep_name=vm_name,
@@ -197,7 +197,7 @@ class ConfigurationValidator:
                 deployed_size = deployed_disk.get("diskSizeGB")
                 if bicep_size and deployed_size and bicep_size != deployed_size:
                     drifts.append(
-                        ResourceDrift(
+                        ResourceComparison(
                             resource_type="Microsoft.Compute/virtualMachines",
                             resource_name=vm_name,
                             bicep_name=vm_name,

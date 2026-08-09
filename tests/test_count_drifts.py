@@ -213,3 +213,43 @@ class ThePhase1SummaryCannotBeMistakenForTheFinalOneTests(unittest.TestCase):
     def test_a_clean_report_is_unchanged(self):
         from tools.diff_states import format_drift_report
         self.assertIn("No drift detected", format_drift_report([], "rg-x"))
+
+
+class DriftTypeVocabularyTests(unittest.TestCase):
+    """Two dataclasses model a compared resource, with DIFFERENT vocabularies
+    under the same `drift_type` field name:
+
+        tools.diff_states.ResourceDrift          the pipeline's currency
+        tools.property_drift.ResourceComparison  the comparator's internal one
+
+    They were BOTH called ResourceDrift until the names were split apart. The
+    names are fixed now; these tests pin the thing the rename does not fix -
+    that mixing the vocabularies fails SILENTLY. COUNTED_TYPES keys off these
+    strings, so a comparator-vocabulary value reaching the main drifts list is
+    not an error, it is a finding that vanishes from the count.
+    """
+
+    COMPARATOR_VOCABULARY = ("missing", "extra", "modified", "unchanged")
+
+    def test_the_two_vocabularies_do_not_overlap(self):
+        from tools.count_drifts import COUNTED_TYPES
+        overlap = set(self.COMPARATOR_VOCABULARY) & set(COUNTED_TYPES)
+        self.assertEqual(overlap, set(),
+                         "a comparator drift_type is now also a counted type - "
+                         "the two vocabularies must stay distinguishable")
+
+    def test_comparator_values_are_not_counted(self):
+        # The silent-failure demonstration: a finding carrying the wrong
+        # vocabulary tallies as zero rather than raising.
+        from tools.count_drifts import tally_report
+        report = {"drifts": [{"type": "Microsoft.Storage/storageAccounts",
+                              "name": "st1", "drift_type": v, "details": {}}
+                             for v in self.COMPARATOR_VOCABULARY]}
+        counts = tally_report(report)
+        self.assertEqual(
+            counts["drift_count"] + counts["extra_count"] + counts["missing_count"], 0)
+
+    def test_the_two_classes_have_distinct_names(self):
+        from tools.diff_states import ResourceDrift
+        from tools.property_drift import ResourceComparison
+        self.assertNotEqual(ResourceDrift.__name__, ResourceComparison.__name__)
