@@ -273,6 +273,24 @@ Detected drift is enriched with:
 - Governance context
 - Policy awareness
 
+#### Two severities, and which one is which
+
+A drift row carries both, and they answer different questions. Conflating them
+is a recurring defect, not a hypothetical:
+
+| Field | Question | Where it comes from | Default when unknown |
+|---|---|---|---|
+| `severity` | **Risk** — what is this resource, and what changed about it? | `agent/classification.py` policy tables, stamped by `orchestration.analysis.classify_drifts` | `unknown` |
+| `change_origin.severity` | **Provenance** — how confident are we about who did it? | `tools/change_origin.py`, from the Activity Log | `medium` — a silent log, not a medium problem |
+
+Provenance must never soften risk. Live 2026-08-09: an un-IaC'd
+subscription-scope Owner grant was classified HIGH and rendered as a grey
+"Unknown" badge, because the row carried nothing but `change_origin` and its
+origin *and* category were both `unknown`. The classifier had the right answer
+the whole time — it was reachable only through `DriftAgent`, so its verdict went
+into the LLM prompt and nowhere else, and a scan with no provider never computed
+it at all.
+
 #### Evidence carried to the analysis
 
 Each finding also carries context the *report already holds* but a per-resource
@@ -449,6 +467,8 @@ one produces a failure that a passing test suite will not catch.
 | **The bracketed `[MISSING]`/`[EXTRA]`/`[DRIFT]`/`[UNVERIFIED]` tokens belong to `_print_drift_summary` alone.** Phase 1's `format_drift_report` deliberately does not use them | Both used to appear in one CI log ~370 lines apart in the identical format, and Phase 1's list was already wrong by then — it named 13 extras of which six were reconciled away by smart matching, including a storage account the final summary correctly reported as *deleted*. Nothing machine-readable parses them (counts come from the JSON, see `tests/test_count_drifts.py`); the cost is that a human cannot answer "extra or deleted?" from the log |
 | **A drift row must be shown WITH the finding that explains it, not merely linked to it** | `orphaned_by_missing_resource_group` was populated correctly while rows were emitted in creation order, so one resource-group deletion read as three unrelated deletions with six role assignments in between. Linkage in the data is not the same as one finding in the report; `verify_lz_report.py` asserts adjacency |
 | **The narrative is optional** | Every deterministic stage runs with no LLM credential at all; only the narrative is lost. Which provider supplies it is a config choice (`DRIFT_LLM_PROVIDER`), and nothing above `agent/llm/` touches a vendor SDK |
+| **Living in `agent/` does not make something LLM-dependent** | `agent/classification.py` is pure policy tables with no client and no network, but it was reachable only as a `DriftAgent` mixin — so severity was computed for the prompt and discarded, and never computed at all without a provider. Anything deterministic in `agent/` must be callable, and called, from the deterministic path |
+| **Provenance must never soften risk.** `severity` (what the resource is) and `change_origin.severity` (how sure we are who did it) stay separate fields | `change_origin.severity` defaults to MEDIUM whenever the Activity Log is silent — a statement about attribution, not danger. Merged into one number, "we could not attribute it" reads as "it matters less": a standing subscription-scope Owner grant absent from Bicep, classified HIGH, rendered as a grey Unknown |
 
 ---
 
