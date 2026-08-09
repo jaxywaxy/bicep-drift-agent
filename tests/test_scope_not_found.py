@@ -21,7 +21,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import run_drift_check
+from orchestration import phase1
 from orchestration.detection import _run_phase1
 from tools.live_state.common import ScopeNotFoundError, resource_group_exists
 
@@ -78,24 +78,24 @@ class GuardUnverifiableScopeTests(_IsolatedReportsDir):
     """The guard fires only on the ambiguous case, and errs toward silence."""
 
     def test_absent_scope_raises(self):
-        with mock.patch("run_drift_check.resource_group_exists", return_value=False):
+        with mock.patch("orchestration.phase1.resource_group_exists", return_value=False):
             with self.assertRaises(ScopeNotFoundError) as ctx:
-                run_drift_check._guard_unverifiable_scope("rg-gone")
+                phase1._guard_unverifiable_scope("rg-gone")
         self.assertIn("does not exist", str(ctx.exception))
 
     def test_unconfirmable_scope_also_raises(self):
         # An unverifiable scope is exactly as unsafe to report on as an absent
         # one - reporting deletions we cannot substantiate is the failure mode.
-        with mock.patch("run_drift_check.resource_group_exists", return_value=None):
+        with mock.patch("orchestration.phase1.resource_group_exists", return_value=None):
             with self.assertRaises(ScopeNotFoundError) as ctx:
-                run_drift_check._guard_unverifiable_scope("rg-unknown")
+                phase1._guard_unverifiable_scope("rg-unknown")
         self.assertIn("could not be confirmed", str(ctx.exception))
 
     def test_existing_but_empty_scope_is_allowed_through(self):
         # This one IS real drift: the RG is there and everything declared is
         # genuinely gone. It must stay loud.
-        with mock.patch("run_drift_check.resource_group_exists", return_value=True):
-            self.assertIsNone(run_drift_check._guard_unverifiable_scope("rg-empty"))
+        with mock.patch("orchestration.phase1.resource_group_exists", return_value=True):
+            self.assertIsNone(phase1._guard_unverifiable_scope("rg-empty"))
 
 
 class GuardIsNotCalledOnTheHappyPathTests(_IsolatedReportsDir):
@@ -103,20 +103,20 @@ class GuardIsNotCalledOnTheHappyPathTests(_IsolatedReportsDir):
     the empty result only, so a normal scan pays nothing for it."""
 
     def test_no_existence_check_when_resources_returned(self):
-        with mock.patch("run_drift_check.get_live_state", return_value=[{"name": "x"}]), \
-             mock.patch("run_drift_check.fetch_cross_subscription_resources", return_value=[]), \
-             mock.patch("run_drift_check.fetch_declared_defender_pricings", return_value=[]), \
-             mock.patch("run_drift_check.fetch_declared_workspace_tables", return_value=[]), \
-             mock.patch("run_drift_check.qualify_extension_resource_names"), \
-             mock.patch("run_drift_check.resource_group_exists") as exists:
-            run_drift_check._fetch_live_state("rg-a", "resource_group", [], None)
+        with mock.patch("orchestration.phase1.get_live_state", return_value=[{"name": "x"}]), \
+             mock.patch("orchestration.phase1.fetch_cross_subscription_resources", return_value=[]), \
+             mock.patch("orchestration.phase1.fetch_declared_defender_pricings", return_value=[]), \
+             mock.patch("orchestration.phase1.fetch_declared_workspace_tables", return_value=[]), \
+             mock.patch("orchestration.phase1.qualify_extension_resource_names"), \
+             mock.patch("orchestration.phase1.resource_group_exists") as exists:
+            phase1._fetch_live_state("rg-a", "resource_group", [], None)
         exists.assert_not_called()
 
     def test_existence_check_runs_when_live_set_is_empty(self):
-        with mock.patch("run_drift_check.get_live_state", return_value=[]), \
-             mock.patch("run_drift_check.resource_group_exists", return_value=False) as exists:
+        with mock.patch("orchestration.phase1.get_live_state", return_value=[]), \
+             mock.patch("orchestration.phase1.resource_group_exists", return_value=False) as exists:
             with self.assertRaises(ScopeNotFoundError):
-                run_drift_check._fetch_live_state("rg-a", "resource_group", [], None)
+                phase1._fetch_live_state("rg-a", "resource_group", [], None)
         exists.assert_called_once()
 
 
@@ -158,9 +158,9 @@ class ScopeNotFoundReportTests(_IsolatedReportsDir):
     def test_marker_report_is_written_before_raising(self):
         import json
 
-        with mock.patch("run_drift_check.resource_group_exists", return_value=False):
+        with mock.patch("orchestration.phase1.resource_group_exists", return_value=False):
             with self.assertRaises(ScopeNotFoundError):
-                run_drift_check._guard_unverifiable_scope("rg-gone", "main.bicep")
+                phase1._guard_unverifiable_scope("rg-gone", "main.bicep")
         written = os.path.join("reports", "rg-gone-drift.json")
         self.assertTrue(os.path.exists(written))
         with open(written) as f:

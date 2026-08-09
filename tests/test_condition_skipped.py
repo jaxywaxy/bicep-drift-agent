@@ -25,8 +25,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import run_drift_check
-from run_drift_check import (
+from orchestration import phase1
+from orchestration.phase1 import (
     _annotate_condition_skipped,
     _coerce_bicepparam_value,
     _load_ignore_patterns,
@@ -143,18 +143,18 @@ class ThePipelineActuallyCallsItTests(unittest.TestCase):
             captured["drifts"] = drifts
             captured["condition_skipped"] = kwargs.get("condition_skipped")
 
-        with mock.patch.object(run_drift_check, "_resolve_parameter_overrides", return_value={}), \
-                mock.patch.object(run_drift_check, "_compile_and_extract", side_effect=fake_compile), \
-                mock.patch.object(run_drift_check, "_fetch_live_state", return_value=[]), \
-                mock.patch.object(run_drift_check, "_load_ignore_patterns", return_value=None), \
-                mock.patch.object(run_drift_check, "_diff_states",
+        with mock.patch.object(phase1, "_resolve_parameter_overrides", return_value={}), \
+                mock.patch.object(phase1, "_compile_and_extract", side_effect=fake_compile), \
+                mock.patch.object(phase1, "_fetch_live_state", return_value=[]), \
+                mock.patch.object(phase1, "_load_ignore_patterns", return_value=None), \
+                mock.patch.object(phase1, "_diff_states",
                                   return_value=[ResourceDrift(AKS, "aks-1", "extra_in_azure")]), \
-                mock.patch.object(run_drift_check, "_run_rbac_sidecar"), \
-                mock.patch.object(run_drift_check, "_run_policy_sidecar", return_value=({}, [])), \
-                mock.patch.object(run_drift_check, "_run_stack_sidecar"), \
-                mock.patch.object(run_drift_check, "format_drift_report", return_value=""), \
-                mock.patch.object(run_drift_check, "_save_phase1_report", side_effect=fake_save):
-            run_drift_check.run("main.bicep", "rg-x")
+                mock.patch.object(phase1, "_run_rbac_sidecar"), \
+                mock.patch.object(phase1, "_run_policy_sidecar", return_value=({}, [])), \
+                mock.patch.object(phase1, "_run_stack_sidecar"), \
+                mock.patch.object(phase1, "format_drift_report", return_value=""), \
+                mock.patch.object(phase1, "_save_phase1_report", side_effect=fake_save):
+            phase1.run("main.bicep", "rg-x")
         return captured
 
     def test_the_gated_off_extra_reaches_the_report_annotated(self):
@@ -194,7 +194,7 @@ class BicepparamValuesKeepTheirTypeTests(unittest.TestCase):
         with mock.patch("pathlib.Path.exists", return_value=True), \
                 mock.patch("builtins.open",
                            mock.mock_open(read_data="param deployAks = false\nparam count = 0\n")):
-            params = run_drift_check._load_bicepparam_file("x/bicep/main.bicep", "rg-test")
+            params = phase1._load_bicepparam_file("x/bicep/main.bicep", "rg-test")
         self.assertIs(params["deployAks"], False)
         self.assertEqual(params["count"], 0)
 
@@ -205,17 +205,17 @@ class PhaseOneLayersTheIgnoreProfileTests(unittest.TestCase):
     layers them, so the two phases disagreed about what is ignorable."""
 
     def test_both_the_baseline_and_the_repo_profile_are_loaded(self):
-        with mock.patch.object(run_drift_check, "_find_repo_ignore",
+        with mock.patch.object(phase1, "_find_repo_ignore",
                                return_value=Path("/lz/.drift-ignore")), \
-                mock.patch.object(run_drift_check.IgnorePatternList, "from_files") as from_files:
+                mock.patch.object(phase1.IgnorePatternList, "from_files") as from_files:
             from_files.return_value.patterns = []
             _load_ignore_patterns("lz/bicep/main.bicep")
         self.assertEqual([str(a) for a in from_files.call_args.args],
                          [".drift-ignore", "/lz/.drift-ignore"])
 
     def test_the_baseline_still_loads_when_the_repo_has_no_profile(self):
-        with mock.patch.object(run_drift_check, "_find_repo_ignore", return_value=None), \
-                mock.patch.object(run_drift_check.IgnorePatternList, "from_files") as from_files:
+        with mock.patch.object(phase1, "_find_repo_ignore", return_value=None), \
+                mock.patch.object(phase1.IgnorePatternList, "from_files") as from_files:
             from_files.return_value.patterns = []
             _load_ignore_patterns("lz/bicep/main.bicep")
         self.assertEqual([str(a) for a in from_files.call_args.args], [".drift-ignore"])

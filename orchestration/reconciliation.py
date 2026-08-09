@@ -13,6 +13,7 @@ from pathlib import Path
 from tools.diff_states import _IDENTITY_MATCHED_TYPES, _should_compare_resource, filter_unmanaged_live_resources
 from tools.ignore_patterns import IgnorePatternList
 from tools.logger import get_logger
+from orchestration.phase1 import _attribute_orphans_to_missing_rgs
 from tools.property_drift import DriftDetector
 from tools.smart_matching import _has_unresolvable_expression, annotate_drifts_with_matches, detect_unresolvable_expressions, smart_match_resources
 
@@ -94,10 +95,6 @@ def _apply_smart_matching(report_data: dict) -> None:
     # resource is proven missing only HERE, so it never reached attribution and
     # a deleted RG still read as N unrelated deletions. Idempotent, so the
     # earlier pass's work is left alone.
-    #
-    # Local import: run_drift_check pulls in orchestration.targeting, and a
-    # module-level import here would tie the two together at import time.
-    from run_drift_check import _attribute_orphans_to_missing_rgs
     _attribute_orphans_to_missing_rgs(
         report_data.get("drifts", []), report_data.get("arm_resources", [])
     )

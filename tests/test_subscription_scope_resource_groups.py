@@ -21,7 +21,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import run_drift_check
+from orchestration import phase1
 from tools.diff_states import ResourceDrift
 from tools.live_state.collectors.resource_groups import (
     RESOURCE_GROUP_TYPE,
@@ -147,7 +147,7 @@ class OrphanAttributionTests(unittest.TestCase):
 
     def test_contents_of_a_deleted_rg_are_attributed_to_it(self):
         drifts = self._drifts()
-        attributed = run_drift_check._attribute_orphans_to_missing_rgs(drifts, self.ARM)
+        attributed = phase1._attribute_orphans_to_missing_rgs(drifts, self.ARM)
         self.assertEqual(attributed, 1)
         vnet = drifts[1]
         self.assertEqual(vnet.details["orphaned_by_missing_resource_group"], "rg-networking")
@@ -155,21 +155,21 @@ class OrphanAttributionTests(unittest.TestCase):
 
     def test_a_resource_in_a_surviving_rg_is_not_attributed(self):
         drifts = self._drifts()
-        run_drift_check._attribute_orphans_to_missing_rgs(drifts, self.ARM)
+        phase1._attribute_orphans_to_missing_rgs(drifts, self.ARM)
         self.assertNotIn("orphaned_by_missing_resource_group", drifts[2].details)
 
     def test_orphans_are_annotated_not_suppressed(self):
         # They really are gone: the cost guard needs them, and whoever restores
         # the RG needs the inventory.
         drifts = self._drifts()
-        run_drift_check._attribute_orphans_to_missing_rgs(drifts, self.ARM)
+        phase1._attribute_orphans_to_missing_rgs(drifts, self.ARM)
         self.assertEqual(len(drifts), 3)
         self.assertTrue(all(d.drift_type == "missing_in_azure" for d in drifts))
 
     def test_no_missing_rg_means_no_annotation(self):
         drifts = [ResourceDrift("Microsoft.Network/virtualNetworks", "vnet-hub",
                                 "missing_in_azure")]
-        self.assertEqual(run_drift_check._attribute_orphans_to_missing_rgs(drifts, self.ARM), 0)
+        self.assertEqual(phase1._attribute_orphans_to_missing_rgs(drifts, self.ARM), 0)
         self.assertNotIn("orphaned_by_missing_resource_group", drifts[0].details)
 
 
@@ -189,21 +189,21 @@ class EmptySubscriptionFailsTests(unittest.TestCase):
 
     def test_empty_subscription_scan_raises(self):
         with self.assertRaises(ScopeNotFoundError) as ctx:
-            run_drift_check._guard_empty_subscription("*", "main.bicep")
+            phase1._guard_empty_subscription("*", "main.bicep")
         self.assertIn("no resources at all", str(ctx.exception))
 
     def test_it_writes_the_marker_report_too(self):
         import json
         with self.assertRaises(ScopeNotFoundError):
-            run_drift_check._guard_empty_subscription("*", "main.bicep")
+            phase1._guard_empty_subscription("*", "main.bicep")
         with open(os.path.join("reports", "subscription-drift.json")) as f:
             self.assertEqual(json.load(f)["scope_status"], "not_found")
 
     def test_subscription_scope_takes_the_subscription_guard(self):
-        with mock.patch("run_drift_check.get_live_state", return_value=[]), \
-             mock.patch("run_drift_check._guard_empty_subscription") as sub_guard, \
-             mock.patch("run_drift_check._guard_unverifiable_scope") as rg_guard:
-            run_drift_check._fetch_live_state("*", "subscription", [], None)
+        with mock.patch("orchestration.phase1.get_live_state", return_value=[]), \
+             mock.patch("orchestration.phase1._guard_empty_subscription") as sub_guard, \
+             mock.patch("orchestration.phase1._guard_unverifiable_scope") as rg_guard:
+            phase1._fetch_live_state("*", "subscription", [], None)
         sub_guard.assert_called_once()
         rg_guard.assert_not_called()
 
@@ -266,7 +266,7 @@ class TopLevelVariablesResolveAgainstParametersTests(unittest.TestCase):
     def test_orphan_attribution_matches_the_real_group(self):
         # The consequence, at the level that matters: the stamped value must be
         # the key the orphan lookup uses against the missing resource group.
-        from run_drift_check import _attribute_orphans_to_missing_rgs
+        from orchestration.phase1 import _attribute_orphans_to_missing_rgs
         from tools.diff_states import ResourceDrift
         law = self._law()
         drifts = [
@@ -322,7 +322,7 @@ class OrphanAttributionSurvivesTheStagesTests(unittest.TestCase):
 
     def _run(self):
         from orchestration.reconciliation import _apply_smart_matching
-        from run_drift_check import _attribute_orphans_to_missing_rgs
+        from orchestration.phase1 import _attribute_orphans_to_missing_rgs
         report = self._report()
         _apply_smart_matching(report)
         _attribute_orphans_to_missing_rgs(report["drifts"], report["arm_resources"])
@@ -347,7 +347,7 @@ class OrphanAttributionSurvivesTheStagesTests(unittest.TestCase):
         # attribution must not depend on the name it was created with.
         report = self._report()
         from orchestration.reconciliation import _apply_smart_matching
-        from run_drift_check import _attribute_orphans_to_missing_rgs
+        from orchestration.phase1 import _attribute_orphans_to_missing_rgs
         _apply_smart_matching(report)
         for d in report["drifts"]:
             if d.get("type") == "Microsoft.Storage/storageAccounts":
@@ -363,7 +363,7 @@ class OrphanAttributionSurvivesTheStagesTests(unittest.TestCase):
         # Phase 1 annotates what it can see; the later pass catches the rest.
         # Running both must not double-annotate or raise.
         report = self._run()
-        from run_drift_check import _attribute_orphans_to_missing_rgs
+        from orchestration.phase1 import _attribute_orphans_to_missing_rgs
         n = _attribute_orphans_to_missing_rgs(report["drifts"], report["arm_resources"])
         self.assertEqual(n, 0, "an already-attributed row was attributed again")
 
@@ -371,7 +371,7 @@ class OrphanAttributionSurvivesTheStagesTests(unittest.TestCase):
         report = self._report()
         report["arm_resources"][1]["_target_rg"] = "jacquidev-rg-apps"  # still exists
         from orchestration.reconciliation import _apply_smart_matching
-        from run_drift_check import _attribute_orphans_to_missing_rgs
+        from orchestration.phase1 import _attribute_orphans_to_missing_rgs
         _apply_smart_matching(report)
         _attribute_orphans_to_missing_rgs(report["drifts"], report["arm_resources"])
         row = self._storage_row(report)

@@ -27,8 +27,8 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import run_drift_check
-from run_drift_check import _mark_unverified_missing
+from orchestration import phase1
+from orchestration.phase1 import _mark_unverified_missing
 from tools.diff_states import ResourceDrift
 from tools.live_state import CollectionGaps
 from tools.live_state.collectors.data_plane import _expand_data_plane_children
@@ -134,19 +134,19 @@ class ThePipelineActuallyCallsItTests(unittest.TestCase):
             captured["drifts"] = drifts
             captured["collection_gaps"] = collection_gaps
 
-        with mock.patch.object(run_drift_check, "_resolve_parameter_overrides", return_value={}), \
-                mock.patch.object(run_drift_check, "_compile_and_extract",
+        with mock.patch.object(phase1, "_resolve_parameter_overrides", return_value={}), \
+                mock.patch.object(phase1, "_compile_and_extract",
                                   return_value=([{"type": BLOB, "name": "st1/default"}], "resourceGroup")), \
-                mock.patch.object(run_drift_check, "_fetch_live_state", side_effect=fake_fetch), \
-                mock.patch.object(run_drift_check, "_load_ignore_patterns", return_value=None), \
-                mock.patch.object(run_drift_check, "_diff_states",
+                mock.patch.object(phase1, "_fetch_live_state", side_effect=fake_fetch), \
+                mock.patch.object(phase1, "_load_ignore_patterns", return_value=None), \
+                mock.patch.object(phase1, "_diff_states",
                                   return_value=[ResourceDrift(BLOB, "st1/default", "missing_in_azure")]), \
-                mock.patch.object(run_drift_check, "_run_rbac_sidecar"), \
-                mock.patch.object(run_drift_check, "_run_policy_sidecar", return_value=({}, [])), \
-                mock.patch.object(run_drift_check, "_run_stack_sidecar"), \
-                mock.patch.object(run_drift_check, "format_drift_report", return_value=""), \
-                mock.patch.object(run_drift_check, "_save_phase1_report", side_effect=fake_save):
-            run_drift_check.run("main.bicep", "rg-x")
+                mock.patch.object(phase1, "_run_rbac_sidecar"), \
+                mock.patch.object(phase1, "_run_policy_sidecar", return_value=({}, [])), \
+                mock.patch.object(phase1, "_run_stack_sidecar"), \
+                mock.patch.object(phase1, "format_drift_report", return_value=""), \
+                mock.patch.object(phase1, "_save_phase1_report", side_effect=fake_save):
+            phase1.run("main.bicep", "rg-x")
         return captured
 
     def test_a_gapped_type_reaches_the_report_marked(self):
