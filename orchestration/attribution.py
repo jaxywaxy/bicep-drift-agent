@@ -10,7 +10,7 @@ the actionable set. Runs BEFORE the Claude call so the analysis sees who/how.
 import os
 
 from orchestration.reconciliation import _find_deployed_resource
-from tools.activity_log import deployed_name_from_event_id, detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource
+from tools.activity_log import deployed_name_from_event_id, detect_scanning_identity, fetch_policy_principal_ids, fetch_resource_group_activity, match_activity_for_resource, provider_path
 from tools.change_origin import build_resource_lifecycle, classify_change_origin, event_explains_drift, select_relevant_activity
 from tools.config import (AUTHORIZED_DEPLOYERS, module_owners,
                           ownership_default_owner, platform_types)
@@ -66,6 +66,10 @@ def _fallback_resource_id(subscription_id: str, selector: str, resource_type: st
 
     3. A role assignment already carries its real id in details.assignment_id -
        there is no need to invent one.
+
+    4. A NESTED type interleaves its type and name segments (seen live
+       2026-08-09). Delegated to activity_log.provider_path, which is the
+       inverse of the parser the matcher uses.
     """
     details = drift.get("details") or {}
     if (resource_type or "").lower() == RESOURCE_GROUP_TYPE:
@@ -84,8 +88,11 @@ def _fallback_resource_id(subscription_id: str, selector: str, resource_type: st
         resource_group = selector
     if not resource_group:
         return ""
+    tail = provider_path(resource_type, name)
+    if not tail:
+        return ""
     return (f"/subscriptions/{subscription_id}/resourceGroups/{resource_group}"
-            f"/providers/{resource_type}/{name}")
+            f"/providers/{tail}")
 
 
 def _attribute_lifecycle(report_data: dict, resource_group: str) -> None:
