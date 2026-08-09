@@ -159,6 +159,38 @@ def fetch_resource_group_activity(
         return []
 
 
+def provider_path(resource_type: str, name: str) -> str:
+    """Build the '/providers/' tail of an ARM id: the inverse of
+    deployed_name_from_event_id.
+
+    ARM INTERLEAVES type and name segments -
+    'Microsoft.Network/virtualNetworks/<vnet>/virtualNetworkPeerings/<peering>' -
+    it does not concatenate the whole type then the whole name. Getting that
+    backwards produces a path that looks right and cannot exist, which is worse
+    than no path at all: every nested type (Cosmos databases/containers, VNet
+    peerings, DNS zone groups, workspace tables) then failed BOTH matching
+    strategies in match_activity_for_resource and was reported with no actor at
+    all (live, 2026-08-09).
+
+    Lives beside the parser for the same reason _recover_deployed_name is an
+    alias rather than a copy: if build and parse ever disagree about the shape
+    of an id, the disagreement is silent.
+
+    Returns "" when the name does not supply one segment per child type, so
+    callers fall through to type matching instead of onto a fabricated path.
+    """
+    if not resource_type or not name:
+        return ""
+    type_segments = resource_type.split("/")  # [namespace, type1, type2, ...]
+    name_segments = name.split("/")
+    if len(type_segments) < 2 or len(name_segments) != len(type_segments) - 1:
+        return ""
+    parts = [type_segments[0]]
+    for type_segment, name_segment in zip(type_segments[1:], name_segments):
+        parts += [type_segment, name_segment]
+    return "/".join(parts)
+
+
 def deployed_name_from_event_id(resource_type: str, event_resource_id: str) -> str:
     """Extract the deployed name for resource_type from an activity-log id.
 
@@ -330,12 +362,25 @@ def match_activity_for_resource(
         return matched
 
     # Fallback ONLY for resources with no id match (e.g. deleted resources whose
-    # exact id can't be resolved): match by resource type substring.
+    # exact id can't be resolved): match on the event's TYPE CHAIN.
+    #
+    # This was a substring test ('type in event_id'), which no nested type can
+    # ever pass: ARM interleaves the name segments, so
+    # 'microsoft.documentdb/databaseaccounts/sqldatabases' never appears
+    # contiguously in a real child's id. Parsing the chain is what
+    # deployed_name_from_event_id already does correctly, and reusing it keeps
+    # one definition of "is this event for this type".
+    #
+    # It is also stricter in a way we want: the substring matched events for
+    # resources merely NESTED UNDER this type (a lock under a storage account
+    # carries the storage type in its id), which are never the deletion event
+    # this fallback exists to find.
     if resource_type_lower:
-        by_type = [
-            e for e in rg_events
-            if resource_type_lower in (e.get("resource_id") or "").lower()
+        named_events = [
+            (e, deployed_name_from_event_id(resource_type or "", e.get("resource_id") or ""))
+            for e in rg_events
         ]
+        by_type = [e for e, deployed in named_events if deployed]
         # The declared name is the tail of the id we constructed; keep only the
         # events whose own name could belong to it. Returning nothing is the
         # right failure mode - an unattributed drift reads "no event accounts
@@ -345,12 +390,8 @@ def match_activity_for_resource(
         if not declared_name:
             return by_type
         return [
-            e for e in by_type
-            if could_be_same_resource(
-                declared_name,
-                deployed_name_from_event_id(
-                    resource_type or "", e.get("resource_id") or ""),
-            )
+            e for e, deployed in named_events
+            if deployed and could_be_same_resource(declared_name, deployed)
         ]
     return []
 
