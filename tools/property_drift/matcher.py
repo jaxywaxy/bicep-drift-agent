@@ -98,6 +98,50 @@ class ResourceMatcher:
         return None
 
     @staticmethod
+    def _names_plausibly_correspond(bicep_name: str, cand_name: str) -> bool:
+        """Could a lone same-type candidate be this declared resource?
+
+        Both arguments lowercase.
+
+        For a CHILD name the leaf is the identity, and the old test could not
+        see it: `bicep_name.split("[")[0]` stops at the first placeholder, so
+        'sqldrift[86c9cbf6]/driftdb' reduced to 'sqldrift' and happily accepted
+        the surviving sibling 'sqldrift<hash>/master'. Live 2026-08-11: the
+        deleted database was reported missing under its SIBLING'S name, so the
+        report asserted that `master` - which still exists - was gone.
+
+        A leaf may itself carry a placeholder ('parent/child-[hash]'), so it is
+        compared the same way a top-level name is: exact when literal, static
+        prefix when not.
+        """
+        def _prefix_ok(declared: str, deployed: str) -> bool:
+            static_prefix = declared.split("[")[0].strip()
+            if "[" not in declared:
+                return declared == deployed
+            return (len(static_prefix) < 3
+                    or deployed.startswith(static_prefix)
+                    or static_prefix in deployed)
+
+        if "/" in bicep_name:
+            if "/" not in cand_name:
+                return False
+            b_parent, _, b_leaf = bicep_name.rpartition("/")
+            d_parent, _, d_leaf = cand_name.rpartition("/")
+            # Same rule the fuzzy path uses: a LITERAL parent must correspond
+            # ('stalpha/default/data' is not 'stbravo/default/data'), while a
+            # parent carrying a placeholder is unresolvable and cannot be
+            # compared at all - which is exactly when the leaf has to carry the
+            # decision.
+            if "[" not in b_parent and b_parent != d_parent:
+                return False
+            return _prefix_ok(b_leaf, d_leaf)
+
+        static_prefix = bicep_name.split("[")[0].strip()
+        return (len(static_prefix) < 3
+                or cand_name.startswith(static_prefix)
+                or static_prefix in cand_name)
+
+    @staticmethod
     def _match_by_fuzzy_tokens(
         bicep_name: str, candidates: list[dict], current_best_score: float
     ) -> tuple[dict, float]:
@@ -191,7 +235,18 @@ class ResourceMatcher:
                 if "[" in bicep_name and "]" in bicep_name:
                     prefix = bicep_name.split("[")[0]
                     if prefix:
-                        prefix_matches = [d for d in candidates if d.get("name", "").startswith(prefix)]
+                        # `split("[")` stops at the placeholder, so for a CHILD
+                        # name ('sqldrift[hash]/driftdb') the prefix collapses to
+                        # the parent and matches any sibling. _names_plausibly_
+                        # correspond re-applies the leaf. Live 2026-08-11: this
+                        # pass paired a deleted database with the surviving
+                        # `master` before either later guard could refuse it.
+                        prefix_matches = [
+                            d for d in candidates
+                            if d.get("name", "").startswith(prefix)
+                            and ResourceMatcher._names_plausibly_correspond(
+                                bicep_name.lower(), d.get("name", "").lower())
+                        ]
                         if len(prefix_matches) == 1:
                             matches.append((bicep_resource, prefix_matches[0], MatchConfidenceScores.PREFIX_MATCH))
                             used_deployed.add(id(prefix_matches[0]))
@@ -256,8 +311,9 @@ class ResourceMatcher:
                 # the lone candidate to share it.
                 if not best_match and len(candidates) == 1:
                     cand_name = candidates[0].get("name", "").lower()
+                    plausible = ResourceMatcher._names_plausibly_correspond(
+                        bicep_name.lower(), cand_name)
                     static_prefix = bicep_name.split("[")[0].lower().strip()
-                    plausible = len(static_prefix) < 3 or cand_name.startswith(static_prefix) or static_prefix in cand_name
                     if plausible:
                         best_match = candidates[0]
                         best_score = MatchConfidenceScores.SINGLE_CANDIDATE
