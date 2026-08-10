@@ -257,6 +257,6 @@ if __name__ == "__main__":
         print(f"Drift issue: {issue_url}")
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
-        with open(github_output, "a") as f:
+        with open(github_output, "a", encoding="utf-8") as f:
             f.write(f"issue_url={issue_url}\n")
     sys.exit(0)

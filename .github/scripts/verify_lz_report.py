@@ -191,7 +191,7 @@ def main(argv):
 
     failed = 0
     for path in reports:
-        report = json.loads(path.read_text())
+        report = json.loads(path.read_text(encoding="utf-8"))
         print(f"\n=== {path.name} "
               f"(drift_count={report.get('drift_count')}) ===")
         for check in checks:

@@ -157,7 +157,7 @@ def main(argv) -> int:
     lines = [f"{k}={v}" for k, v in counts.items() if k != "reports"]
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
-        with open(github_output, "a") as f:
+        with open(github_output, "a", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
     critical = f" ({counts['critical_count']} CRITICAL)" if counts["critical_count"] else ""
     print(
