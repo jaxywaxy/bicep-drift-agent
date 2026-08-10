@@ -15,7 +15,7 @@ from tools.ignore_patterns import IgnorePatternList
 from tools.logger import get_logger
 from orchestration.phase1 import _attribute_orphans_to_missing_rgs
 from tools.property_drift import DriftDetector
-from tools.smart_matching import _has_unresolvable_expression, annotate_drifts_with_matches, detect_unresolvable_expressions, smart_match_resources
+from tools.smart_matching import _has_unresolvable_expression, annotate_drifts_with_matches, detect_unresolvable_expressions, names_plausibly_correspond, smart_match_resources
 
 logger = get_logger(__name__)
 
@@ -36,12 +36,23 @@ def _find_deployed_resource(resource_type: str, bicep_name: str, live_resources:
                 resource.get("name", "") == bicep_name):
             return resource
 
-    # Second try: match by type + static prefix (for uniqueString placeholder names)
+    # Second try: match by type + static prefix (for uniqueString placeholder names).
+    #
+    # The prefix alone is NOT sufficient for a child name: `split("[")` stops at
+    # the placeholder, so 'sqldrift[hash]/driftdb' reduces to 'sqldrift' and
+    # matches the surviving sibling 'sqldrift<hash>/master'. Attribution then
+    # takes that row's REAL id, matches master's own activity events against it,
+    # and renames the drift - so the report claimed `master` (which exists) was
+    # missing while the actual driftdb deletion was mislabelled. Live 2026-08-11;
+    # this was the source of the symptom that #425 and #426 each fixed a
+    # different, genuine instance of.
     name_prefix = bicep_name.split("[")[0] if "[" in bicep_name else bicep_name
     if name_prefix:
         for resource in live_resources:
             if (resource.get("type", "").lower() == type_lower and
-                    resource.get("name", "").startswith(name_prefix)):
+                    resource.get("name", "").startswith(name_prefix) and
+                    names_plausibly_correspond(bicep_name.lower(),
+                                               resource.get("name", "").lower())):
                 return resource
 
     return None

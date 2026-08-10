@@ -11,6 +11,8 @@ plausibility check.
 import logging
 from collections import defaultdict
 
+from tools.smart_matching import names_plausibly_correspond
+
 from .models import MatchConfidenceScores
 
 logger = logging.getLogger(__name__)
@@ -99,47 +101,14 @@ class ResourceMatcher:
 
     @staticmethod
     def _names_plausibly_correspond(bicep_name: str, cand_name: str) -> bool:
-        """Could a lone same-type candidate be this declared resource?
+        """Thin alias for the shared rule in tools.smart_matching.
 
-        Both arguments lowercase.
-
-        For a CHILD name the leaf is the identity, and the old test could not
-        see it: `bicep_name.split("[")[0]` stops at the first placeholder, so
-        'sqldrift[86c9cbf6]/driftdb' reduced to 'sqldrift' and happily accepted
-        the surviving sibling 'sqldrift<hash>/master'. Live 2026-08-11: the
-        deleted database was reported missing under its SIBLING'S name, so the
-        report asserted that `master` - which still exists - was gone.
-
-        A leaf may itself carry a placeholder ('parent/child-[hash]'), so it is
-        compared the same way a top-level name is: exact when literal, static
-        prefix when not.
+        Three modules independently grew their own broken copy of this test
+        (see that function's docstring). One definition, so a fix in one place
+        cannot leave another module still pairing a deleted child with its
+        surviving sibling.
         """
-        def _prefix_ok(declared: str, deployed: str) -> bool:
-            static_prefix = declared.split("[")[0].strip()
-            if "[" not in declared:
-                return declared == deployed
-            return (len(static_prefix) < 3
-                    or deployed.startswith(static_prefix)
-                    or static_prefix in deployed)
-
-        if "/" in bicep_name:
-            if "/" not in cand_name:
-                return False
-            b_parent, _, b_leaf = bicep_name.rpartition("/")
-            d_parent, _, d_leaf = cand_name.rpartition("/")
-            # Same rule the fuzzy path uses: a LITERAL parent must correspond
-            # ('stalpha/default/data' is not 'stbravo/default/data'), while a
-            # parent carrying a placeholder is unresolvable and cannot be
-            # compared at all - which is exactly when the leaf has to carry the
-            # decision.
-            if "[" not in b_parent and b_parent != d_parent:
-                return False
-            return _prefix_ok(b_leaf, d_leaf)
-
-        static_prefix = bicep_name.split("[")[0].strip()
-        return (len(static_prefix) < 3
-                or cand_name.startswith(static_prefix)
-                or static_prefix in cand_name)
+        return names_plausibly_correspond(bicep_name, cand_name)
 
     @staticmethod
     def _match_by_fuzzy_tokens(

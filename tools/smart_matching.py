@@ -76,6 +76,60 @@ def _has_unresolvable_expression(name_str: str) -> bool:
     return False
 
 
+def names_plausibly_correspond(bicep_name: str, cand_name: str) -> bool:
+    """Could a same-type live resource be this declared resource?
+
+    Both arguments lowercase. THE one definition - three modules independently
+    grew the same broken version of this test and all three shipped it:
+
+        name_prefix = bicep_name.split("[")[0]      # 'sqldrift[hash]/driftdb'
+        cand.startswith(name_prefix)                # -> 'sqldrift'
+
+    `split("[")` stops at the first placeholder, so for a CHILD name shaped
+    `parent[hash]/leaf` it discards the leaf entirely and the test collapses
+    onto the parent - which every sibling shares by construction. Live
+    2026-08-11: a deleted `sqldrift[hash]/driftdb` was reported missing under
+    the name of its surviving sibling `sqldrift<hash>/master`, so the report
+    asserted a resource that still exists was gone, and the real deletion was
+    mislabelled.
+
+    The rules:
+
+    - A CHILD's identity is its LEAF, so the leaf must correspond.
+    - A LITERAL parent must correspond too ('stalpha/default/data' is not
+      'stbravo/default/data'). A parent carrying a placeholder is unresolvable
+      and cannot be compared - which is exactly when the leaf carries the
+      decision alone.
+    - A leaf may itself be runtime-named ('parent/child-[hash]'), so it is
+      compared the way a top-level name is: exact when literal, static prefix
+      when not.
+    """
+    def _prefix_ok(declared: str, deployed: str) -> bool:
+        static_prefix = declared.split("[")[0].strip()
+        if "[" not in declared:
+            return declared == deployed
+        return (len(static_prefix) < 3
+                or deployed.startswith(static_prefix)
+                or static_prefix in deployed)
+
+    if not bicep_name or not cand_name:
+        return False
+
+    if "/" in bicep_name:
+        if "/" not in cand_name:
+            return False
+        b_parent, _, b_leaf = bicep_name.rpartition("/")
+        d_parent, _, d_leaf = cand_name.rpartition("/")
+        if "[" not in b_parent and b_parent != d_parent:
+            return False
+        return _prefix_ok(b_leaf, d_leaf)
+
+    static_prefix = bicep_name.split("[")[0].strip()
+    return (len(static_prefix) < 3
+            or cand_name.startswith(static_prefix)
+            or static_prefix in cand_name)
+
+
 def _scope_to_target_rg(bicep_resource: dict, candidates: list[dict]) -> list[dict]:
     """Keep only candidates in the resource group the declaration deploys into.
 
