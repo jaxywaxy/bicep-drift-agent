@@ -141,38 +141,41 @@ def smart_match_resources(
         candidates = [r for r in unmatched_azure if (r.get('type') or '').lower() == rtype_lower]
         candidates = _scope_to_target_rg(bicep_resource, candidates)
 
-        if len(candidates) == 1:
-            # Perfect match: one unresolvable Bicep resource and one unmatched Azure resource of same type
+        # EVERY candidate count goes through _find_best_match, including one.
+        #
+        # A lone candidate used to be taken as a "perfect match" unconditionally,
+        # skipping the child-leaf guard that _find_best_match applies. A DELETION
+        # is what reduces the pool to one, so deleting a declared child routed the
+        # match around the very guard that would have caught it - and raised the
+        # confidence from medium to high on the way.
+        #
+        # Live 2026-08-11: `sqldrift[86c9cbf6]/driftdb` was deleted, leaving only
+        # the undeclared system database `sqldrift<hash>/master`. The declared
+        # child matched `master` at confidence 'high', so the deletion vanished
+        # from the report AND an undeclared extra was absorbed - a false negative
+        # that drift_count can never reveal.
+        #
+        # _find_best_match already accepts a sole candidate (`len(candidates) == 1`
+        # short-circuits its prefix/suffix threshold), so nothing that legitimately
+        # matched before stops matching; only leaf-incompatible pairs are refused.
+        best_match = _find_best_match(bicep_resource, candidates)
+        if best_match:
+            sole = len(candidates) == 1
             matched_resource = {
                 **bicep_resource,
-                'matched_to': candidates[0].get('name'),
-                'match_confidence': 'high',
-                'match_reason': 'Same resource type, unresolvable name in Bicep',
-                'actual_deployed_name': candidates[0].get('name'),
+                'matched_to': best_match.get('name'),
+                'match_confidence': 'high' if sole else 'medium',
+                'match_reason': (
+                    'Same resource type, unresolvable name in Bicep' if sole
+                    else 'Same resource type, possible match among multiple candidates'
+                ),
+                'actual_deployed_name': best_match.get('name'),
             }
             matched.append(matched_resource)
 
             # Remove from unmatched lists
             unmatched_bicep.remove(bicep_resource)
-            unmatched_azure.remove(candidates[0])
-
-        elif len(candidates) > 1:
-            # Multiple candidates - try to pick the best match
-            # Prefer resources with similar characteristics
-            best_match = _find_best_match(bicep_resource, candidates)
-            if best_match:
-                matched_resource = {
-                    **bicep_resource,
-                    'matched_to': best_match.get('name'),
-                    'match_confidence': 'medium',
-                    'match_reason': 'Same resource type, possible match among multiple candidates',
-                    'actual_deployed_name': best_match.get('name'),
-                }
-                matched.append(matched_resource)
-
-                # Remove from unmatched lists
-                unmatched_bicep.remove(bicep_resource)
-                unmatched_azure.remove(best_match)
+            unmatched_azure.remove(best_match)
 
     return matched, unmatched_bicep, unmatched_azure
 
