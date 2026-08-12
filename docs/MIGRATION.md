@@ -68,18 +68,25 @@ do **not** move with this one, the token's owner must still have access to them
 from the new org. If the token belongs to a personal account being wound down,
 re-issue it.
 
-## 3. `.github/lz-index.yml` — 7 owner-qualified repo paths
+## 3. `.github/lz-index.yml` — 2 owner-qualified repo paths
 
-Only needs editing **if the Bicep repos move too**. The index points outward:
+Only needs editing **if the Bicep repo moves too**. The index points outward:
 
-```
-landingzone, landingzone-prod, spoke-drifttest  ->  jaxywaxy/azure-landingzone-bicep
-test-resources, vhub-test,
-test-stack-resources, database-testing          ->  jaxywaxy/drift-test-resources
+```text
+landingzone, landingzone-prod  ->  jaxywaxy/azure-landingzone-bicep
 ```
 
-If those two repos stay under `jaxywaxy`, leave the index alone — the agent
-clones them by full path and does not care where it lives itself.
+If that repo stays under `jaxywaxy`, leave the index alone — the agent clones by
+full path and does not care where it lives itself.
+
+The five verification-fixture entries (`test-resources`, `vhub-test`,
+`test-stack-resources`, `database-testing`, `spoke-drifttest`) and their four
+dispatch workflows were **removed on 2026-08-12**: the estates were not migrated,
+so they would have resolved to nothing in the new org — a registered landing zone
+that can never be scanned, which is precisely what
+`tests/test_lz_index_integrity.py` exists to prevent. `drift-lz-template.yml`
+remains as the copy-me pattern for wiring a new LZ, and `docs/TEST_ESTATE.md` is
+the method for building an estate to verify against.
 
 ## 4. What does NOT need changing
 

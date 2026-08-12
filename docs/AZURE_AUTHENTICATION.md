@@ -246,7 +246,7 @@ az identity federated-credential list --identity-name $APP_ID
 
 1. ✅ Complete Step 1-3 above
 2. ✅ Push feature branch to GitHub
-3. ✅ Run workflow: `gh workflow run drift-lz-test.yml --ref feature/cleanup-and-recommendations`
+3. ✅ Run a landing-zone workflow, e.g. `gh workflow run drift-lz-landingzone.yml`
 4. ✅ Verify authentication succeeds in workflow logs
 5. ✅ Merge to main and update federated credential for production branch
 6. ✅ Teams add `subscription_id` to their `drift-lz-config.yml`

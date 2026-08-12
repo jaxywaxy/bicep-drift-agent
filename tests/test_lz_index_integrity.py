@@ -24,6 +24,12 @@ WORKFLOWS = ROOT / ".github/workflows"
 
 # Fixture estates. Deployed for a verification round and torn down after, so a
 # schedule here means a daily failure against an estate that is usually absent.
+#
+# NONE ARE CURRENTLY REGISTERED — the verification estates were not migrated
+# (see docs/TEST_ESTATE.md), so the check below is dormant rather than passing
+# on merit. It is kept, and these names kept in it, because the next fixture
+# someone registers should inherit the rule instead of rediscovering it. Add new
+# fixture names here when an estate returns.
 FIXTURE_LANDING_ZONES = {
     "spoke-drifttest", "test-resources", "vhub-test",
     "test-stack-resources", "database-testing",
@@ -37,7 +43,10 @@ def _index() -> dict:
 class IndexResolvesTests(unittest.TestCase):
     def test_the_index_is_not_empty(self):
         # Guards the guard: an empty parse would make everything below vacuous.
-        self.assertGreater(len(_index()), 2)
+        # The threshold was 2 when five fixture estates were registered
+        # alongside the production LZs; they were removed when the estates were
+        # not migrated, so anything above zero is now a real index.
+        self.assertGreaterEqual(len(_index()), 1)
 
     def test_every_entry_names_a_workflow_that_exists(self):
         missing = {name: cfg.get("workflow")
