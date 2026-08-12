@@ -96,6 +96,20 @@ while preventing:
 - Role assignment changes
 - Policy administration changes
 
+### One exception, under `DRIFT_LLM_PROVIDER=azure_openai`
+
+Reader is the whole grant under the default `anthropic` provider. Under
+`azure_openai` the narrative is generated **keylessly** — there is no model
+credential anywhere — so the same identity additionally holds **Cognitive
+Services OpenAI User** on the Azure OpenAI account (see
+[AZURE_AUTHENTICATION.md](AZURE_AUTHENTICATION.md)).
+
+That role permits *invoking a deployed model*. It grants no control-plane
+rights: it cannot create, modify or delete the account, its deployments, or
+anything else in the estate, so every statement under "Write Operations" below
+still holds. The trade is deliberate — one extra data-plane role in exchange for
+no long-lived model key in GitHub.
+
 ### Why Management Group Scope?
 
 Using management-group scope allows:

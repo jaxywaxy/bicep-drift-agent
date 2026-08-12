@@ -253,6 +253,42 @@ az identity federated-credential list --identity-name $APP_ID
 
 ---
 
+## A second role, only under `DRIFT_LLM_PROVIDER=azure_openai`
+
+The Reader grant above covers **reading Azure state**. It does not cover
+**calling the model**, and the two are separate grants on the same identity.
+
+Under the default `anthropic` provider there is nothing more to do: the agent
+authenticates to Anthropic with `ANTHROPIC_API_KEY` and never touches Entra for
+the narrative.
+
+Under `azure_openai` there is no key. `agent/llm/azure_openai_provider.py` uses
+`DefaultAzureCredential` against the scope
+`https://cognitiveservices.azure.com/.default`, which means the **same OIDC
+identity** that scans the estate must also hold **Cognitive Services OpenAI
+User** on the Azure OpenAI account:
+
+```bash
+az role assignment create \
+  --assignee "<scanning-sp-object-id>" \
+  --role "Cognitive Services OpenAI User" \
+  --scope "$(az cognitiveservices account show \
+              --name <openai-account> --resource-group <rg> --query id -o tsv)"
+```
+
+Keyless is deliberate — it is why no model credential exists as a repo secret.
+The cost is that the grant is easy to miss, because **nothing fails until the
+narrative step**: every deterministic stage completes, the JSON and HTML reports
+are written, and only the analysis is absent. A scan that "worked but produced no
+narrative" under `azure_openai` is this grant, not a bug.
+
+Endpoint and deployment are **repository variables**, not secrets
+(`AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`) — an endpoint URL and a
+deployment name are not credentials, and storing them as secrets only hides
+them from the people who need to read them.
+
+---
+
 ## Scanning Identity vs Deployer Identity
 
 The drift agent recognises changes made by the identity it **runs as** as

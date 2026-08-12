@@ -541,6 +541,7 @@ The following environment variables are recognised.
 | `DRIFT_AUTHORIZED_DEPLOYERS` | — | Additional deployer identities (see below) |
 | `INCLUDE_ROLE_ASSIGNMENTS` | `true` | Set `false` to disable the RBAC sidecar |
 | `INCLUDE_POLICY_ASSIGNMENTS` | `true` | Set `false` to disable the policy sidecar |
+| `INCLUDE_DEPLOYMENT_STACKS` | `true` | Set `false` to force the stack sidecar off even where `DRIFT_DEPLOYMENT_STACK` is configured |
 | `DRIFT_DEPLOYMENT_STACK` | — | Deployment-stack name. Stack comparison is opt-in and stays off unless set |
 | `DRIFT_LOG_LEVEL` | `INFO` | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `DRIFT_BICEP_TIMEOUT` | `120` | Seconds allowed for `az bicep build`. Raise for very large templates |

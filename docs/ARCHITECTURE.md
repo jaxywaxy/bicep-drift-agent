@@ -265,13 +265,22 @@ is in [CAPABILITIES.md](CAPABILITIES.md#deployment-stack-drift).
 
 ### 5. Enrichment
 
-Detected drift is enriched with:
+Detected drift is enriched with ownership classification, severity, change
+attribution, governance context and policy awareness. `analyze_drift.main()` is
+the sole ordering authority; the stages run in this order, and the order is
+load-bearing:
 
-- Ownership classification
-- Severity
-- Change attribution
-- Governance context
-- Policy awareness
+| # | Stage | Why here |
+|---|---|---|
+| 1 | `_attribute_lifecycle` | Fetches the RG's Activity Log once and matches per drift in memory |
+| 2 | `_claim_policy_required_tags` | Marks tag values a policy imposes, before anything grades them. An in-flight Modify is invisible to the Activity Log by construction, so this cannot be inferred from attribution |
+| 3 | `classify_drifts` | Stamps RISK `severity` + `category`. After attribution (it reads `change_origin`), before the analysis, so prompt and report agree |
+| 4 | analysis | Optional; sees who/how, not "investigate the Activity Log" |
+| 5 | `_split_policy_and_tag_owners` | Moves `change_origin.expected` rows to `policy_enforced_drifts`; tags the rest platform/workload |
+| 6 | `_group_orphans_with_their_cause` | Keeps a deletion and its orphaned dependents in one finding rather than N scattered ones |
+| 7 | `_include_placeholder_deletions` | Re-admits uniqueString-named deletions, which are invisible to name matching |
+| 8 | `_finalize_drift_count` | Recomputes `drift_count` against `COUNTED_TYPES` |
+| 9 | `_strip_internal_details` | Removes pipeline-internal keys before the JSON is written |
 
 #### Two severities, and which one is which
 
