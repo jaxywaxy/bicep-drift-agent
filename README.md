@@ -264,6 +264,7 @@ gh workflow run drift-lz-platform.yml
 | `docs/OPERATIONS_RUNBOOK.md` | Operational procedures and troubleshooting |
 | `docs/VALIDATION_STATUS.md` | What each capability has actually been proven to detect |
 | `docs/TEST_ESTATE.md` | Verification-round procedure, and the reference estate it was run against (separate repo, not migrated) |
+| `docs/MIGRATION.md` | Moving this repo to another GitHub organisation — what breaks and in what order |
 
 ---
 
