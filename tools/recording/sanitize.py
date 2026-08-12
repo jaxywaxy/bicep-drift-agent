@@ -53,7 +53,27 @@ import re
 import urllib.parse
 from typing import Any
 
+from ..rbac import BUILTIN_ROLE_NAMES, PRIVILEGED_ROLE_GUIDS
 from ..redact import redact_secrets
+
+#: GUIDs that are PUBLIC Azure constants, not tenant data, and must survive
+#: sanitising unchanged.
+#:
+#: Found by replaying a recorded scan and diffing it against its own recording:
+#: three role-assignment drifts came back reading `8d36ee6f-… -> ServicePrincipal:…`
+#: where the live run said `Owner -> …`. Aliasing had rewritten the built-in
+#: role definition id, so `BUILTIN_ROLE_NAMES` no longer resolved it.
+#:
+#: The name was the visible half. The dangerous half is that the same GUID
+#: decides `PRIVILEGED_ROLE_GUIDS` membership, so a replayed subscription-Owner
+#: grant classified as NOT privileged - a fixture that silently softens
+#: severity, which is the exact failure mode the corpus exists to end.
+#:
+#: Sourced from rbac.py rather than restated, so a role added there cannot be
+#: forgotten here.
+_PUBLIC_GUIDS = frozenset(
+    g.lower() for g in (set(BUILTIN_ROLE_NAMES) | set(PRIVILEGED_ROLE_GUIDS))
+)
 
 #: Matches a bare GUID anywhere in a string (URL path, id, property value).
 _GUID_RE = re.compile(
@@ -101,7 +121,9 @@ class Sanitiser:
         self.name_map = {k.lower(): v for k, v in (name_map or {}).items()}
 
     def guid(self, value: str) -> str:
-        """Alias one GUID, passing through anything already aliased."""
+        """Alias one GUID, passing through public constants and known aliases."""
+        if value.lower() in _PUBLIC_GUIDS:
+            return value
         if value.lower() in self.known_aliases:
             return value.lower()
         alias = alias_guid(value)

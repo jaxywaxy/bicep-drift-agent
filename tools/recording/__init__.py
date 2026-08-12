@@ -148,6 +148,7 @@ def start_replay(path: str | Path) -> None:
     cassette = Cassette.load(path)
     _session = _Session("replay", cassette, path)
     _install_sdk_transport_hook()
+    _install_credential_hook()
     logger.info("Replaying Azure payloads from %s (%d interactions)", path, len(cassette))
 
 
@@ -157,6 +158,7 @@ def stop() -> None:
     session = _session
     _session = None
     _remove_sdk_transport_hook()
+    _remove_credential_hook()
     if session is not None and session.mode == "record":
         session.cassette.save(session.path)
 
@@ -303,6 +305,79 @@ def capture_http_error(req: Any, error: urllib.error.HTTPError) -> None:
 # ---------------------------------------------------------------------------
 
 _original_transport_send = None
+_original_get_token = None
+
+#: Far-future expiry so no SDK pipeline decides the replayed token needs
+#: refreshing mid-run and goes to AAD after all.
+_REPLAY_TOKEN_EXPIRY = 4102444800  # 2100-01-01Z
+
+
+def _install_credential_hook() -> None:
+    """During replay, stop every credential from calling AAD.
+
+    Intercepting the two DATA seams is not enough to take a replay offline:
+    before any of them is reached, `acquire_arm_token` and ten collectors each
+    construct a DefaultAzureCredential and fetch a bearer token. With no Azure
+    credential - CI, or a laptop that is not logged in - that fetch fails,
+    `acquire_arm_token` returns None, and the collectors record collection gaps.
+    The replay would then produce a DIFFERENT result from the recording, for a
+    reason having nothing to do with the payloads under test, and the fixture
+    would be quietly worthless.
+
+    The token itself is never needed: it only ever becomes an Authorization
+    header, and headers are dropped rather than recorded. Replay-only - a
+    recording must authenticate for real.
+
+    Two patches, because the two seams reach a credential differently:
+
+    - The urllib collectors call `DefaultAzureCredential.get_token` themselves.
+    - The SDK clients never touch the credential directly. azure-core's
+      `BearerTokenCredentialPolicy` does it for them, one policy above the
+      transport - so the transport hook is never even reached when
+      authentication fails. Patching the credential alone is NOT enough here,
+      and looks like it is: azure-core prefers `get_token_info` when the
+      credential offers it, which DefaultAzureCredential does, so a patch on
+      `get_token` is silently bypassed on this path.
+
+    The policy's on_request is neutralised rather than fed a fake token, because
+    during a replay there is no outbound request left to authorise.
+    """
+    global _original_get_token
+    if _original_get_token is not None:
+        return
+    try:
+        from azure.core.credentials import AccessToken
+        from azure.core.pipeline.policies import BearerTokenCredentialPolicy
+        from azure.identity import DefaultAzureCredential
+    except ImportError:  # pragma: no cover - all are declared dependencies
+        return
+
+    def replayed_token(self, *scopes, **kwargs):
+        return AccessToken("replayed-token-not-a-credential", _REPLAY_TOKEN_EXPIRY)
+
+    _original_get_token = {
+        "get_token": DefaultAzureCredential.get_token,
+        "get_token_info": getattr(DefaultAzureCredential, "get_token_info", None),
+        "on_request": BearerTokenCredentialPolicy.on_request,
+    }
+    DefaultAzureCredential.get_token = replayed_token
+    if _original_get_token["get_token_info"] is not None:
+        DefaultAzureCredential.get_token_info = replayed_token
+    BearerTokenCredentialPolicy.on_request = lambda self, request: None
+
+
+def _remove_credential_hook() -> None:
+    global _original_get_token
+    if _original_get_token is None:
+        return
+    from azure.core.pipeline.policies import BearerTokenCredentialPolicy
+    from azure.identity import DefaultAzureCredential
+
+    DefaultAzureCredential.get_token = _original_get_token["get_token"]
+    if _original_get_token["get_token_info"] is not None:
+        DefaultAzureCredential.get_token_info = _original_get_token["get_token_info"]
+    BearerTokenCredentialPolicy.on_request = _original_get_token["on_request"]
+    _original_get_token = None
 
 
 def _install_sdk_transport_hook() -> None:

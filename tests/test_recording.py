@@ -132,6 +132,53 @@ class SanitiserTests(unittest.TestCase):
         self.assertNotIn("hunter2", json.dumps(out))
 
 
+class PublicGuidsSurviveSanitisingTests(unittest.TestCase):
+    """Built-in role definition ids are public Azure constants, not tenant data.
+
+    Caught by replaying a recorded scan against its own recording: three
+    role-assignment drifts read `8d36ee6f-… -> ServicePrincipal:…` on replay
+    where the live run said `Owner -> …`. The visible half was a lost name. The
+    dangerous half is that the same GUID decides PRIVILEGED_ROLE_GUIDS
+    membership, so a replayed subscription-Owner grant classified as NOT
+    privileged - a fixture that quietly softens severity.
+    """
+
+    OWNER = "8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
+
+    def test_a_builtin_role_id_is_not_aliased(self):
+        self.assertEqual(Sanitiser().guid(self.OWNER), self.OWNER)
+
+    def test_it_survives_inside_a_resource_id(self):
+        from tools.rbac import _extract_guid
+
+        role_id = (f"/subscriptions/{SUB}/providers/Microsoft.Authorization"
+                   f"/roleDefinitions/{self.OWNER}")
+        out = Sanitiser().text(role_id)
+        self.assertNotIn(SUB, out)
+        self.assertEqual(_extract_guid(out), self.OWNER)
+
+    def test_the_role_still_resolves_to_its_name_after_a_round_trip(self):
+        from tools.rbac import BUILTIN_ROLE_NAMES
+
+        body = {"properties": {"roleDefinitionId":
+                               f"/subscriptions/{SUB}/providers/Microsoft."
+                               f"Authorization/roleDefinitions/{self.OWNER}"}}
+        out = Sanitiser().body(body)
+        rid = out["properties"]["roleDefinitionId"].rsplit("/", 1)[-1]
+        self.assertEqual(BUILTIN_ROLE_NAMES.get(rid), "Owner")
+
+    def test_it_is_still_classified_as_privileged(self):
+        from tools.rbac import PRIVILEGED_ROLE_GUIDS
+
+        self.assertIn(Sanitiser().guid(self.OWNER), PRIVILEGED_ROLE_GUIDS)
+
+    def test_a_tenant_principal_id_is_still_aliased(self):
+        # Guards the guard: an exemption that swallowed everything would make
+        # every assertion above pass while leaking the whole estate.
+        principal = "70afebf7-5bdd-45d9-9cfc-534af9a95589"
+        self.assertNotEqual(Sanitiser().guid(principal), principal)
+
+
 class CassetteTests(unittest.TestCase):
     def test_round_trips_through_disk(self):
         with tempfile.TemporaryDirectory() as d:
@@ -254,6 +301,61 @@ class ReplaySpeaksInAliasesTests(_RecordingTestCase):
         with mock.patch("urllib.request.urlopen", _exploding_urlopen):
             hit = recording.replay_urlopen(urllib.request.Request(LOCKS_URL))
         self.assertEqual(hit.status, 200)
+
+
+class ReplayNeedsNoAzureCredentialTests(_RecordingTestCase):
+    """Intercepting the two data seams is not enough to take a replay offline.
+
+    Before either is reached, `acquire_arm_token` and ten collectors each build
+    a DefaultAzureCredential and call AAD. Unauthenticated - CI, or a laptop
+    that is not logged in - that call fails, the token comes back None, and the
+    collectors record collection gaps instead of reading the cassette. The
+    replay would diverge from its own recording for a reason unrelated to the
+    payloads under test, which is the quiet way a fixture becomes worthless.
+    """
+
+    def test_a_token_is_served_without_calling_aad(self):
+        from azure.identity import DefaultAzureCredential
+
+        self._record_locks()
+        recording.start_replay(self.path)
+        with mock.patch.object(
+            DefaultAzureCredential, "__init__",
+            lambda self, *a, **k: None,
+        ):
+            token = DefaultAzureCredential().get_token(
+                "https://management.azure.com/.default"
+            )
+        self.assertTrue(token.token)
+
+    def test_acquire_arm_token_succeeds_with_no_credential_available(self):
+        from tools.live_state.common import acquire_arm_token
+
+        self._record_locks()
+        recording.start_replay(self.path)
+        self.assertIsNotNone(
+            acquire_arm_token(),
+            "a None token makes every collector record a gap instead of "
+            "reading the cassette",
+        )
+
+    def test_the_credential_hook_is_removed_on_stop(self):
+        from azure.identity import DefaultAzureCredential
+
+        before = DefaultAzureCredential.get_token
+        self._record_locks()
+        recording.start_replay(self.path)
+        self.assertIsNot(DefaultAzureCredential.get_token, before)
+        recording.stop()
+        self.assertIs(DefaultAzureCredential.get_token, before)
+
+    def test_recording_does_not_fake_the_token(self):
+        # A recording must authenticate for real, or it records nothing.
+        from azure.identity import DefaultAzureCredential
+
+        before = DefaultAzureCredential.get_token
+        recording.start_recording(self.path)
+        self.assertIs(DefaultAzureCredential.get_token, before)
 
 
 class MissesAreLoudTests(_RecordingTestCase):
