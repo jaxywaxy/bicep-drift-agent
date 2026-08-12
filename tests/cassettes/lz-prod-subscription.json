@@ -10,19 +10,24 @@
     "1c82669e-b9ce-48fa-8345-5b901183638b",
     "2a52ddea-f151-4135-84cc-441053e997c3",
     "33e3f051-b8d0-4570-8a67-3294ed59f843",
+    "38e1ba02-c6bf-4599-8648-20875fce0f35",
     "406562c8-ccc0-4489-8780-cff296237c04",
+    "41a28b23-e7b6-4fa7-8e1f-71f89be5e7b2",
     "4b4f05ff-fd84-4180-8002-f60fab29cfab",
     "4f6c3700-2f81-4f91-812b-14083d07fee9",
     "4f891acb-43c8-4a75-8aeb-01ad330a9f2a",
     "51b3ce16-82c2-4853-8fa2-732c5e293827",
+    "61fb262c-59ad-410c-81e1-bf0fa9c462ab",
     "6213d072-a2ee-4474-8cd1-dfefab6b2219",
     "6279a9ef-2043-4545-89eb-1e3bd432a466",
     "6f9657b2-834c-47d7-8a79-52fc2081dd84",
+    "704506e6-2c56-4e06-8bef-47ca0acd2243",
     "71645b2a-d150-4c90-84a6-6a12c60fa784",
     "748c3a11-94b1-4dbe-8a0e-17dd5ad055d9",
     "757e0c3d-1564-48d2-88dc-23cb813a6cd8",
     "79da664f-0eef-4990-8771-c99013a8f370",
     "7e28d69c-3857-4dd3-8273-b714e6749a3d",
+    "80c35eb8-849e-4142-8366-67a09dd71c2a",
     "82711602-42cd-4120-8b14-2563eae4071a",
     "85682211-fec9-43bc-8a53-75fb772eb037",
     "87a0752a-01b0-46a2-88e2-eb43aab69e37",
@@ -31,15 +36,18 @@
     "8ef6a35f-8aaa-4e63-89cb-aacb6b4bceb4",
     "95757b73-b5f0-4108-869a-be0fdccac49a",
     "9ca090e2-28e1-4874-844e-f25b761d2e54",
+    "9ccd5e04-dab8-4cef-8a30-197e600d922b",
     "9ef05976-f3ab-4d40-8f4d-0a56c349bba9",
     "9fdd54fc-bd09-4832-880c-e7ed630779b9",
     "a2b672c2-38f5-4da3-8d4e-6092361b4d6c",
     "b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8",
     "bec5b731-cae8-4c9f-8331-241e2c6836f1",
+    "c4a19b03-4ffe-46c4-8b6f-19a98115422b",
     "c84d58a6-8881-453a-80d2-6e0ae99d6bb9",
     "ce5042e8-2803-4e02-83bc-e5d683080b63",
     "d4c793c8-0ef7-4abb-8856-fe44c1dace62",
     "d59da4b4-8251-4002-88ba-1469cb1f5751",
+    "d989f542-1c18-4247-8535-f699026aa24b",
     "dc5d6c33-511c-4e64-82e6-79f3a889a171",
     "e12bf61d-e8fd-4996-8c0a-582f9bfe1700",
     "eb4ccf2f-815c-47d3-86b6-d854b470fec9",
@@ -57,6 +65,167 @@
       "status": 200,
       "body": {
         "value": []
+      },
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+    },
+    "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/providers/Microsoft.Authorization/policyAssignments?api-version=2022-06-01": {
+      "method": "GET",
+      "url": "https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/providers/Microsoft.Authorization/policyAssignments?api-version=2022-06-01",
+      "status": 200,
+      "body": {
+        "value": [
+          {
+            "properties": {
+              "displayName": "Microsoft Azure region access restriction blocking West Europe region",
+              "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/704506e6-2c56-4e06-8bef-47ca0acd2243",
+              "scope": "/providers/Microsoft.Management/managementGroups/6279a9ef-2043-4545-89eb-1e3bd432a466",
+              "metadata": {
+                "createdBy": "9ccd5e04-dab8-4cef-8a30-197e600d922b",
+                "createdOn": "2026-01-15T09:32:39.8111434Z",
+                "updatedBy": "9ccd5e04-dab8-4cef-8a30-197e600d922b",
+                "updatedOn": "2026-07-31T10:11:23.4118539Z"
+              },
+              "enforcementMode": "Default",
+              "nonComplianceMessages": [
+                {
+                  "message": "The selected region is currently not accepting new customers: https://aka.ms/locationineligible"
+                }
+              ],
+              "resourceSelectors": [
+                {
+                  "name": "SDPRegions",
+                  "selectors": [
+                    {
+                      "kind": "resourceLocation",
+                      "in": [
+                        "australiaeast",
+                        "southcentralus2",
+                        "spaincentral2",
+                        "australiacentral2",
+                        "japaneast",
+                        "chilecentral",
+                        "jioindiawest",
+                        "koreasouth",
+                        "austriaeast",
+                        "southeastasia",
+                        "southindia",
+                        "francesouth",
+                        "switzerlandnorth",
+                        "germanynorth",
+                        "belgiumcentral",
+                        "southafricanorth",
+                        "uaenorth",
+                        "polandcentral",
+                        "norwayeast",
+                        "northeurope",
+                        "israelcentral",
+                        "taiwannorthwest",
+                        "ukwest",
+                        "malaysiasouth2",
+                        "qatarcentral",
+                        "mexicocentral",
+                        "italynorth2",
+                        "eastus2",
+                        "centralus",
+                        "canadaeast",
+                        "brazilsouth",
+                        "spaincentral",
+                        "westus3"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "overrides": [
+                {
+                  "kind": "policyEffect",
+                  "value": "deny"
+                }
+              ]
+            },
+            "id": "/providers/Microsoft.Management/managementGroups/6279a9ef-2043-4545-89eb-1e3bd432a466/providers/Microsoft.Authorization/policyAssignments/sys.blockwesteurope",
+            "type": "Microsoft.Authorization/policyAssignments",
+            "name": "sys.blockwesteurope",
+            "systemData": {
+              "createdBy": "61fb262c-59ad-410c-81e1-bf0fa9c462ab",
+              "createdByType": "Application",
+              "createdAt": "2026-01-15T09:32:39.7901202Z",
+              "lastModifiedBy": "61fb262c-59ad-410c-81e1-bf0fa9c462ab",
+              "lastModifiedByType": "Application",
+              "lastModifiedAt": "2026-07-31T10:11:23.3860236Z"
+            }
+          },
+          {
+            "properties": {
+              "displayName": "Microsoft Azure Multi Factor Authentication Enforcement for Resource Write Actions",
+              "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/d989f542-1c18-4247-8535-f699026aa24b",
+              "scope": "/providers/Microsoft.Management/managementGroups/6279a9ef-2043-4545-89eb-1e3bd432a466",
+              "parameters": {
+                "effect": {
+                  "value": "Deny"
+                }
+              },
+              "metadata": {
+                "createdBy": "c4a19b03-4ffe-46c4-8b6f-19a98115422b",
+                "createdOn": "2026-07-01T22:39:50.761921Z",
+                "updatedBy": "c4a19b03-4ffe-46c4-8b6f-19a98115422b",
+                "updatedOn": "2026-07-07T01:37:10.2570233Z"
+              },
+              "enforcementMode": "Default",
+              "nonComplianceMessages": [
+                {
+                  "message": "You are receiving this error because you tried to create, update or delete Azure resources without authenticating through MFA. User accounts must be authenticated through MFA to manage your resources. To resolve this error, go to https://aka.ms/MFAforAzure"
+                }
+              ]
+            },
+            "id": "/providers/Microsoft.Management/managementGroups/6279a9ef-2043-4545-89eb-1e3bd432a466/providers/Microsoft.Authorization/policyAssignments/sys.mfa-write",
+            "type": "Microsoft.Authorization/policyAssignments",
+            "name": "sys.mfa-write",
+            "systemData": {
+              "createdBy": "41a28b23-e7b6-4fa7-8e1f-71f89be5e7b2",
+              "createdByType": "Application",
+              "createdAt": "2026-07-01T22:39:50.7378523Z",
+              "lastModifiedBy": "41a28b23-e7b6-4fa7-8e1f-71f89be5e7b2",
+              "lastModifiedByType": "Application",
+              "lastModifiedAt": "2026-07-07T01:37:10.2439761Z"
+            }
+          },
+          {
+            "properties": {
+              "displayName": "Microsoft Azure Multi Factor Authentication Enforcement for Resource Delete Actions",
+              "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/80c35eb8-849e-4142-8366-67a09dd71c2a",
+              "scope": "/providers/Microsoft.Management/managementGroups/6279a9ef-2043-4545-89eb-1e3bd432a466",
+              "parameters": {
+                "effect": {
+                  "value": "DenyAction"
+                }
+              },
+              "metadata": {
+                "createdBy": "c4a19b03-4ffe-46c4-8b6f-19a98115422b",
+                "createdOn": "2026-07-01T22:43:25.5795076Z",
+                "updatedBy": "c4a19b03-4ffe-46c4-8b6f-19a98115422b",
+                "updatedOn": "2026-07-07T01:36:45.24465Z"
+              },
+              "enforcementMode": "Default",
+              "nonComplianceMessages": [
+                {
+                  "message": "You are receiving this error because you tried to create, update or delete Azure resources without authenticating through MFA. User accounts must be authenticated through MFA to manage your resources. To resolve this error, go to https://aka.ms/MFAforAzure"
+                }
+              ]
+            },
+            "id": "/providers/Microsoft.Management/managementGroups/6279a9ef-2043-4545-89eb-1e3bd432a466/providers/Microsoft.Authorization/policyAssignments/sys.mfa-delete",
+            "type": "Microsoft.Authorization/policyAssignments",
+            "name": "sys.mfa-delete",
+            "systemData": {
+              "createdBy": "41a28b23-e7b6-4fa7-8e1f-71f89be5e7b2",
+              "createdByType": "Application",
+              "createdAt": "2026-07-01T22:43:25.5573357Z",
+              "lastModifiedBy": "41a28b23-e7b6-4fa7-8e1f-71f89be5e7b2",
+              "lastModifiedByType": "Application",
+              "lastModifiedAt": "2026-07-07T01:36:45.2203488Z"
+            }
+          }
+        ]
       },
       "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
     },
@@ -420,15 +589,15 @@
             "name": "jacquiprod-rg-apps",
             "location": "australiaeast",
             "tags": {
-              "owner": "jacqui",
               "environment": "prod",
+              "owner": "jacqui",
+              "project": "landingzone",
               "service": "platform",
-              "businessunit": "cloud",
               "costcenter": "engineering",
-              "managedby": "bicep",
-              "createdby": "bicep",
+              "businessunit": "cloud",
               "workload": "prod-workloads",
-              "project": "landingzone"
+              "createdby": "bicep",
+              "managedby": "bicep"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps"
           },
@@ -436,15 +605,15 @@
             "name": "jacquiprod-rg-logging",
             "location": "australiaeast",
             "tags": {
-              "owner": "jacqui",
               "environment": "prod",
+              "owner": "jacqui",
+              "project": "landingzone",
               "service": "platform",
-              "businessunit": "cloud",
               "costcenter": "engineering",
-              "managedby": "bicep",
-              "createdby": "bicep",
+              "businessunit": "cloud",
               "workload": "prod-workloads",
-              "project": "landingzone"
+              "createdby": "bicep",
+              "managedby": "bicep"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging"
           },
@@ -452,15 +621,15 @@
             "name": "jacquiprod-rg-networking",
             "location": "australiaeast",
             "tags": {
-              "owner": "jacqui",
               "environment": "prod",
-              "managedby": "bicep",
-              "createdby": "bicep",
-              "service": "platform",
-              "workload": "prod-workloads",
+              "owner": "jacqui",
               "project": "landingzone",
+              "service": "platform",
               "costcenter": "engineering",
-              "businessunit": "cloud"
+              "businessunit": "cloud",
+              "workload": "prod-workloads",
+              "createdby": "bicep",
+              "managedby": "bicep"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking"
           },
@@ -468,15 +637,15 @@
             "name": "jacquiprod-rg-platform",
             "location": "australiaeast",
             "tags": {
-              "owner": "jacqui",
               "environment": "prod",
+              "owner": "jacqui",
+              "project": "landingzone",
               "service": "platform",
-              "businessunit": "cloud",
               "costcenter": "engineering",
-              "managedby": "bicep",
-              "createdby": "bicep",
+              "businessunit": "cloud",
               "workload": "prod-workloads",
-              "project": "landingzone"
+              "createdby": "bicep",
+              "managedby": "bicep"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-platform"
           },

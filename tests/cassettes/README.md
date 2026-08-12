@@ -46,3 +46,9 @@ failing.
   behaviour these fixtures exist to test. Record only from a verification
   estate, never a client's.
 - Request headers are not recorded at all, so no bearer token is present.
+- Responses over `DRIFT_CASSETTE_MAX_BYTES` (1MB) are **skipped**, and listed
+  under `oversize_skipped` in the metadata. In practice that is the Activity
+  Log, which returned 35,075 events for one subscription — 174MB. It is not
+  truncated, because a fixture that lies about how much Azure returned is worse
+  than an absent one; a replay needing it misses loudly. Attribution keeps its
+  hand-written fixtures, where the event shape is small and stable.

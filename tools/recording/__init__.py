@@ -82,6 +82,72 @@ _RECORDABLE_HOSTS = (
 )
 
 
+#: Largest response body that may go into a cassette, in bytes.
+#:
+#: A cassette is a COMMITTED artifact, so an unbounded response destroys it: the
+#: first full-pipeline recording came to 174MB, essentially all of it the
+#: subscription's Activity Log at 35,075 events. Truncating that list would have
+#: been worse than dropping it - a fixture that lies about how much Azure
+#: returned is exactly the kind of thing this corpus exists to stop.
+#:
+#: Deliberately a general size guard rather than an Activity-Log special case.
+#: Any list endpoint on a large enough estate has the same shape, and a rule
+#: naming one endpoint would not have caught the next one.
+#:
+#: 1MB separates the two populations by a wide margin: the whole 29-resource
+#: Resource Graph corpus is 125KB.
+_MAX_BODY_BYTES = int(os.environ.get("DRIFT_CASSETTE_MAX_BYTES") or 1_000_000)
+
+#: Total bytes a cassette may reach before recording stops.
+#:
+#: The per-response cap above is necessary and NOT sufficient, which took a
+#: second 174MB recording to establish: the Activity Log arrives through the
+#: Monitor SDK's pager as hundreds of responses that are individually well under
+#: 1MB. Death by paging is invisible to any per-response rule, so the budget is
+#: the backstop that bounds a cassette regardless of how the volume arrives.
+_MAX_CASSETTE_BYTES = int(os.environ.get("DRIFT_CASSETTE_BUDGET_BYTES") or 20_000_000)
+
+#: Endpoints never recorded, and why. Matched as a lowercase substring of the
+#: URL path.
+#:
+#: The budget alone would have stopped the 174MB file, but it would have stopped
+#: it by truncating an arbitrary tail of whatever happened to be recorded last -
+#: which is a corpus whose contents depend on request ordering. Naming the one
+#: endpoint that is genuinely unsuitable keeps the rest of the corpus complete.
+#:
+#: The Activity Log qualifies on its own merits, not merely on size: it is
+#: unbounded (35,076 events for one subscription), it is time-varying so a
+#: fixture of it is stale the day after it is taken, and attribution already has
+#: hand-written fixtures where the event shape is small and stable.
+_NEVER_RECORD_PATHS = {
+    "/microsoft.insights/eventtypes/": "Activity Log - unbounded and time-varying",
+}
+
+
+def _too_large(raw: bytes, key_hint: str) -> bool:
+    """Whether a response is too big to commit; records the fact if so.
+
+    The skip is stamped into the cassette's own metadata, not just logged, so
+    the committed file says what is missing and why. A replay that needs the
+    request still raises CassetteMiss - it is genuinely absent, and inventing a
+    truncated answer would be the lie this whole module refuses to tell.
+    """
+    if len(raw) <= _MAX_BODY_BYTES:
+        return False
+    logger.warning(
+        "Cassette: %s returned %.1fMB, over the %.1fMB limit - NOT recorded. "
+        "A replay needing it will miss loudly. Raise DRIFT_CASSETTE_MAX_BYTES "
+        "only if the result is small enough to commit.",
+        key_hint, len(raw) / 1e6, _MAX_BODY_BYTES / 1e6,
+    )
+    skipped = _session.cassette.metadata.setdefault("oversize_skipped", [])
+    entry = f"{key_hint} ({len(raw) // 1000}KB)"
+    if entry not in skipped:
+        skipped.append(entry)
+        skipped.sort()
+    return True
+
+
 def _is_recordable(url: str) -> bool:
     """Whether a URL's response may be written to a cassette.
 
@@ -90,9 +156,39 @@ def _is_recordable(url: str) -> bool:
     - a GitHub Issue publish, say - fails loudly instead of quietly reaching the
     real network and writing something.
     """
-    host = urllib.parse.urlsplit(url).hostname or ""
-    return any(host.lower() == h or host.lower().endswith("." + h)
-               for h in _RECORDABLE_HOSTS)
+    parts = urllib.parse.urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if not any(host == h or host.endswith("." + h) for h in _RECORDABLE_HOSTS):
+        return False
+    path = parts.path.lower()
+    for fragment, reason in _NEVER_RECORD_PATHS.items():
+        if fragment in path:
+            logger.debug("Cassette: not recording %s (%s)", url, reason)
+            return False
+    return True
+
+
+def _over_budget(raw: bytes) -> bool:
+    """Whether this cassette has hit its total size budget.
+
+    Warns once and stamps the cassette, so a truncated corpus announces itself
+    rather than looking merely incomplete.
+    """
+    _session.bytes_recorded += len(raw)
+    if _session.bytes_recorded <= _MAX_CASSETTE_BYTES:
+        return False
+    if "budget_exhausted" not in _session.cassette.metadata:
+        logger.warning(
+            "Cassette: hit the %.0fMB budget after %d interaction(s); recording "
+            "stopped. The corpus is INCOMPLETE - narrow the scan or raise "
+            "DRIFT_CASSETTE_BUDGET_BYTES.",
+            _MAX_CASSETTE_BYTES / 1e6, len(_session.cassette),
+        )
+        _session.cassette.metadata["budget_exhausted"] = (
+            f"stopped after {len(_session.cassette)} interaction(s) at "
+            f"{_MAX_CASSETTE_BYTES / 1e6:.0f}MB - corpus is incomplete"
+        )
+    return True
 
 
 class _Session:
@@ -101,6 +197,8 @@ class _Session:
         self.cassette = cassette
         self.path = path
         self.note = note
+        #: Running total of recorded response bytes, for the budget check.
+        self.bytes_recorded = 0
 
 
 #: The one live session, or None. Module-global on purpose: the seams it feeds
@@ -268,6 +366,8 @@ def capture_urlopen(req: Any, response: Any) -> Any:
         logger.debug("Cassette: not an Azure host, leaving %s unrecorded", url)
         return response
     raw = response.read()
+    if _too_large(raw, f"{method.upper()} {url}") or _over_budget(raw):
+        return _ReplayedResponse(raw, getattr(response, "status", 200), url)
     try:
         body = json.loads(raw) if raw else None
     except (ValueError, TypeError):
@@ -444,7 +544,9 @@ def _capture_sdk(request: Any, response: Any) -> None:
     if not _is_recordable(request.url):
         return
     try:
-        raw = response.body()
+        raw = response.body() or b""
+        if _too_large(raw, f"{request.method} {request.url}") or _over_budget(raw):
+            return
         body = json.loads(raw) if raw else None
     except Exception as e:
         logger.debug("Cassette: could not capture SDK response body: %s", e)

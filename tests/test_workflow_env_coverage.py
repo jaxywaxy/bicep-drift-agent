@@ -48,7 +48,8 @@ _ENV_READ = (
 #: Adding a name here needs the same argument - "it is inconvenient to plumb"
 #: is not one.
 _DELIBERATELY_NOT_IN_THE_SCAN_WORKFLOW = frozenset(
-    {"DRIFT_RECORD_CASSETTE", "DRIFT_REPLAY_CASSETTE", "DRIFT_CASSETTE_NOTE"}
+    {"DRIFT_RECORD_CASSETTE", "DRIFT_REPLAY_CASSETTE", "DRIFT_CASSETTE_NOTE",
+     "DRIFT_CASSETTE_MAX_BYTES", "DRIFT_CASSETTE_BUDGET_BYTES"}
 )
 
 

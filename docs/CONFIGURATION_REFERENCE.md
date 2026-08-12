@@ -570,6 +570,8 @@ artifact. Recording is a developer action against a verification estate.
 | `DRIFT_RECORD_CASSETTE` | — | Path to write recorded Azure payloads to. The scan runs normally and every ARM REST and SDK read is captured, sanitised, on the way past. Appends to an existing cassette, so a corpus builds up over several scans |
 | `DRIFT_REPLAY_CASSETTE` | — | Path to serve every Azure read from. **No network calls are made at all.** A request the cassette does not cover raises `CassetteMiss` — it never returns empty, because an empty collection means *deleted* to everything downstream |
 | `DRIFT_CASSETTE_NOTE` | — | Free-text provenance stamped on each recorded interaction (which estate, which round) |
+| `DRIFT_CASSETTE_MAX_BYTES` | `1000000` | Largest single response body that may enter a cassette. Oversize responses are skipped, logged, and listed under `oversize_skipped` in the cassette metadata; a replay needing one misses loudly rather than replaying a truncated lie |
+| `DRIFT_CASSETTE_BUDGET_BYTES` | `20000000` | Total bytes a cassette may reach before recording stops and stamps `budget_exhausted` into its metadata. The per-response cap alone is **not** sufficient: the Activity Log arrives through the Monitor SDK's pager as hundreds of responses individually well under 1MB, and the first two full-pipeline recordings each came to 174MB because of it. The Activity Log endpoint is now excluded outright — it is unbounded, time-varying, and already covered by hand-written attribution fixtures — and this budget is the backstop for whatever does the same thing next |
 
 Setting both `DRIFT_RECORD_CASSETTE` and `DRIFT_REPLAY_CASSETTE` is an error
 rather than a precedence rule.

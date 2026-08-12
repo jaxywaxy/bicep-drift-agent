@@ -502,6 +502,123 @@ class OnlyAzureIsRecordedTests(_RecordingTestCase):
             )
 
 
+class OversizeResponsesAreNotCommittedTests(_RecordingTestCase):
+    """A cassette is a committed artifact, so one unbounded response destroys it.
+
+    The first full-pipeline recording came to 174MB, essentially all of it the
+    subscription's Activity Log at 35,075 events. Truncating that list would
+    have been worse than dropping it: a fixture that lies about how much Azure
+    returned is the thing this corpus exists to stop.
+    """
+
+    def _record_big(self, rows):
+        from tools.http_util import urlopen_checked
+
+        recording.start_recording(self.path)
+        with mock.patch("urllib.request.urlopen",
+                        _urlopen_returning({"value": rows})):
+            urlopen_checked("https://management.azure.com/x?api-version=1")
+        recording.stop()
+
+    def test_an_oversize_body_is_skipped_rather_than_truncated(self):
+        big = [{"pad": "x" * 2000} for _ in range(1000)]  # ~2MB
+        with self.assertLogs("tools.recording", "WARNING"):
+            self._record_big(big)
+        self.assertEqual(len(Cassette.load(self.path)), 0)
+
+    def test_the_skip_is_stamped_into_the_cassette_so_it_is_visible(self):
+        # Logged alone it would vanish; the committed file has to say what is
+        # missing and why, or a later reader sees only an unexplained gap.
+        with self.assertLogs("tools.recording", "WARNING"):
+            self._record_big([{"pad": "x" * 2000} for _ in range(1000)])
+        skipped = Cassette.load(self.path).metadata.get("oversize_skipped")
+        self.assertTrue(skipped)
+        self.assertIn("api-version=1", skipped[0])
+
+    def test_a_normal_body_is_unaffected(self):
+        self._record_big([{"pad": "small"}])
+        self.assertEqual(len(Cassette.load(self.path)), 1)
+
+    def test_the_caller_still_reads_its_response_when_the_body_is_skipped(self):
+        # Declining to record must never break the scan being recorded.
+        from tools.http_util import urlopen_checked
+
+        recording.start_recording(self.path)
+        with mock.patch("urllib.request.urlopen",
+                        _urlopen_returning({"value": [{"pad": "x" * 2000}] * 1000})):
+            with self.assertLogs("tools.recording", "WARNING"):
+                body = json.load(
+                    urlopen_checked("https://management.azure.com/x?api-version=1")
+                )
+        self.assertEqual(len(body["value"]), 1000)
+
+
+class PagedFloodsAreBoundedTests(_RecordingTestCase):
+    """The per-response cap is necessary and NOT sufficient.
+
+    It took a second 174MB recording to establish: the Activity Log arrives
+    through the Monitor SDK's pager as hundreds of responses each well under
+    1MB, so no per-response rule can see it. Two defences, and this pins both.
+    """
+
+    ACTIVITY_URL = (
+        "https://management.azure.com/subscriptions/{}/providers"
+        "/Microsoft.Insights/eventtypes/management/values?api-version=2015-04-01"
+    ).format(SUB)
+
+    def test_the_activity_log_endpoint_is_never_recorded(self):
+        from tools.http_util import urlopen_checked
+
+        recording.start_recording(self.path)
+        with mock.patch("urllib.request.urlopen",
+                        _urlopen_returning({"value": [{"eventName": "x"}]})):
+            urlopen_checked(self.ACTIVITY_URL)
+        recording.stop()
+        self.assertEqual(len(Cassette.load(self.path)), 0)
+
+    def test_a_normal_arm_read_is_still_recorded(self):
+        # Guards the exclusion: a path rule that matched everything would make
+        # the assertion above pass while recording nothing at all.
+        self._record_locks()
+        self.assertEqual(len(Cassette.load(self.path)), 1)
+
+    def test_the_budget_stops_a_flood_of_individually_small_pages(self):
+        from tools.http_util import urlopen_checked
+
+        page = {"value": [{"pad": "x" * 900} for _ in range(500)]}  # ~0.5MB
+        with mock.patch("tools.recording._MAX_CASSETTE_BYTES", 2_000_000):
+            recording.start_recording(self.path)
+            with mock.patch("urllib.request.urlopen", _urlopen_returning(page)):
+                with self.assertLogs("tools.recording", "WARNING"):
+                    for i in range(20):
+                        urlopen_checked(
+                            f"https://management.azure.com/x{i}?api-version=1"
+                        )
+            recording.stop()
+
+        loaded = Cassette.load(self.path)
+        self.assertLess(len(loaded), 20, "the budget did not stop anything")
+        self.assertIn("budget_exhausted", loaded.metadata)
+
+    def test_a_truncated_corpus_says_so_in_its_own_metadata(self):
+        # Logged alone it would vanish. A corpus that is silently incomplete is
+        # worse than one that is obviously incomplete.
+        from tools.http_util import urlopen_checked
+
+        page = {"value": [{"pad": "x" * 900} for _ in range(500)]}
+        with mock.patch("tools.recording._MAX_CASSETTE_BYTES", 1_000_001):
+            recording.start_recording(self.path)
+            with mock.patch("urllib.request.urlopen", _urlopen_returning(page)):
+                with self.assertLogs("tools.recording", "WARNING"):
+                    for i in range(6):
+                        urlopen_checked(
+                            f"https://management.azure.com/y{i}?api-version=1"
+                        )
+            recording.stop()
+        self.assertIn("incomplete",
+                      Cassette.load(self.path).metadata["budget_exhausted"])
+
+
 class RequestBodiesAreSanitisedTests(unittest.TestCase):
     """urllib carries a request body as raw bytes, which is a type the body
     walker has to handle explicitly - it fell straight through the str branch
