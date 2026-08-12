@@ -238,6 +238,32 @@ The platform collects configuration and metadata required for drift analysis, in
 
 The platform does not modify resources and does not perform remediation actions.
 
+### Recorded Payloads
+
+Azure responses can be captured to a **cassette** for use as a test fixture
+(`DRIFT_RECORD_CASSETTE`). This is a development facility with three
+restrictions, each enforced by a test rather than by convention:
+
+- **Unreachable from a production scan.** The record/replay variables are
+  deliberately not passed by `drift-check-lz-hybrid.yml`, and
+  `tests/test_workflow_env_coverage.py` fails if they ever appear in it. A scan
+  that could be talked into recording would write a client's raw ARM payloads
+  into a CI artifact.
+- **No credentials are captured.** Request headers are dropped wholesale rather
+  than filtered, and credential-bearing query parameters (`sig`, `code`,
+  `access_token`, …) are stripped from the URL before it is used even as a
+  lookup key.
+- **No real identifiers reach disk.** Subscription, tenant and principal GUIDs
+  are replaced by a one-way hash, so a committed cassette cannot be traced back
+  to the estate it came from — not even by whoever recorded it. Secret-bearing
+  property values are redacted first, through the same `tools/redact.py` that
+  scrubs the report artifact.
+
+Resource *names* are recorded as-is. Name correspondence is the behaviour these
+fixtures exist to test, and scrambling names would make them worthless; the
+corpus is therefore recorded from a synthetic verification estate, never from a
+client's.
+
 ## Write Operations
 
 The drift detection engine does not:

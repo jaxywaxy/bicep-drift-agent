@@ -39,6 +39,19 @@ _ENV_READ = (
 )
 
 
+#: Read by the code and deliberately NOT reachable from the production scan
+#: workflow. This is the one legitimate reason to be unplumbed, and it is the
+#: opposite of the hole this file guards: these switch on record/replay, and a
+#: production scan that could be talked into recording would write a client's
+#: raw ARM payloads into a CI artifact. Recording is a developer action against
+#: a verification estate, run locally or from the fixture-recording workflow.
+#: Adding a name here needs the same argument - "it is inconvenient to plumb"
+#: is not one.
+_DELIBERATELY_NOT_IN_THE_SCAN_WORKFLOW = frozenset(
+    {"DRIFT_RECORD_CASSETTE", "DRIFT_REPLAY_CASSETTE", "DRIFT_CASSETTE_NOTE"}
+)
+
+
 def _env_vars_the_code_reads() -> dict[str, str]:
     found: dict[str, str] = {}
     for sub in ("tools", "agent", "orchestration"):
@@ -68,11 +81,24 @@ class WorkflowPassesEveryTunableTests(unittest.TestCase):
     def test_every_env_var_the_code_reads_is_passed_by_the_workflow(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         missing = {v: src for v, src in _env_vars_the_code_reads().items()
-                   if v not in workflow}
+                   if v not in workflow
+                   and v not in _DELIBERATELY_NOT_IN_THE_SCAN_WORKFLOW}
         self.assertEqual(
             missing, {},
             "these are read by the code but never reach a CI scan, so setting "
             f"them changes nothing: {missing}")
+
+    def test_the_exemptions_are_still_absent_from_the_scan_workflow(self):
+        # Guards the exemption, not the rule. If a cassette variable ever DOES
+        # appear in the production scan workflow, that is a scan which can be
+        # made to write raw ARM payloads to a CI artifact, and it must fail here
+        # rather than be quietly covered by the allowance above.
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        leaked = sorted(v for v in _DELIBERATELY_NOT_IN_THE_SCAN_WORKFLOW
+                        if v in workflow)
+        self.assertEqual(
+            leaked, [],
+            f"record/replay must not be reachable from a production scan: {leaked}")
 
 
 class EmptyEnvIsUnsetTests(unittest.TestCase):

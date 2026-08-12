@@ -201,6 +201,37 @@ declared resources of a gapped type are reported as *unverified* rather than
 deleted. The same principle applies to the scan scope itself (below). An
 absence the agent cannot substantiate is never reported as a deletion.
 
+**Every Azure read passes through one of two seams**, which is what makes the
+collection layer recordable (below): ARM REST goes through
+`tools/http_util.urlopen_checked`, and every SDK client — Resource Graph, RBAC,
+policy, monitor, targeting — goes through the shared `azure.core` transport.
+
+#### Recorded payloads (`tools/recording/`)
+
+Hand-written test fixtures encode *our beliefs* about what Azure returns, so a
+wrong belief produces a green test — the failure mode behind a deletion false
+negative that 1,366 passing tests did not catch. A cassette records what a real
+subscription actually returned, for a real API version, on a known date, and
+tests replay it instead.
+
+Recording is off unless `DRIFT_RECORD_CASSETTE` / `DRIFT_REPLAY_CASSETTE` is
+set, and both hooks are a `None` check on the production path. Two properties
+are load-bearing:
+
+- **A replay miss raises.** It never returns an empty result, because an empty
+  collection is indistinguishable from a deletion here — a lenient replayer
+  would manufacture `missing_in_azure` rows while the suite stayed green.
+- **Identifiers are pseudonymised one-way** on the way to disk, so a committed
+  cassette carries no real subscription, tenant or principal, and secret values
+  go through `tools/redact.py` first.
+
+`python -m tools.recording.decay <committed> <fresh>` diffs the **shape** of two
+recordings — fields Azure stopped returning, started returning, or retyped —
+while ignoring value changes. That is the only mechanical way to catch API decay:
+whether an absent property means "unset" or "default" is API-version-dependent
+and observable only by watching what Azure returns, so a comparator proven
+correct in one month can be wrong the next with nothing failing.
+
 ### 3. Normalisation
 
 Resource data is normalised to reduce false positives.

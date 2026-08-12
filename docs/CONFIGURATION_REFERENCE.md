@@ -558,6 +558,34 @@ The following environment variables are recognised.
 | `AZURE_OPENAI_TOKEN_SCOPE` | public cloud | Entra audience for the data plane. Only set it for US Gov or China clouds, whose audiences differ — the default fails there with an opaque auth error |
 | `AZURE_OPENAI_API_KEY` | — | **Omit this.** Left unset, the provider uses `DefaultAzureCredential`, which is the entire reason to run Azure OpenAI: the workload identity CI already holds needs `Cognitive Services OpenAI User` on the account, and no LLM key is stored anywhere. Setting a key works, but trades that away |
 
+### Record / replay (development only)
+
+These three are **deliberately not passed by the production scan workflow**, and
+`tests/test_workflow_env_coverage.py` asserts they never are. A scan that could
+be talked into recording would write a client's raw ARM payloads into a CI
+artifact. Recording is a developer action against a verification estate.
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `DRIFT_RECORD_CASSETTE` | — | Path to write recorded Azure payloads to. The scan runs normally and every ARM REST and SDK read is captured, sanitised, on the way past. Appends to an existing cassette, so a corpus builds up over several scans |
+| `DRIFT_REPLAY_CASSETTE` | — | Path to serve every Azure read from. **No network calls are made at all.** A request the cassette does not cover raises `CassetteMiss` — it never returns empty, because an empty collection means *deleted* to everything downstream |
+| `DRIFT_CASSETTE_NOTE` | — | Free-text provenance stamped on each recorded interaction (which estate, which round) |
+
+Setting both `DRIFT_RECORD_CASSETTE` and `DRIFT_REPLAY_CASSETTE` is an error
+rather than a precedence rule.
+
+Recorded ids carry a **pseudonymised** subscription — the real GUID is hashed
+one-way and never written to disk, so a committed cassette is safe to ship. A
+test replaying one must drive the pipeline with the alias, which
+`python -m tools.recording.decay --aliases <cassette>` prints.
+
+To check a live API for decay, re-record and diff:
+
+```bash
+DRIFT_RECORD_CASSETTE=fresh.json python analyze_drift.py ./infra/main.bicep "lz-*"
+python -m tools.recording.decay tests/cassettes/lz.json fresh.json   # exit 1 if the shape moved
+```
+
 ## Ownership
 
 Every actionable drift is tagged `platform` or `workload`, and notifications
