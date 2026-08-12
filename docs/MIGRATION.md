@@ -106,9 +106,11 @@ Checked on 2026-08-12, so you can skip re-deriving it:
 1. Add the new federated credential (old one still in place).
 2. Transfer the repo.
 3. Confirm secrets and variables survived; recreate any that did not.
-4. Run `drift-lz-test.yml` against the standing test estate — it exercises
-   OIDC, the external-repo clone, the LLM provider and notifications in one
-   pass. A green run proves the whole chain.
+4. Run a scan against a landing zone you *do* own — it exercises OIDC, the
+   external-repo clone, the LLM provider and notifications in one pass, and a
+   green run proves the whole chain. The verification fixtures were not
+   migrated (see `TEST_ESTATE.md`), so use a real LZ or stand up a fixture
+   first.
 5. Update `.github/lz-index.yml` only if the Bicep repos moved.
 6. Delete the old federated credential.
 

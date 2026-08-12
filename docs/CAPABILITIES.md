@@ -766,4 +766,4 @@ connectivity gateways, not to the hub's routing or security surface.
 real injected drift; some have only ever run against a clean estate, which proves
 they produce no false positives and nothing about whether they detect. The
 difference is recorded honestly in [VALIDATION_STATUS.md](VALIDATION_STATUS.md),
-and the estate and round procedure are in [TEST_ESTATE.md](TEST_ESTATE.md).
+and how to build an estate and run a round is in [TEST_ESTATE.md](TEST_ESTATE.md).

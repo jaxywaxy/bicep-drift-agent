@@ -46,6 +46,17 @@ them.
 > reference, not an audit. If an entry is disputed, the resolution is to run the
 > injection round for that capability — not to argue about the citation.
 
+> **The estates these rounds ran against were not migrated with this repository.**
+> Every claim below remains true — the drift *was* injected and detected on the
+> date given — but **none of it can be re-verified until a new verification
+> estate exists**. Estate names, resource groups and subscriptions are retained
+> deliberately: an unciteable claim is indistinguishable from an unproven one,
+> and stripping them would leave a tier table that cannot be audited.
+>
+> Read the evidence column as *what was done and when*, not as somewhere you can
+> go and look. `TEST_ESTATE.md` is the method for rebuilding an estate capable of
+> re-proving any row here.
+
 ---
 
 ## Detection — resource coverage

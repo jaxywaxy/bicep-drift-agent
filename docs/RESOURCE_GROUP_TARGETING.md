@@ -61,14 +61,14 @@ For RG-scoped templates the selectors *are* expanded (unlike the subscription-sc
 
 ---
 
-## Worked example — the vHub check
+## Worked example — a Virtual WAN hub check
 
 `bicep/vhub.bicep` in `myorg/platform-bicep` is **RG-scoped**, so its resource groups must be configured. It also uses **static resource names** (no `uniqueString`), so it can live in a dedicated RG safely.
 
 `lz-index.yml`:
 
 ```yaml
-vhub-test:
+hub-routing:
   repo: myorg/platform-bicep
   config_path: .github/drift-lz-vhub-config.yml
   workflow: drift-lz-test.yml

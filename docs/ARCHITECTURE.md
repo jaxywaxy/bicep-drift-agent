@@ -505,7 +505,7 @@ one produces a failure that a passing test suite will not catch.
 - [README.md](../README.md)
 - [CAPABILITIES.md](CAPABILITIES.md) — What the agent detects
 - [VALIDATION_STATUS.md](VALIDATION_STATUS.md) — What each capability has been proven to detect
-- [TEST_ESTATE.md](TEST_ESTATE.md) — The verification estate and round procedure
+- [TEST_ESTATE.md](TEST_ESTATE.md) — How to build a verification estate, and the round procedure
 - [CONFIGURATION_REFERENCE.md](CONFIGURATION_REFERENCE.md) — Configuration schema
 - [RESOURCE_GROUP_TARGETING.md](RESOURCE_GROUP_TARGETING.md) — Selector resolution and scope semantics
 - [TEAM_NOTIFICATIONS.md](TEAM_NOTIFICATIONS.md) - Teams and Slack Notification configuration
