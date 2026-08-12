@@ -693,11 +693,11 @@ exists in the target repository.
 
 ---
 
-## Authentication Failure*
+## Authentication Failure
 Review:
 
 ```text
-AZURE_AUTHENTICA*ION.md
+AZURE_AUTHENTICATION.md
 ```
 
 Verify:

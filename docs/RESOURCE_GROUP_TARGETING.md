@@ -32,7 +32,7 @@ The template already names its resource groups, so the agent runs **one subscrip
 `resourceGroup()` is resolved by Azure at deploy time, so the template has no idea where it lives. Targets **must** be configured. The config chain, from the caller inward:
 
 ```
-caller workflow (e.g. drift-lz-test.yml)
+caller workflow (e.g. drift-lz-landingzone.yml)
   names a landing zone
         │
         ▼
@@ -61,17 +61,17 @@ For RG-scoped templates the selectors *are* expanded (unlike the subscription-sc
 
 ---
 
-## Worked example — the vHub check
+## Worked example — a Virtual WAN hub check
 
 `bicep/vhub.bicep` in `myorg/platform-bicep` is **RG-scoped**, so its resource groups must be configured. It also uses **static resource names** (no `uniqueString`), so it can live in a dedicated RG safely.
 
 `lz-index.yml`:
 
 ```yaml
-vhub-test:
+hub-routing:
   repo: myorg/platform-bicep
   config_path: .github/drift-lz-vhub-config.yml
-  workflow: drift-lz-test.yml
+  workflow: drift-lz-hub-routing.yml
 ```
 
 `platform-bicep/.github/drift-lz-vhub-config.yml`:

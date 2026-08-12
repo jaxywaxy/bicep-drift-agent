@@ -143,7 +143,7 @@ team Bicep repository
 
 This allows teams to manage their own drift scope while using a centrally managed detection platform.
 
-See docs/LANDING_ZONE_OPERATIONS.md.
+See [docs/LANDING_ZONES_OPERATIONS.md](docs/LANDING_ZONES_OPERATIONS.md).
 
 ---
 
@@ -263,7 +263,8 @@ gh workflow run drift-lz-platform.yml
 | `docs/SECURITY.md` | Security architecture and permissions |
 | `docs/OPERATIONS_RUNBOOK.md` | Operational procedures and troubleshooting |
 | `docs/VALIDATION_STATUS.md` | What each capability has actually been proven to detect |
-| `docs/TEST_ESTATE.md` | Verification-round procedure, and the reference estate it was run against (separate repo, not migrated) |
+| `docs/TEST_ESTATE.md` | How to build a verification estate and run a round. No estate ships with this repo |
+| `docs/MIGRATION.md` | Moving this repo to another GitHub organisation — what breaks and in what order |
 
 ---
 
@@ -272,7 +273,7 @@ gh workflow run drift-lz-platform.yml
 **Live validation varies by capability.** Comparator coverage is not the same as
 proven detection: some comparators have caught real injected drift, others have
 only ever run against a clean estate. `docs/VALIDATION_STATUS.md` records which is
-which, and `docs/TEST_ESTATE.md` has the outstanding verification backlog. Backup
+which, and `docs/TEST_ESTATE.md` is how to build an estate to re-prove any of it. Backup
 detection is the notable gap — those comparators were silently discarded by an
 ignore rule for about a month, and positive detection is still unproven.
 

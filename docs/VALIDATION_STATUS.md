@@ -46,6 +46,17 @@ them.
 > reference, not an audit. If an entry is disputed, the resolution is to run the
 > injection round for that capability — not to argue about the citation.
 
+> **The estates these rounds ran against were not migrated with this repository.**
+> Every claim below remains true — the drift *was* injected and detected on the
+> date given — but **none of it can be re-verified until a new verification
+> estate exists**. Estate names, resource groups and subscriptions are retained
+> deliberately: an unciteable claim is indistinguishable from an unproven one,
+> and stripping them would leave a tier table that cannot be audited.
+>
+> Read the evidence column as *what was done and when*, not as somewhere you can
+> go and look. `TEST_ESTATE.md` is the method for rebuilding an estate capable of
+> re-proving any row here.
+
 ---
 
 ## Detection — resource coverage
@@ -70,6 +81,8 @@ them.
 | Recovery Services vault backup **policies** | 2026-08-02 round — retention 30→7 detected `critical`, attributed to the out-of-band actor, reverted clean |
 | Azure Firewall rule collection groups | 2026-08-02 round — `ruleCollections[net-deny-smb]` removal detected `critical`, name-keyed (not positional), `owner: platform`, reverted clean |
 | Compute — VMSS capacity | 2026-08-02 round — `sku.capacity` 0→1 detected `critical`; `zones` correctly stayed silent (no subset false positive). Attribution failed on that round and was fixed in #375; **re-proven adversarially 2026-08-03** — actor named correctly with a caller-less health event newer than the write |
+| SQL databases (child deletion) | 2026-08-11 RG round — `sqldrift…/driftdb` deleted, reported `missing_in_azure` / `high` / `manual_change` under **its own name** with the real `deleted_at`. Took three PRs (#425–427) to get there; see the round below |
+| Storage `supportsHttpsTrafficOnly`, Firewall `threatIntelMode`, WAF `policySettings.mode` | 2026-08-11 RG round — all three detected `critical`, attributed to the out-of-band actor |
 
 ### Live-clean only — detection unproven
 
@@ -383,3 +396,92 @@ documentation says otherwise. Two instances landed on the same day —
 `tests/test_workflow_env_coverage.py` now fails if a tunable the code reads is
 missing from the reusable workflow. Its scanner has a guard-the-guard test,
 which immediately caught the scanner itself missing `DRIFT_MODEL_PRICING`.
+
+---
+
+## The 2026-08-11 deployed-estate round — both scopes, and one bug in three modules
+
+The first round since 2026-07 against a genuinely **deployed** estate. Everything
+between had been verified on torn-down or empty estates, which is why two paths
+below had never actually executed.
+
+Eleven runs: subscription scope × {clean, drifted} × {gpt-5.6-sol,
+claude-opus-4-8}, the same four at RG scope, and three fix-verification runs.
+All reports produced in GitHub Actions, not locally.
+
+### Proven
+
+| Property | Evidence |
+|---|---|
+| **Property-drift severity, against real property drift** | The path existed but had never run live — every prior round was on a torn-down estate, so every `property_drifts` entry had `property_diffs: []`. Key Vault `publicNetworkAccess` `Disabled`→`Enabled` → **critical / security_drift**, diff exactly the injected property |
+| **Nested-type attribution on DELETES (#421)** | Previously proven only for *creates*. VNet peering `…/hub-to-apps` and Cosmos `sqlDatabases/appdb` both `missing_in_azure` / `high` / `manual_change`, actor named |
+| **Risk classification ungated from the LLM (#422)** | Severity now stamped on every row regardless of provider — confirmed identical across both providers on both scopes |
+| **RG-scope clean baseline** | `drift_count: 0` across **75 declared resources / ~38 types**, `collection_gaps: {}`, 27 `matched_unresolvable` correctly excluded, 17 policy-enforced rows correctly split out. The broadest false-positive surface in the fixture, clean |
+| **Provider independence, strictly compared** | Not just the drift list — `(type, name, drift_type, severity, category, origin, changed_by, changed_property_paths)` identical across providers on clean **and** drifted estates, at both scopes. Only the narrative differs. Cost within 4% |
+| **Four RG-scope injections** | WAF `policySettings.mode`, Firewall `threatIntelMode`, Storage `supportsHttpsTrafficOnly`, SQL database deletion — all detected, all attributed |
+
+### DO NOT "fix" the unattributed Cosmos grandchild
+
+`…/appdb/items` reported `origin: unknown` / `changed_by: null` and that is
+**correct**. Deleting a Cosmos `sqlDatabase` makes Azure emit exactly one event —
+`sqlDatabases/delete` — and none for the container; verified by querying the
+Activity Log directly. The pipeline attributed the two children that have events
+and declined on the one that does not, rather than inheriting the parent's actor.
+That is the "an absence we cannot substantiate is never asserted" invariant
+working. A future round that "fixes" this into naming an actor has reintroduced
+the sibling-adoption bug.
+
+### The defect: one bug, three modules, and two fixes that changed nothing
+
+The RG-scope drifted run returned 3 of 4. The deleted SQL database was matched to
+`sqldrift…/master` — the system database the template never declares — so the
+deletion vanished **and** the undeclared extra was absorbed. Neither side of the
+discrepancy was reported, which `drift_count` cannot reveal.
+
+The same expression existed in three modules:
+
+```python
+prefix = bicep_name.split("[")[0]     # 'sqldrift[hash]/driftdb' -> 'sqldrift'
+```
+
+`split("[")` stops at the first placeholder, so for a CHILD name it discards the
+leaf and the test collapses onto the parent — which every sibling shares.
+
+| PR | Module | Real bug | Moved the report |
+|---|---|---|---|
+| #425 | `smart_matching`, unguarded single-candidate branch | yes | **no** |
+| #426 | `property_drift.matcher`, two sites | yes | **no** |
+| #427 | `reconciliation._find_deployed_resource` | yes | **yes** |
+
+#425 and #426 both hold — post-#426 the `smart_matched` list had no SQL database
+entry and the detector emitted a correct missing+extra — but neither was
+*reached first*. `_find_deployed_resource` ran earliest: it resolved the deleted
+child to `master`, attribution took that row's real ARM id, matched master's own
+events, and `_recover_deployed_name` renamed the drift. Hence a **live resource
+reported missing**.
+
+#427 collapses all three onto one definition,
+`tools.smart_matching.names_plausibly_correspond`, with a test asserting that any
+module deriving a `split("[")[0]` prefix also imports the guard.
+
+### Two lessons worth keeping
+
+**A count moving in the right direction is not evidence the right thing moved.**
+After #425 `drift_count` went 3→4 and that was read as the fix landing; the row's
+*name* was still wrong. Trace a symptom to its source before calling it fixed.
+
+**Verify an injection against live state, never the command's exit code.**
+`az storage account update --min-tls-version TLS1_0` reported success, printed a
+warning, and changed nothing — Azure retired TLS 1.0/1.1 on 2026-02-03, so a TLS
+downgrade is now useless as an injection and would read as an agent false
+negative. Separately, `az storage account show --query supportsHttpsTrafficOnly`
+returned `null` for a flip that *had* worked; the raw ARM GET showed `false`. The
+CLI misled in both directions.
+
+### Not proven by this round
+
+- **Revert symmetry.** Both estates were left drifted; the `revert → clean` half
+  was not run.
+- **The RG-scope drifted run on Anthropic post-fix** was re-run and matched
+  gpt-5.6-sol exactly, but the three fix-verification runs themselves were
+  single-provider.
