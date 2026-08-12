@@ -221,6 +221,33 @@ class CassetteTests(unittest.TestCase):
         self.assertEqual(c.lookup("GET", LOCKS_URL).body, {"value": [1]})
 
 
+class PagedQueriesKeySeparatelyTests(unittest.TestCase):
+    """The RBAC and policy comparators page Resource Graph with a skip_token.
+
+    Every page is a POST to the SAME url, so if the key were built from the url
+    alone they would collide, one response per key would keep only the first,
+    and a replay would silently see page 1 for every page - dropping role
+    assignments and reading them as removed. The skip_token rides in the request
+    BODY, which the key includes, so the pages separate. Pinned because it holds
+    by construction rather than by intent, and a key built from fewer parts
+    would still pass every other test here.
+    """
+
+    URL = ("https://management.azure.com/providers/Microsoft.ResourceGraph"
+           "/resources?api-version=2021-03-01")
+
+    def test_two_pages_of_one_query_do_not_collide(self):
+        c = Cassette()
+        page1 = {"query": "authorizationresources", "subscriptions": [SUB]}
+        page2 = dict(page1, options={"skip_token": "opaque-token-from-page-1"})
+        c.record("POST", self.URL, 200, {"data": [{"n": 1}]}, request_body=page1)
+        c.record("POST", self.URL, 200, {"data": [{"n": 2}]}, request_body=page2)
+
+        self.assertEqual(len(c), 2)
+        self.assertEqual(c.lookup("POST", self.URL, page1).body["data"], [{"n": 1}])
+        self.assertEqual(c.lookup("POST", self.URL, page2).body["data"], [{"n": 2}])
+
+
 class NoNetworkOnReplayTests(_RecordingTestCase):
     def test_a_collector_replays_without_touching_the_network(self):
         recorded = self._record_locks()
