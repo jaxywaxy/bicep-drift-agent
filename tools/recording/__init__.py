@@ -136,6 +136,13 @@ def start_recording(path: str | Path, note: str = "") -> None:
     path = Path(path)
     cassette = Cassette.load(path) if path.exists() else Cassette()
     cassette.metadata.setdefault("note", note)
+    # Which alias is the subscription. A cassette holds a dozen pseudonyms and
+    # nothing in their shape says which is which, so without this a replay test
+    # cannot know what to set AZURE_SUBSCRIPTION_ID to - and every id in the
+    # recording is scoped to that one value.
+    sub = os.environ.get("AZURE_SUBSCRIPTION_ID")
+    if sub:
+        cassette.metadata["subscription_alias"] = cassette.sanitiser.guid(sub)
     _session = _Session("record", cassette, path, note)
     _install_sdk_transport_hook()
     logger.info("Recording Azure payloads to %s (%d already present)", path, len(cassette))

@@ -500,6 +500,64 @@ class RequestBodiesAreSanitisedTests(unittest.TestCase):
         )
 
 
+class SubscriptionAliasIsRecordedTests(_RecordingTestCase):
+    """A cassette holds a dozen pseudonyms and nothing in their shape says which
+    is the subscription - so it has to be written down, or a replay test cannot
+    know what to set AZURE_SUBSCRIPTION_ID to."""
+
+    def test_the_subscription_alias_is_stamped_into_the_metadata(self):
+        import os
+
+        with mock.patch.dict(os.environ, {"AZURE_SUBSCRIPTION_ID": SUB}):
+            self._record_locks()
+        self.assertEqual(
+            Cassette.load(self.path).metadata.get("subscription_alias"),
+            alias_guid(SUB),
+        )
+
+    def test_the_real_subscription_is_still_not_written(self):
+        import os
+
+        with mock.patch.dict(os.environ, {"AZURE_SUBSCRIPTION_ID": SUB}):
+            self._record_locks()
+        self.assertNotIn(SUB, self.path.read_text())
+
+
+class CassetteSupportFailsLoudlyTests(unittest.TestCase):
+    """The harness in tests/cassette_support.py must ERROR on a missing or
+    unusable cassette, never skip. A suite that skips itself reports success,
+    which is how the backup comparators shipped dead for a month."""
+
+    def _run(self, case) -> unittest.TestResult:
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(case)
+        return suite.run(unittest.TestResult())
+
+    def test_a_subclass_with_no_cassette_named_errors(self):
+        from tests.cassette_support import CassetteTestCase
+
+        class NoName(CassetteTestCase):
+            def test_nothing(self):
+                pass
+
+        result = self._run(NoName)
+        self.assertTrue(result.errors)
+        self.assertEqual(result.skipped, [])
+
+    def test_a_missing_cassette_file_errors_rather_than_skipping(self):
+        from tests.cassette_support import CassetteTestCase
+
+        class Absent(CassetteTestCase):
+            CASSETTE = "definitely-not-recorded.json"
+
+            def test_nothing(self):
+                pass
+
+        result = self._run(Absent)
+        self.assertTrue(result.errors)
+        self.assertEqual(result.skipped, [])
+        self.assertIn("Re-record", str(result.errors[0][1]))
+
+
 class InactiveIsANoOpTests(unittest.TestCase):
     def test_no_session_means_the_read_path_is_unchanged(self):
         self.assertFalse(recording.is_active())
