@@ -220,6 +220,14 @@ def deployed_name_from_event_id(resource_type: str, event_resource_id: str) -> s
 def _shared_affix_len(declared: str, deployed: str) -> int:
     """Longest common prefix or suffix between two names, case-insensitively.
 
+    Case is folded HERE, never by the caller - the same contract
+    `smart_matching._common_prefix_len` / `_common_suffix_len` state, and the
+    reason those two now fold too. They are deliberately separate copies rather
+    than one import: attribution stays independent of the pairing path (see
+    tests/test_identity_matching_boundary.py). The CONTRACT is what is shared,
+    and a test pins that the two agree, so the copies cannot drift apart the way
+    the correspondence rule did across four modules.
+
     A partially-resolved Bicep name keeps its literal lead ('func-drift-' in
     'func-drift-[86c9cbf6]') or, for a child, its literal tail ('/kv-audit').
 
