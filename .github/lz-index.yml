@@ -34,3 +34,18 @@ landing_zones:
     repo: jaxywaxy/azure-landingzone-bicep
     config_path: .github/drift-lz-prod-config.yml
     workflow: drift-lz-prod.yml
+
+  # ======================= VERIFICATION ONLY ==========================
+  # Fixture estates used to promote a capability from live-clean to
+  # live-proven (see docs/TEST_ESTATE.md). NOT customer infrastructure:
+  # they are deployed for a round and torn down after, so a failing scan
+  # here usually means the estate is absent, not that drift was found.
+  #
+  # Manual dispatch only. Do not add a schedule to any of them - a
+  # scheduled scan of a normally-absent estate produces a daily failure
+  # that trains people to ignore red.
+
+  test-resources:
+    repo: jaxywaxy/drift-test-resources
+    config_path: .github/drift-lz-config.yml
+    workflow: drift-lz-test.yml
