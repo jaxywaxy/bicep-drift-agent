@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from orchestration.phase1 import run
+from tools import recording
 from tools.get_live_state import ScopeNotFoundError
 from tools.logger import get_logger, setup_logging
 
@@ -48,7 +49,14 @@ def main():
         sys.exit(1)
 
     try:
-        run(bicep_file, resource_group)
+        # No-op unless DRIFT_RECORD_CASSETTE / DRIFT_REPLAY_CASSETTE is set.
+        # In the finally so a recording of a scan that crashed is still written -
+        # the payload that caused the crash is the one worth keeping.
+        recording.configure_from_env()
+        try:
+            run(bicep_file, resource_group)
+        finally:
+            recording.stop()
     except ScopeNotFoundError as e:
         # Exit 2, not 1: a scope that cannot be read is a targeting/config
         # failure, and CI should be able to tell it apart from both a real

@@ -210,8 +210,12 @@ class TestAttributionRunsBeforeAnalysis(unittest.TestCase):
     persisted report carried change_origin.changed_by."""
 
     def test_main_orders_attribute_analyze_split(self):
+        # Reads _main, not main: main() is a thin wrapper that only opens and
+        # closes a record/replay session, and the pipeline ordering this guards
+        # lives in _main. Repoint it if the body ever moves again - a source
+        # scan that finds nothing to order would pass for the wrong reason.
         import inspect
-        src = inspect.getsource(ad.main)
+        src = inspect.getsource(ad._main)
         i_attr = src.index("_attribute_lifecycle(")
         i_analyze = src.index("_run_claude_analysis(")
         i_split = src.index("_split_policy_and_tag_owners(")

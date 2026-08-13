@@ -13,8 +13,14 @@ trust store is pinned here - see _trust_context.
 import functools
 import os
 import ssl
+import urllib.error
 import urllib.parse
 import urllib.request
+
+try:
+    from . import recording
+except ImportError:  # imported as a top-level module by some callers
+    import recording
 
 _ALLOWED_SCHEMES = ("http", "https")
 
@@ -54,12 +60,26 @@ def urlopen_checked(req, timeout=30):
 
     Accepts a urllib Request or a URL string, mirroring urllib.request.urlopen.
     Raises ValueError for schemes like file://, ftp://, or data://.
+
+    Record/replay hangs off here rather than off a wrapper, because this really
+    is the one place every ARM REST read passes through and a parallel path
+    would make that claim false. Both hooks are no-ops unless a session is
+    running (see tools/recording). Replay returns before any socket is opened;
+    recording captures the real response - including HTTPError, since a 404 is
+    load-bearing signal to callers like resource_group_exists, not noise.
     """
     url = req.full_url if isinstance(req, urllib.request.Request) else req
     scheme = urllib.parse.urlsplit(url).scheme.lower()
     if scheme not in _ALLOWED_SCHEMES:
         raise ValueError(f"Refusing to open non-HTTP(S) URL (scheme={scheme!r})")
-    # Scheme validated above; only http/https reach urlopen.
-    return urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
-        req, timeout=timeout, context=_trust_context()
-    )
+    if recording.is_replaying():
+        return recording.replay_urlopen(req)
+    try:
+        # Scheme validated above; only http/https reach urlopen.
+        response = urllib.request.urlopen(  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected
+            req, timeout=timeout, context=_trust_context()
+        )
+    except urllib.error.HTTPError as e:
+        recording.capture_http_error(req, e)
+        raise
+    return recording.capture_urlopen(req, response)

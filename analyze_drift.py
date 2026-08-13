@@ -29,6 +29,7 @@ load_dotenv()
 
 from agent.drift_agent import DriftAgent
 from agent.llm import build_provider_or_reason
+from tools import recording
 from tools.logger import get_logger, setup_logging
 from tools.rg_selector import rg_label
 
@@ -65,6 +66,18 @@ from orchestration.reporting import (
 
 
 def main():
+    """Entry point. Wraps the run so a record/replay session, when one is asked
+    for, spans the WHOLE pipeline - Phase 1, the sidecars, and the Activity Log
+    fetch that happens well after Phase 1 returns. No-op unless
+    DRIFT_RECORD_CASSETTE / DRIFT_REPLAY_CASSETTE is set."""
+    recording.configure_from_env()
+    try:
+        _main()
+    finally:
+        recording.stop()
+
+
+def _main():
     from tools.config import LOG_LEVEL, validate_config
     setup_logging(level=LOG_LEVEL)
     for warning in validate_config():
