@@ -78,6 +78,53 @@ class DeclaredDiskVisibilityTests(unittest.TestCase):
 
         self.assertEqual(filter_unmanaged_live_resources(live, []), [])
 
+    def test_a_short_literal_prefix_does_not_erase_every_live_disk(self):
+        """A declared disk whose literal lead is under three characters.
+
+        This filter used to hand-roll its own correspondence test and discard
+        any prefix shorter than three characters as undiscriminating. Discarding
+        it from the LIST, though, is not the same as treating it as
+        undiscriminating: with no prefixes left, every live disk matched nothing
+        and was dropped as auto-managed, so the declared disk had no live
+        counterpart and reported missing_in_azure. A fabricated deletion for a
+        disk that exists.
+
+        The shared rule takes the opposite branch on the same input - a prefix
+        too short to discriminate accepts, rather than rejects.
+        """
+        live = [_disk("d-drift-data"), _disk("vm-drift-test_OsDisk_1_9f3a")]
+        arm = [_disk("d-[a1b2c3d4]")]
+
+        kept = {r["name"] for r in filter_unmanaged_live_resources(live, arm)}
+
+        self.assertIn("d-drift-data", kept)
+
+    def test_a_fully_expression_named_disk_does_not_erase_every_live_disk(self):
+        # Same failure with nothing literal at all: `name: uniqueString(...)`
+        # normalises to a bare placeholder, so the derived prefix was empty.
+        live = [_disk("disk-drift-data")]
+        arm = [_disk("[a1b2c3d4]")]
+
+        kept = {r["name"] for r in filter_unmanaged_live_resources(live, arm)}
+
+        self.assertIn("disk-drift-data", kept)
+
+    def test_the_filter_agrees_with_the_shared_correspondence_rule(self):
+        # The property that keeps the two from diverging again: whether a live
+        # disk survives is exactly whether some declared disk corresponds to it.
+        from tools.smart_matching import names_plausibly_correspond
+
+        live = [_disk("disk-drift-data"), _disk("vm-drift-test_OsDisk_1_9f3a")]
+        for declared in ("disk-drift-[a1b2c3d4]", "d-[a1b2c3d4]", "[a1b2c3d4]",
+                         "disk-drift-data"):
+            with self.subTest(declared=declared):
+                kept = {r["name"] for r in
+                        filter_unmanaged_live_resources(live, [_disk(declared)])}
+                expected = {r["name"] for r in live
+                            if names_plausibly_correspond(declared.lower(),
+                                                          r["name"].lower())}
+                self.assertEqual(kept, expected)
+
     def test_placeholder_named_disk_matches_by_static_prefix(self):
         """uniqueString-named declarations still claim their live disk."""
         live = [_disk("diskdrifttest86c9cbf6")]

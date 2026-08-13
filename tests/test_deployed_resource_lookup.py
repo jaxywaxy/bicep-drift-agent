@@ -18,11 +18,15 @@ This is the site that actually produced the symptom. #425 (smart_matching) and
 #426 (property_drift) each fixed a real, independent instance of the identical
 `split("[")[0]` bug, and both hold - but neither was reached first, so the
 visible report did not change. All three now share ONE definition
-(tools.smart_matching.names_plausibly_correspond) so a future fix cannot leave
-a fourth copy behind.
+(tools.smart_matching.names_plausibly_correspond).
+
+A FOURTH copy was found afterwards in `tools/diff_states.py`, which the guard
+added here could not see because it named two files instead of scanning. It is
+fixed and the guard now walks the source tree - see OneDefinitionTests.
 """
 
 import os
+import pathlib
 import sys
 import unittest
 
@@ -31,7 +35,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from orchestration.reconciliation import _find_deployed_resource
 from tools.smart_matching import names_plausibly_correspond
 
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
 SQLDB = "Microsoft.Sql/servers/databases"
+
+
+def _source_files() -> list[pathlib.Path]:
+    """Every production module. Tests are excluded deliberately: a test may
+    legitimately spell the broken expression out to assert it is gone."""
+    return sorted(
+        p for package in ("tools", "orchestration", "agent")
+        for p in (ROOT / package).rglob("*.py")
+        if "__pycache__" not in p.parts
+    )
 
 
 def live(name, rtype=SQLDB):
@@ -85,22 +101,42 @@ class OneDefinitionTests(unittest.TestCase):
                                  names_plausibly_correspond(b, c))
 
     def test_no_module_still_uses_the_truncating_prefix_test(self):
-        """The exact expression that caused all three instances. It is legitimate
-        for deriving a prefix, but never as the whole correspondence test."""
-        import pathlib
+        """Every module deriving a static prefix must also carry the shared rule.
+
+        Scans the SOURCE TREE. The version of this guard added with the original
+        fix named two files and asserted on neither - it built an `offenders`
+        list it never checked, then re-walked the same two paths. So it could
+        only ever confirm that the two files already fixed stayed fixed.
+
+        `tools/diff_states.py` had the same truncating prefix test the whole
+        time, invisible to it, and had drifted further than the originals: it
+        discarded prefixes shorter than three characters instead of treating
+        them as undiscriminating, so a disk declared `d-[uniqueString()]` caused
+        every live disk to be filtered out and reported missing. A guard scoped
+        to the files you already fixed is not a guard.
+        """
         offenders = []
-        for rel in ("orchestration/reconciliation.py", "tools/property_drift/matcher.py"):
-            src = pathlib.Path(rel).read_text(encoding="utf-8")
-            for i, line in enumerate(src.splitlines(), 1):
-                if 'split("[")[0]' in line and "names_plausibly_correspond" not in src[:src.index(line)][-400:]:
-                    offenders.append(f"{rel}:{i}")
-        # A bare prefix derivation is fine as long as the guard runs alongside it;
-        # assert the guard is imported in every module that derives one.
-        for rel in ("orchestration/reconciliation.py", "tools/property_drift/matcher.py"):
-            src = pathlib.Path(rel).read_text(encoding="utf-8")
-            if 'split("[")[0]' in src:
-                self.assertIn("names_plausibly_correspond", src,
-                              f"{rel} derives a static prefix without the correspondence guard")
+        for path in _source_files():
+            src = path.read_text(encoding="utf-8")
+            if 'split("[")[0]' not in src:
+                continue
+            if "names_plausibly_correspond" not in src:
+                offenders.append(str(path.relative_to(ROOT)))
+        self.assertEqual(
+            offenders, [],
+            "these derive a static name prefix without the shared correspondence "
+            "rule, which is how the same defect grew four independent copies. "
+            f"Import tools.smart_matching.names_plausibly_correspond: {offenders}")
+
+    def test_the_scanner_actually_reaches_the_modules_it_claims_to(self):
+        # Guards the guard. The previous version passed because it looked at
+        # almost nothing; a scan that finds no files would do the same.
+        scanned = {str(p.relative_to(ROOT)) for p in _source_files()}
+        for expected in ("tools/diff_states.py", "tools/smart_matching.py",
+                         "tools/property_drift/matcher.py",
+                         "orchestration/reconciliation.py"):
+            self.assertIn(expected, scanned)
+        self.assertGreater(len(scanned), 40, f"only scanned {len(scanned)} files")
 
 
 if __name__ == "__main__":

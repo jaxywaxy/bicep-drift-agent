@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from .normalizer import normalize_live_resources
 from .property_drift import DriftDetector
+from .smart_matching import names_plausibly_correspond
 
 logger = logging.getLogger(__name__)
 
@@ -159,16 +160,26 @@ def filter_unmanaged_live_resources(normalized_live: list[dict], filtered_arm: l
     dropped_types = auto_managed_types - declared_auto_managed
     # When disks ARE declared, the type-level drop is too blunt: a VM's implicit
     # OS disk would become a false extra_in_azure. Drop only live disks that
-    # correspond to no declared disk - matched by the literal prefix before any
-    # uniqueString placeholder, the same plausibility test the single-candidate
-    # matcher uses. Note attachment is NOT the discriminator: a data disk
-    # declared as its own resource is normally attached to a VM too.
-    declared_disk_prefixes = [
-        p for p in (
-            (r.get("name") or "").split("[")[0].lower().strip()
+    # correspond to no declared disk. Note attachment is NOT the discriminator:
+    # a data disk declared as its own resource is normally attached to a VM too.
+    #
+    # Correspondence goes through the SHARED rule. This used to hand-roll the
+    # same truncating prefix test that PRs #425-#427 removed from three other
+    # modules - a fourth copy the guard those PRs added could not see, because
+    # it named two files rather than scanning the repo. The copy had drifted
+    # from the shared rule in the DANGEROUS direction: it dropped any prefix
+    # shorter than three characters instead of treating it as undiscriminating,
+    # so a disk declared `d-[uniqueString()]`, or named entirely by an
+    # expression, left the prefix list empty and every live disk was filtered
+    # out as auto-managed. The declared disks then had no live counterpart and
+    # reported as missing_in_azure - a fabricated deletion, which is this
+    # tool's worst failure.
+    declared_disk_names = [
+        n for n in (
+            (r.get("name") or "").lower().strip()
             for r in filtered_arm
             if (r.get("type") or "").lower() == "microsoft.compute/disks"
-        ) if len(p) >= 3
+        ) if n
     ]
 
     def _is_auto_managed(r: dict) -> bool:
@@ -178,7 +189,8 @@ def filter_unmanaged_live_resources(normalized_live: list[dict], filtered_arm: l
         if rtype != "microsoft.compute/disks":
             return False
         name = (r.get("name") or "").lower()
-        return not any(name.startswith(p) or p in name for p in declared_disk_prefixes)
+        return not any(names_plausibly_correspond(declared, name)
+                       for declared in declared_disk_names)
 
     result = [r for r in normalized_live if not _is_auto_managed(r)]
     result = [
