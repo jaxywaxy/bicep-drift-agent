@@ -743,7 +743,7 @@ if __name__ == "__main__":
 
     # Example usage
     if len(sys.argv) < 2:
-        logger.error("Usage: python send_notifications.py <drift_output_file> [report_url]")
+        logger.error("Usage: python3 -m tools.send_notifications <drift_output_file> [report_url]")
         sys.exit(1)
 
     output_file = sys.argv[1]
