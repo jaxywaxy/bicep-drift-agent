@@ -294,6 +294,55 @@ finding the engine can emit.
 The full limitation set, including what deny assignments do and do not prevent,
 is in [CAPABILITIES.md](CAPABILITIES.md#deployment-stack-drift).
 
+#### Schema-derived facts
+
+Two of the comparison's suppression rules are backed by the published Azure type
+definitions (`Azure/bicep-types-az`), distilled into a vendored file by
+`tools/schema/distill.py` and read at scan time by `tools/schema/flags.py`:
+
+- **Write-only properties.** Paths the resource provider declares as never
+  returned, so a desired-vs-null diff on them is noise.
+- **Property existence at an apiVersion.** A template can declare a property its
+  target `apiVersion` does not define; `az bicep build` warns (BCP037) but still
+  compiles, and ARM drops the property at deploy time. It is then absent from
+  every live payload forever, which the removed-property branch would otherwise
+  report on every scan with no action that could ever clear it.
+
+Four constraints make this safe, and each exists because the alternative is a
+silent false negative:
+
+**The facts are additive, never a replacement.** Measured across the 73 types
+this repo has opinions about (7,829 declared paths), the schema's `WriteOnly`
+flag reproduces **2 of the 17** hand-maintained `WRITE_ONLY_PROPERTIES` entries —
+Microsoft.Compute annotates none of the `osProfile` family at any apiVersion from
+2021-07-01 to 2024-11-01. The flag records what an RP author *annotated*; the
+hand list records what Azure was *observed to return*. Swapping one for the other
+would drop 15 suppressions and false-positive on every VM.
+
+**They are type-scoped.** The hand list was curated path by path to be safe as a
+global substring set; the schema's flags were not. `Microsoft.Resources/deployments`
+marks `identity` write-only and `Microsoft.Web/sites` marks `properties.siteConfig` —
+either one folded into a global list would blind real drift estate-wide.
+
+**Write-only is honoured only where the property is ABSENT.** The flag explains
+an absence. Where Azure did return the property the flag is simply wrong about
+that apiVersion, and acting on it would re-open the invisible-`siteConfig` false
+negative — Azure returns `siteConfig` in full despite flagging it.
+
+**Only a positive answer acts.** `property_declared` returns `None` for an
+uncovered `type@apiVersion`, and for anything under a free-form map (`tags`), an
+untyped `any`, an array element, or a branch the distiller truncated. Coverage is
+deliberately partial, so `None` must mean "do not act" — reading it as "not
+declared" would suppress every removed tag, which is precisely what the tool
+exists to catch.
+
+The scan itself **never fetches schemas**: distillation is an offline build step,
+and a scan that reached GitHub would make drift results depend on upstream
+availability and on whichever commit was live that day. The snapshot decays as
+upstream ships new apiVersions, which no unit test can notice — `.github/workflows/schema-decay.yml`
+checks it weekly, and regeneration is a reviewed change because these facts can
+only ever suppress.
+
 ### 5. Enrichment
 
 Detected drift is enriched with ownership classification, severity, change
@@ -403,6 +452,7 @@ deliberately one module per resource family.
 | Desired state | `tools/compile_bicep.py`, `tools/normalizer/` | Compile, flatten, resolve expressions |
 | Live state | `tools/live_state/` | Resource Graph plus `tools/live_state/collectors/`, one module per family |
 | Comparison | `tools/property_drift/` | Comparator, matcher, severity, and per-domain modules (security, firewall, monitoring, private DNS) |
+| Type facts | `tools/schema/` | Vendored write-only and property-existence facts from the published Azure type definitions; `distill.py` is an offline build step, the scan only reads |
 | Sidecars | `tools/rbac.py`, `tools/policy.py`, `tools/deployment_stacks.py` | Identity-matched, fail-soft |
 | Attribution | `tools/activity_log.py`, `tools/change_origin.py` | Who, when, how |
 | Output | `tools/html_report.py`, `tools/send_notifications.py`, `tools/publish_lz_issue.py` | |

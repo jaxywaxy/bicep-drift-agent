@@ -62,7 +62,9 @@ class DriftDetector:
             bicep_props = extractor.extract_bicep_properties(bicep_res)
             deployed_props = extractor.extract_azure_properties(deployed_res)
 
-            diffs = comparator.compare_properties(bicep_props, deployed_props)
+            diffs = comparator.compare_properties(
+                bicep_props, deployed_props, bicep_res.get("apiVersion"),
+            )
 
             if diffs:
                 drifts.append(

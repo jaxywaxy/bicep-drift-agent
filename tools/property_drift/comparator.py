@@ -15,6 +15,7 @@ The class keeps thin `staticmethod` aliases (PropertyComparator._foo) delegating
 to those modules, preserving every call site the test suite binds to.
 """
 
+import logging
 from typing import Any
 
 from .models import PropertyDiff
@@ -24,6 +25,8 @@ from . import security as _security
 from . import firewall as _firewall
 from . import primitives as _primitives
 from . import private_dns as _private_dns
+
+logger = logging.getLogger(__name__)
 
 
 class PropertyComparator:
@@ -40,7 +43,9 @@ class PropertyComparator:
     _elevate_backup_severity = staticmethod(_severity.elevate_backup_severity)
     _elevate_workspace_table_severity = staticmethod(_severity.elevate_workspace_table_severity)
     _is_write_only_property = staticmethod(_severity.is_write_only_property)
+    _is_write_only_for_type = staticmethod(_severity.is_write_only_for_type)
     _is_unprojected_property = staticmethod(_severity.is_unprojected_property)
+    _is_absent_from_api_version = staticmethod(_severity.is_absent_from_api_version)
     # monitoring: extracted to monitoring.py; aliases preserve call sites.
     _LINKAGE_TYPES = _monitoring.LINKAGE_TYPES
     _LINKAGE_PATHS = _monitoring.LINKAGE_PATHS
@@ -73,8 +78,15 @@ class PropertyComparator:
     def compare_properties(
         bicep_properties: dict[str, Any],
         deployed_properties: dict[str, Any],
+        api_version: str | None = None,
     ) -> list[PropertyDiff]:
-        """Compare properties between Bicep and deployed resources."""
+        """Compare properties between Bicep and deployed resources.
+
+        `api_version` is the version the TEMPLATE targets (ARM metadata, not a
+        deployed property, so the extractor drops it). It is optional and
+        defaults to None: without it the schema-derived checks in severity.py
+        simply do not fire, which is the same behaviour as an uncovered type.
+        """
         diffs = []
         rtype = str(bicep_properties.get("type", "")).lower()
 
@@ -254,12 +266,30 @@ class PropertyComparator:
         # Check for removed properties (in Bicep but not deployed)
         for key, bicep_value in bicep_flat.items():
             if key not in deployed_flat:
-                if PropertyComparator._is_write_only_property(key):
+                # Schema-derived write-only paths are honoured HERE ONLY, never
+                # in the modified branch above. The flag says the RP declared
+                # the value un-returnable, which explains an ABSENCE; where
+                # Azure did return the property the flag is simply wrong about
+                # this API version, and acting on it would blind real drift -
+                # Microsoft.Web/sites flags `properties.siteConfig` write-only
+                # and Azure returns it in full (the #234 false negative).
+                if PropertyComparator._is_write_only_for_type(rtype, api_version, key):
                     continue
 
                 # Skip properties Resource Graph never projects for this type
                 # (e.g. Virtual WAN properties.type) - always a desired-vs-null FP.
                 if PropertyComparator._is_unprojected_property(rtype, key):
+                    continue
+
+                # A property the template declares but this apiVersion does not
+                # define was dropped by ARM at deploy time; it can never appear
+                # in a live payload, so reporting it would be permanent noise.
+                if PropertyComparator._is_absent_from_api_version(rtype, api_version, key):
+                    logger.info(
+                        "Not drift: %s declares %s, which %s does not define - "
+                        "ARM drops it at deploy time (check the template's apiVersion)",
+                        rtype, key, api_version,
+                    )
                     continue
 
                 if PropertyComparator._has_unresolved_expressions(bicep_value):

@@ -1,0 +1,51 @@
+name: Schema decay
+
+# The vendored Azure type facts (tools/schema/data/az_type_flags.json) are a
+# SNAPSHOT of an upstream repo that keeps moving: new apiVersions ship, RPs add
+# properties, and an occasional write-only annotation appears. Nothing in the
+# unit suite can notice - it tests against the snapshot, so a year-old snapshot
+# stays green forever while the API-version existence check quietly answers for
+# versions nobody targets any more.
+#
+# This is the same silent-decay problem the drift comparators have; the
+# difference is that here it is cheap to detect, so it is detected on a
+# schedule rather than waited for. The job never rewrites the vendored file:
+# regeneration is a reviewed change, because these facts can only ever suppress
+# drift and an unreviewed suppression is exactly what must not land quietly.
+
+on:
+  schedule:
+    # Weekly. Upstream ships continuously, but the facts this repo distils out
+    # of it move slowly, and a daily run would mostly re-report the same drift.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Vendored schema facts are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Compare the vendored facts against upstream
+        # Reaches the network on purpose - it is the ONLY job that does. The
+        # scan pipeline reads the vendored file and never fetches, so drift
+        # results stay reproducible and independent of GitHub availability.
+        run: python -m tools.schema.distill --check
+
+      - name: How to fix a failure
+        if: failure()
+        run: |
+          echo "Upstream type definitions have moved on. Regenerate and review:" >&2
+          echo "    python -m tools.schema.distill" >&2
+          echo "    git diff tools/schema/data/az_type_flags.json" >&2
+          echo >&2
+          echo "Read the diff before committing. A path LEAVING the corpus turns" >&2
+          echo "into a suppressed drift, and a new write-only flag suppresses a" >&2
+          echo "whole property subtree for that type." >&2
