@@ -17,10 +17,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-try:
-    from . import recording
-except ImportError:  # imported as a top-level module by some callers
-    import recording
+# Package-relative, with NO top-level fallback. The fallback that used to be
+# here could not work and hid that fact: `tools.recording` imports `..rbac` and
+# `..redact`, so loading it as a top-level `recording` raises "attempted
+# relative import beyond top-level package" - one frame deeper than the
+# ImportError being caught, and therefore uncatchable here. It took down the
+# notification publisher on main. Every entry point now runs as a module
+# (`python -m tools.x`), the only arrangement in which this package's relative
+# imports are valid; see tests/test_entry_points_import.py.
+from . import recording
 
 _ALLOWED_SCHEMES = ("http", "https")
 

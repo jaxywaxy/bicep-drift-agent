@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 5:
         logger.error(
-            "Usage: python publish_lz_issue.py <reports_dir> <lz_repo> <lz_name> <run_url>"
+            "Usage: python3 -m tools.publish_lz_issue <reports_dir> <lz_repo> <lz_name> <run_url>"
         )
         sys.exit(1)
 

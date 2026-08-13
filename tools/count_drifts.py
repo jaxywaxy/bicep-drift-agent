@@ -140,7 +140,7 @@ def count_drifts(reports_dir: str) -> dict[str, int]:
 
 def main(argv) -> int:
     if len(argv) < 2:
-        print("Usage: python3 tools/count_drifts.py <reports_dir>", file=sys.stderr)
+        print("Usage: python3 -m tools.count_drifts <reports_dir>", file=sys.stderr)
         return 2
     try:
         counts = count_drifts(argv[1])

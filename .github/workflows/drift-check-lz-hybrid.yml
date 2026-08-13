@@ -383,8 +383,12 @@ jobs:
           # summary printed, so grep returned 0 while the report held 37
           # actionable drifts. count_drifts.py reads the same JSON the report
           # and notifications use, and FAILS if no report exists.
-          # (This job checks the agent out under drift-tools/, hence the path.)
-          python3 drift-tools/tools/count_drifts.py drift-tools/reports
+          # (This job checks the agent out under drift-tools/, hence PYTHONPATH.
+          # Run as a MODULE, not a script path: tools/ is a package whose
+          # modules import each other relatively, and a bare script path gives
+          # Python no package context - which is how the notification publisher
+          # broke on main. Same form as the rg_selector call above.)
+          PYTHONPATH=drift-tools python3 -m tools.count_drifts drift-tools/reports
 
       - name: Prepare reports for upload
         if: always()
@@ -453,7 +457,7 @@ jobs:
           # Emits drift_count / extra_count / missing_count / total_issues -
           # the SAME keys as the per-check step (this step used to emit
           # total_drift/total_extra/total_missing for the identical facts).
-          python3 tools/count_drifts.py .
+          python3 -m tools.count_drifts .
 
       - name: Checkout external repo for notifications config
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -475,7 +479,7 @@ jobs:
         run: |
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           # Reports (*-drift.json) were downloaded into the workspace root.
-          python3 tools/publish_lz_issue.py . \
+          python3 -m tools.publish_lz_issue . \
             "${{ needs.load-config.outputs.lz-repo }}" \
             "${{ needs.load-config.outputs.lz-name }}" \
             "$RUN_URL"
@@ -542,9 +546,9 @@ jobs:
           # per-resource-group *-drift.json land in the downloaded artifact dir.
           # Fall back to the concatenated text report if no JSON is present.
           if ls *-drift.json >/dev/null 2>&1; then
-            python3 tools/send_notifications.py . "$REPORT_URL"
+            python3 -m tools.send_notifications . "$REPORT_URL"
           else
-            python3 tools/send_notifications.py consolidated_drift_report.txt "$REPORT_URL"
+            python3 -m tools.send_notifications consolidated_drift_report.txt "$REPORT_URL"
           fi
 
       - name: Publish summary to GitHub
