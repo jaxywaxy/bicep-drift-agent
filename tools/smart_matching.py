@@ -234,6 +234,45 @@ def smart_match_resources(
     return matched, unmatched_bicep, unmatched_azure
 
 
+#: The shared contract for both affix primitives below and for
+#: `activity_log._shared_affix_len`: **case-insensitive, folded by the function
+#: itself**, never by the caller.
+#:
+#: These were nested inside _find_best_match and case-SENSITIVE, working only
+#: because both call sites happened to lowercase first. `_shared_affix_len`
+#: folds internally. Two primitives computing the same thing under opposite
+#: conventions is how a comparison silently under-counts the day someone passes
+#: a raw Azure name - which arrives mixed-case, since ARM preserves the casing a
+#: resource was created with.
+#:
+#: Deliberately NOT shared with activity_log by import. That module answers a
+#: different question and stays independent of the pairing path - see
+#: tests/test_identity_matching_boundary.py. What is shared is the CONTRACT,
+#: pinned by a test asserting the two agree.
+
+
+def _common_prefix_len(a: str, b: str) -> int:
+    """Length of the longest common prefix, case-insensitively."""
+    a, b = a.lower(), b.lower()
+    n = 0
+    for ca, cb in zip(a, b):
+        if ca != cb:
+            break
+        n += 1
+    return n
+
+
+def _common_suffix_len(a: str, b: str) -> int:
+    """Length of the longest common suffix, case-insensitively."""
+    a, b = a.lower(), b.lower()
+    n = 0
+    for ca, cb in zip(reversed(a), reversed(b)):
+        if ca != cb:
+            break
+        n += 1
+    return n
+
+
 def _find_best_match(bicep_resource: dict, candidates: list[dict]) -> dict:
     """
     Find the best matching Azure resource from candidates.
@@ -273,22 +312,6 @@ def _find_best_match(bicep_resource: dict, candidates: list[dict]) -> dict:
         ]
         if not candidates:
             return None
-
-    def _common_prefix_len(a: str, b: str) -> int:
-        n = 0
-        for ca, cb in zip(a, b):
-            if ca != cb:
-                break
-            n += 1
-        return n
-
-    def _common_suffix_len(a: str, b: str) -> int:
-        n = 0
-        for ca, cb in zip(reversed(a), reversed(b)):
-            if ca != cb:
-                break
-            n += 1
-        return n
 
     # Prefix + suffix: a child name like 'sqldrift[86c9cbf6]/driftdb' shares
     # the same prefix with every sibling of the same server ('.../driftdb' and

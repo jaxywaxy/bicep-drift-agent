@@ -29,8 +29,12 @@ PRs #425-#427 and the diff_states fix that followed.
 
 import unittest
 
-from tools.activity_log import could_be_same_resource
-from tools.smart_matching import names_plausibly_correspond
+from tools.activity_log import _shared_affix_len, could_be_same_resource
+from tools.smart_matching import (
+    _common_prefix_len,
+    _common_suffix_len,
+    names_plausibly_correspond,
+)
 
 
 def _pair(declared: str, deployed: str) -> bool:
@@ -101,6 +105,69 @@ class WhereTheyMustStillAgreeTests(unittest.TestCase):
             with self.subTest(f"{declared} vs {deployed}"):
                 self.assertIs(_pair(declared, deployed), expected)
                 self.assertIs(could_be_same_resource(declared, deployed), expected)
+
+
+class AffixPrimitivesShareOneContractTests(unittest.TestCase):
+    """One layer below the two rules sits the same primitive, twice.
+
+    `smart_matching._common_prefix_len`/`_common_suffix_len` and
+    `activity_log._shared_affix_len` both compute longest common prefix/suffix.
+    They stay separate copies on purpose - attribution does not import from the
+    pairing path - so what has to be shared is the CONTRACT, or they drift the
+    way the correspondence rule drifted across four modules.
+
+    The contract: **case is folded by the function, never by the caller.** The
+    smart_matching pair used to be case-SENSITIVE, working only because both
+    call sites happened to lowercase first. Azure preserves the casing a
+    resource was created with, so a raw live name reaching either of them
+    mixed-case would silently under-count the shared run.
+    """
+
+    MIXED = (
+        ("Func-Drift-[86C9CBF6]", "func-drift-3s7c7wed"),
+        ("STDRIFTDATA", "stdriftdata"),
+        ("kvdrift[86c9cbf6]/KV-Audit", "kvdrift3s7c7wed/kv-audit"),
+    )
+
+    def test_the_pairing_primitives_fold_case_themselves(self):
+        for declared, deployed in self.MIXED:
+            with self.subTest(f"{declared} vs {deployed}"):
+                self.assertEqual(_common_prefix_len(declared, deployed),
+                                 _common_prefix_len(declared.lower(), deployed.lower()))
+                self.assertEqual(_common_suffix_len(declared, deployed),
+                                 _common_suffix_len(declared.lower(), deployed.lower()))
+
+    def test_the_attribution_primitive_folds_case_too(self):
+        for declared, deployed in self.MIXED:
+            with self.subTest(f"{declared} vs {deployed}"):
+                self.assertEqual(_shared_affix_len(declared, deployed),
+                                 _shared_affix_len(declared.lower(), deployed.lower()))
+
+    def test_the_two_copies_compute_the_same_thing(self):
+        # _shared_affix_len is max(prefix, suffix) over the same computation.
+        # Pinning the identity is what stops the copies diverging; the
+        # AGGREGATION differing is fine and deliberate.
+        pairs = list(self.MIXED) + [
+            ("asp-test-drift", "asp-func-drift-test"),
+            ("sqldrift[86c9cbf6]/driftdb", "sqldrift3s7c7wed/master"),
+            ("", "anything"),
+            ("identical", "identical"),
+        ]
+        for declared, deployed in pairs:
+            with self.subTest(f"{declared} vs {deployed}"):
+                self.assertEqual(
+                    _shared_affix_len(declared, deployed),
+                    max(_common_prefix_len(declared, deployed),
+                        _common_suffix_len(declared, deployed)))
+
+    def test_mixed_case_actually_exercises_the_folding(self):
+        # Guards the guard: if every fixture above were already lowercase the
+        # case assertions would pass without the folding existing at all.
+        self.assertTrue(any(d != d.lower() or l != l.lower()
+                            for d, l in self.MIXED))
+        # And the folding must be load-bearing, not a no-op: without it these
+        # two names share nothing at the front.
+        self.assertEqual(_common_prefix_len("STDRIFT", "stdrift"), 7)
 
 
 class TheRulesAreNotTheSameFunctionTests(unittest.TestCase):
