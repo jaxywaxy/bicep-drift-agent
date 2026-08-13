@@ -1,0 +1,102 @@
+# tools/schema/data/coverage.txt
+#
+# Which Azure type@apiVersion pairs the vendored schema facts cover.
+# Regenerate the facts with:  python -m tools.schema.distill
+#
+# A bare type covers its LATEST STABLE apiVersion; `type@version` pins one.
+# Coverage is deliberately partial: a type@version absent from here reads as
+# UNKNOWN at scan time and every schema-derived check disables itself for that
+# resource (tools/schema/flags.py). Adding a pin is how an operator extends the
+# checks to whatever versions their own templates target.
+#
+# Section 1 - every type this repo has an opinion about, at latest stable.
+microsoft.authorization/policyassignments
+microsoft.authorization/policyexemptions
+microsoft.authorization/roleassignments
+microsoft.cdn/profiles
+microsoft.cdn/profiles/afdendpoints
+microsoft.cdn/profiles/origingroups
+microsoft.cognitiveservices/accounts
+microsoft.compute/disks
+microsoft.compute/virtualmachines
+microsoft.compute/virtualmachines/extensions
+microsoft.compute/virtualmachinescalesets
+microsoft.containerinstance/containergroups
+microsoft.containerregistry/registries
+microsoft.containerservice/managedclusters
+microsoft.documentdb/databaseaccounts
+microsoft.eventgrid/systemtopics
+microsoft.eventgrid/topics
+microsoft.eventhub/namespaces
+microsoft.eventhub/namespaces/eventhubs
+microsoft.hybridcompute/machines
+microsoft.insights/actiongroups
+microsoft.insights/activitylogalerts
+microsoft.insights/components
+microsoft.insights/metricalerts
+microsoft.insights/scheduledqueryrules
+microsoft.keyvault/vaults
+microsoft.logic/workflows
+microsoft.managedidentity/userassignedidentities
+microsoft.network/applicationgateways
+microsoft.network/applicationgatewaywebapplicationfirewallpolicies
+microsoft.network/azurefirewalls
+microsoft.network/bastionhosts
+microsoft.network/ddosprotectionplans
+microsoft.network/dnszones
+microsoft.network/firewallpolicies
+microsoft.network/firewallpolicies/rulecollectiongroups
+microsoft.network/frontdoorwebapplicationfirewallpolicies
+microsoft.network/ipgroups
+microsoft.network/loadbalancers
+microsoft.network/natgateways
+microsoft.network/networksecuritygroups
+microsoft.network/networksecuritygroups/securityrules
+microsoft.network/privatednszones
+microsoft.network/privateendpoints
+microsoft.network/privateendpoints/privatednszonegroups
+microsoft.network/publicipaddresses
+microsoft.network/routetables
+microsoft.network/virtualhubs
+microsoft.network/virtualhubs/hubroutetables
+microsoft.network/virtualhubs/routingintent
+microsoft.network/virtualnetworkgateways
+microsoft.network/virtualnetworks
+microsoft.network/virtualnetworks/subnets
+microsoft.network/virtualnetworks/virtualnetworkpeerings
+microsoft.network/virtualwans
+microsoft.operationalinsights/workspaces
+microsoft.operationalinsights/workspaces/tables
+microsoft.recoveryservices/vaults
+microsoft.recoveryservices/vaults/backuppolicies
+microsoft.resources/deployments
+microsoft.resources/deploymentstacks
+microsoft.security/pricings
+microsoft.servicebus/namespaces
+microsoft.sql/servers
+microsoft.sql/servers/databases
+microsoft.storage/storageaccounts
+microsoft.storage/storageaccounts/blobservices
+microsoft.storage/storageaccounts/fileservices
+microsoft.storage/storageaccounts/queueservices
+microsoft.storage/storageaccounts/tableservices
+microsoft.web/sites
+microsoft.web/sites/config
+#
+# Section 2 - versions the landing-zone templates and test fixtures actually
+# pin, so the checks fire on the estates this repo is verified against.
+microsoft.documentdb/databaseaccounts/sqldatabases/containers@2024-05-15
+microsoft.documentdb/databaseaccounts/sqldatabases@2024-05-15
+microsoft.documentdb/databaseaccounts@2024-05-15
+microsoft.keyvault/vaults@2023-07-01
+microsoft.managedidentity/userassignedidentities@2023-01-31
+microsoft.network/natgateways@2023-04-01
+microsoft.network/networksecuritygroups@2023-04-01
+microsoft.network/privateendpoints@2023-04-01
+microsoft.network/publicipaddresses@2023-04-01
+microsoft.network/routetables@2023-04-01
+microsoft.network/virtualnetworks/virtualnetworkpeerings@2023-04-01
+microsoft.network/virtualnetworks@2023-04-01
+microsoft.operationalinsights/workspaces@2023-09-01
+microsoft.resources/resourcegroups@2021-04-01
+microsoft.storage/storageaccounts@2023-01-01

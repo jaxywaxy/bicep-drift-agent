@@ -123,6 +123,7 @@ nothing.
 | Azure Normalisation | Handles casing, defaults and Azure-generated values |
 | Subset Comparison | Ignores Azure-added read-only metadata |
 | Write-Only Protection | Secrets and write-only values not compared or exposed |
+| API-Version Awareness | A property the template's `apiVersion` does not define is reported as a template problem, not as permanent drift |
 | Unverified Absence | A type the collectors could not read is reported as unverified, never as deleted |
 | Unreadable Scope | A resource group that does not exist aborts the scan; it is never reported as every declared resource being deleted |
 | Declared Resource Groups | At subscription scope a missing resource group is drift on the group itself, with its orphaned contents attributed to it |

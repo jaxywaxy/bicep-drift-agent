@@ -7,10 +7,15 @@ never-projected property classifiers. Extracted from PropertyComparator so
 the severity rules are testable in isolation; comparator.py keeps thin
 staticmethod aliases (PropertyComparator._get_severity etc.) that delegate
 here, preserving every existing call site.
+
+The hand-maintained tables below are the primary source. `tools/schema/`
+supplies type-scoped facts derived from the published Azure type definitions,
+which ADD to them - see is_write_only_for_type for why they cannot replace them.
 """
 
 
 from .models import PropertyDiff  # noqa: F401
+from tools.schema import flags as _schema
 
 
 CRITICAL_PROPERTIES = {
@@ -370,3 +375,42 @@ def is_unprojected_property(rtype: str, property_path: str) -> bool:
         return False
     p = property_path.lower()
     return any(p == wp or p.startswith(wp + ".") for wp in props)
+
+
+def is_write_only_for_type(rtype: str, api_version: str | None, property_path: str) -> bool:
+    """Write-only per the hand list OR per the type's own published schema.
+
+    The two sources answer different questions and neither subsumes the other.
+    WRITE_ONLY_PROPERTIES is EMPIRICAL - paths Azure was observed not to return,
+    curated to be safe as global substrings. The schema flag is CONTRACTUAL - an
+    RP author annotated the REST spec. Measured across the 73 types this repo
+    has opinions about, the flag reproduces only 2 of the 17 hand-listed paths
+    (Microsoft.Compute annotates none of the osProfile family at any API version
+    tried, 2021-07-01 through 2024-11-01), so the schema is added to the hand
+    list, never substituted for it.
+
+    The schema half is type-scoped because it was never curated for global use:
+    Microsoft.Resources/deployments marks `identity` write-only, and suppressing
+    `identity` estate-wide would blind managed-identity drift on every resource.
+    """
+    if is_write_only_property(property_path):
+        return True
+    return _schema.is_write_only(rtype, api_version, property_path)
+
+
+def is_absent_from_api_version(rtype: str, api_version: str | None, property_path: str) -> bool:
+    """True only when the type's schema for THIS apiVersion positively does not
+    declare the property.
+
+    A template can declare a property its target API version does not have -
+    `az bicep build` warns (BCP037) but still compiles, and ARM drops it at
+    deploy time. The property is then absent from every live payload forever,
+    which the removed-property branch would otherwise report as drift on every
+    single scan, with no action that could ever clear it.
+
+    Deliberately conservative: `property_declared` returns None for an
+    uncovered type@apiVersion and for anything under a free-form map, an
+    untyped `any`, an array element, or a truncated branch. Only an explicit
+    False suppresses, so partial coverage costs nothing but the check itself.
+    """
+    return _schema.property_declared(rtype, api_version, property_path) is False
