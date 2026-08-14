@@ -26,6 +26,7 @@ tools.schema.flags alone: a fact the comparator never reaches is not a feature.
 """
 
 import json
+import logging
 import unittest
 from unittest.mock import patch
 
@@ -169,6 +170,30 @@ class ApiVersionExistenceTests(unittest.TestCase):
             "2023-01-01",
         )
         self.assertIn("tags.owner", _paths(diffs))
+
+    def test_synthesised_empty_keys_are_never_judged_at_all(self):
+        """The check runs LAST in the removed-property branch, after the
+        emptiness filters.
+
+        Not every key in the flattened bicep surface was written by a human:
+        the normaliser gives every resource a top-level `zones` key, null on
+        types that have no such concept. Judging those changed no outcome (the
+        emptiness filter drops them either way) but emitted 25 lines per scan
+        telling the operator their template declares `zones` at a bad
+        apiVersion, on templates that never mention zones. Found on the live
+        fixture estate, not by any unit test.
+        """
+        bicep = _storage({"supportsHttpsTrafficOnly": True})
+        bicep["zones"] = None  # what normalize_resource actually produces
+        with self.assertLogs("tools.property_drift.comparator", level="INFO") as captured:
+            logging.getLogger("tools.property_drift.comparator").info("anchor")
+            PropertyComparator.compare_properties(
+                bicep, _live_storage({"supportsHttpsTrafficOnly": True}), "2023-01-01",
+            )
+        self.assertEqual(
+            [], [line for line in captured.output if "zones" in line],
+            "a synthesised empty key was judged against the schema",
+        )
 
     def test_array_element_paths_are_never_judged_absent(self):
         """The corpus omits array interiors by construction (flatten_dict keeps

@@ -281,17 +281,6 @@ class PropertyComparator:
                 if PropertyComparator._is_unprojected_property(rtype, key):
                     continue
 
-                # A property the template declares but this apiVersion does not
-                # define was dropped by ARM at deploy time; it can never appear
-                # in a live payload, so reporting it would be permanent noise.
-                if PropertyComparator._is_absent_from_api_version(rtype, api_version, key):
-                    logger.info(
-                        "Not drift: %s declares %s, which %s does not define - "
-                        "ARM drops it at deploy time (check the template's apiVersion)",
-                        rtype, key, api_version,
-                    )
-                    continue
-
                 if PropertyComparator._has_unresolved_expressions(bicep_value):
                     continue
 
@@ -301,6 +290,27 @@ class PropertyComparator:
 
                 # Skip if Bicep value is essentially empty (optional property not set)
                 if not bicep_value or (isinstance(bicep_value, (dict, list)) and len(bicep_value) == 0):
+                    continue
+
+                # A property the template declares but this apiVersion does not
+                # define was dropped by ARM at deploy time; it can never appear
+                # in a live payload, so reporting it would be permanent noise.
+                #
+                # Placed LAST on purpose, after every cheaper filter. Several
+                # keys in bicep_flat are SYNTHESISED rather than declared - the
+                # normaliser gives every resource a top-level `zones` key, null
+                # on the types that have no such concept - and judging those
+                # produced 25 log lines per scan telling the operator their
+                # template declares `zones` at a bad apiVersion, on templates
+                # that never mention zones. Running last also bounds the check:
+                # it can only ever suppress a property that survived every other
+                # filter and was about to be reported.
+                if PropertyComparator._is_absent_from_api_version(rtype, api_version, key):
+                    logger.info(
+                        "Not drift: %s declares %s, which %s does not define - "
+                        "ARM drops it at deploy time (check the template's apiVersion)",
+                        rtype, key, api_version,
+                    )
                     continue
 
                 # Tags are the exception to the blanket 'info'. That default
