@@ -1334,7 +1334,11 @@ def _render_property_drift_section(data: dict) -> str:
 def _render_agent_usage_footer(data: dict) -> str:
     """One-line agent usage/cost note for the footer (PR #218 telemetry).
 
-    Renders nothing when the run had no API key (no agent_usage block).
+    Renders nothing when the run had no API key (no agent_usage block), but a
+    provider that was configured and FAILED says so. Those two cases used to
+    render identically - silence - so a torn-down endpoint produced green runs
+    with no analysis and no signal, noticed only because the cost line
+    disappeared. The failure stays non-fatal; it just stops being invisible.
 
     Says "Agent analysis", not "Claude analysis": the provider is selectable
     (DRIFT_LLM_PROVIDER) and the footer prints the model beside the label, so
@@ -1342,7 +1346,14 @@ def _render_agent_usage_footer(data: dict) -> str:
     (gpt-5-mini)" in a live report.
     """
     usage = data.get("agent_usage")
+    failure = data.get("agent_analysis_error")
     if not usage or not usage.get("calls"):
+        if failure:
+            return (
+                f"<br>Agent analysis unavailable this run "
+                f"({_esc(str(failure.get('error_type', 'error')))}): "
+                f"{_esc(str(failure.get('hint', '')))}"
+            )
         return ""
     models = ", ".join(usage.get("models") or []) or "unknown model"
     cost = usage.get("estimated_cost_usd")

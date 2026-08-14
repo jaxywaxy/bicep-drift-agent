@@ -186,6 +186,20 @@ def _run_claude_analysis(agent, report_data: dict):
         return agent_analysis
     except Exception as e:
         hint = _explain_llm_failure(getattr(agent, "provider", None), e)
+        # Record the failure IN THE REPORT, not just the log. Swallowing the
+        # exception is right - the deterministic result is the product - but
+        # leaving no trace in the artifact made a configured-but-unreachable
+        # provider indistinguishable from no provider at all: both render an
+        # empty footer. A torn-down Azure OpenAI endpoint therefore produced
+        # green runs with silently missing analysis for days, noticed only
+        # because the cost line vanished.
+        #
+        # The provider's HINT is stored, never str(e): raw SDK exceptions embed
+        # request URLs and headers, and this file is published to a GitHub issue.
+        report_data["agent_analysis_error"] = {
+            "error_type": type(e).__name__,
+            "hint": hint,
+        }
         logger.error(f"✗ LLM analysis failed ({type(e).__name__}): {hint}")
         logger.warning(
             "Continuing without AI analysis/recommendations - the deterministic "
