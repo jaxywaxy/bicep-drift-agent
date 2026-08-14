@@ -226,6 +226,29 @@ class HtmlReportRenderTests(unittest.TestCase):
         h = _render(agent_usage=None)
         self.assertNotIn("claude-opus-4-8", h)
 
+    def test_a_failed_analysis_says_so_instead_of_rendering_nothing(self):
+        """A configured-but-broken provider must not look like no provider.
+
+        Both used to render an empty footer, so a torn-down Azure OpenAI
+        endpoint produced green runs with silently missing analysis - the only
+        visible symptom was the cost line disappearing.
+        """
+        h = _render(
+            agent_analysis=None,
+            agent_usage={"calls": 0, "input_tokens": 0, "output_tokens": 0,
+                         "models": [], "estimated_cost_usd": 0.0},
+            agent_analysis_error={"error_type": "APIConnectionError",
+                                  "hint": "LLM analysis unavailable this run"},
+        )
+        self.assertIn("Agent analysis unavailable this run", h)
+        self.assertIn("APIConnectionError", h)
+
+    def test_no_provider_configured_still_renders_nothing(self):
+        """The other side of the boundary: silence is still right when nothing
+        was configured, otherwise every key-less run grows a scary footer."""
+        h = _render(agent_usage=None, agent_analysis_error=None)
+        self.assertNotIn("Agent analysis unavailable", h)
+
     def test_policy_enforced_section_rendered(self):
         self.assertIn("Deploy diagnostics", _render())
 
