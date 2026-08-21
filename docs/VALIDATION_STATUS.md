@@ -46,12 +46,18 @@ them.
 > reference, not an audit. If an entry is disputed, the resolution is to run the
 > injection round for that capability — not to argue about the citation.
 
-> **The estates these rounds ran against were not migrated with this repository.**
-> Every claim below remains true — the drift *was* injected and detected on the
-> date given — but **none of it can be re-verified until a new verification
-> estate exists**. Estate names, resource groups and subscriptions are retained
-> deliberately: an unciteable claim is indistinguishable from an unproven one,
-> and stripping them would leave a tier table that cannot be audited.
+> **Most of the estates these rounds ran against were not migrated with this
+> repository.** Every claim below remains true — the drift *was* injected and
+> detected on the date given — but most of it cannot be re-verified until the
+> estate in question is rebuilt. Estate names, resource groups and subscriptions
+> are retained deliberately: an unciteable claim is indistinguishable from an
+> unproven one, and stripping them would leave a tier table that cannot be
+> audited.
+>
+> The exception is the `test-resources` fixture, re-registered on 2026-08-14
+> (#434) for the schema-flag round below, and the prod landing zone, which is a
+> standing estate. Both are scannable; the fixture's estate is deployed per round
+> and torn down after.
 >
 > Read the evidence column as *what was done and when*, not as somewhere you can
 > go and look. `TEST_ESTATE.md` is the method for rebuilding an estate capable of
@@ -485,3 +491,71 @@ CLI misled in both directions.
 - **The RG-scope drifted run on Anthropic post-fix** was re-run and matched
   gpt-5.6-sol exactly, but the three fix-verification runs themselves were
   single-provider.
+
+---
+
+## The 2026-08-14 schema-flag round — a suppression, not a detection
+
+`tools/schema/` (#433–#435) is the first capability here whose entire job is to
+**stop** something being reported. The tier table above is built for detection
+claims, so read this round against a different bar: the question is not "was drift
+caught" but "did the suppression act only where it should".
+
+> **Evidence for this section is the commit record of #433–#435, not a separate
+> written-up run.** It is recorded because the round changed two shipped
+> behaviours; if it is disputed, re-run it against a rebuilt fixture rather than
+> arguing the citation.
+
+### What the round established
+
+| Claim | Evidence |
+|---|---|
+| The checks are correctly **inert** on well-formed templates | Prod LZ: 23 resources, 59 declared paths, every `type@apiVersion` covered, **zero** suppressed by either check (#433). Fixture estate after the coverage fix: 268 checkable paths, full type coverage, still zero judged absent (#434) |
+| The API-version check acts on a **real** case | After #435 the fixture scan emitted exactly one suppression line, and that one was the genuine injected case |
+| Partial coverage disables itself rather than guessing | `property_declared` returns `None` for an uncovered `type@apiVersion`; only an explicit `False` suppresses |
+
+This does **not** upgrade any detection row above. A suppression proven not to
+fire on 327 well-formed paths is a false-positive result, in the same family as
+"live-clean" — it says the check is safe, not that it is useful.
+
+### The defect this round found, and why it is the important part
+
+The first cut of the coverage seed was built from latest-stable plus the
+landing-zone repo's pins. On the fixture estate that left **38 of 75 resources'
+declared paths checkable** — every other `type@apiVersion` fell through to "not
+covered" and disabled itself. The round would have reported a clean pass while
+exercising almost nothing.
+
+That is the same shape as the backup comparators this page opens with: the check
+ran, the suite was green, and the thing under test was never reached. It is worth
+stating as a general rule, because `tools/schema/` will not be the last capability
+with a coverage seed:
+
+**A capability with a coverage list has two failure modes, and only one of them is
+visible.** "The check ran and found nothing" and "the check silently disabled
+itself" produce identical output. Any such capability needs a coverage assertion —
+`flags.coverage_size()` and the pinned-apiVersion test exist for exactly this —
+and a round against it must report *how much was checkable*, not just the result.
+
+### The noise defect (#435)
+
+The API-version check originally ran near the top of the removed-property branch,
+ahead of the emptiness filters, and judged keys the normaliser **synthesises**
+rather than keys a human wrote — every resource gets a top-level `zones`, null on
+types that have no such concept. A fixture scan emitted 26 suppression lines, 25
+of them telling the operator to go audit an `apiVersion` for a property their
+template never mentions. Moving the check last cut it to 1.
+
+Worth keeping as a design rule: **a suppression that logs should run last**, after
+every cheaper filter, so it can only ever speak about something that was actually
+about to be reported.
+
+### Not proven by this round
+
+- **The suppression acting on a property an operator genuinely mis-versioned in
+  their own template**, end to end, with the operator then fixing the
+  `apiVersion` and the line disappearing. The one live case was injected.
+- **Decay behaviour.** `.github/workflows/schema-decay.yml` has not yet caught a
+  real upstream move; it has only been run against a fresh snapshot.
+- **Any estate whose templates are not well formed.** Every path judged so far
+  came from templates that compile clean, which is the easy case.

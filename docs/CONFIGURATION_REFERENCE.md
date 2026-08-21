@@ -585,7 +585,7 @@ To check a live API for decay, re-record and diff:
 
 ```bash
 DRIFT_RECORD_CASSETTE=fresh.json python analyze_drift.py ./infra/main.bicep "lz-*"
-python -m tools.recording.decay tests/cassettes/lz.json fresh.json   # exit 1 if the shape moved
+python -m tools.recording.decay tests/cassettes/lz-prod-subscription.json fresh.json   # exit 1 if the shape moved
 ```
 
 ## Ownership

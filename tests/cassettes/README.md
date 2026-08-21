@@ -9,7 +9,9 @@ Use them via `tests/cassette_support.CassetteTestCase`.
 
 ## Re-recording
 
-Needs a deployed verification estate (`TEST_ESTATE.md`) and `az login`:
+Needs `az login` and a deployed estate you own — the committed corpus was
+recorded from the prod landing zone below, not from a fixture (`TEST_ESTATE.md`
+covers standing one of those up):
 
 ```bash
 export AZURE_SUBSCRIPTION_ID=<the estate's subscription>
@@ -43,8 +45,10 @@ failing.
 - Built-in **role definition** GUIDs are public Azure constants and are kept
   as-is, or `Owner` stops resolving and stops counting as privileged.
 - Resource **names are real**, and deliberately so — name correspondence is the
-  behaviour these fixtures exist to test. Record only from a verification
-  estate, never a client's.
+  behaviour these fixtures exist to test, and the metadata note names the estate
+  they came from. Record only from an estate you own and can publish, never a
+  client's: the GUID hashing is not anonymity, and a cassette recorded from a
+  client would commit their names and topology.
 - Request headers are not recorded at all, so no bearer token is present.
 - Responses over `DRIFT_CASSETTE_MAX_BYTES` (1MB) are **skipped**, and listed
   under `oversize_skipped` in the metadata. In practice that is the Activity
