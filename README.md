@@ -310,4 +310,4 @@ See individual documentation pages for detailed limitations.
 - Bicep
 - GitHub Actions
 - Azure Workload Identity Federation
-- Anthropic Claude (optional report enrichment)
+- Anthropic Claude or Azure OpenAI (optional report enrichment, selected by `DRIFT_LLM_PROVIDER`)

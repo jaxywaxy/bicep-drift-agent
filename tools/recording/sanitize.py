@@ -41,11 +41,19 @@ loud (see cassette.CassetteMiss).
 Deliberate. Name correspondence - `uniqueString()` placeholders, parent/child
 qualification, sibling disambiguation - is the single largest defect family in
 this codebase, and a corpus with scrambled names could not exercise it at all.
-The corpus is recorded from a synthetic verification estate whose names are
-already fictional, so there is nothing to protect. `Sanitiser(name_map=...)`
-exists for the case where a corpus must be recorded from an estate whose names
-are themselves sensitive; it is off by default because using it trades away
-most of the fixture's value.
+
+So the GUID hashing above is **not** anonymity. The names are real, and the
+metadata note names the estate they came from, on purpose. What keeps that safe
+is a rule about *which estate you record*, not about scrubbing afterwards:
+**record only from an estate you own and can publish.** The corpus here comes
+from the maintainer's own landing zone, whose resource names are already public
+in this repository.
+
+`Sanitiser(name_map=...)` exists for the case where a corpus must be recorded
+from an estate whose names are themselves sensitive - a client's, where the
+committed fixture would otherwise carry their topology and nothing else in this
+module would stop it. It is off by default because using it trades away most of
+the fixture's value.
 """
 
 import hashlib

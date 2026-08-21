@@ -88,6 +88,16 @@ that can never be scanned, which is precisely what
 remains as the copy-me pattern for wiring a new LZ, and `docs/TEST_ESTATE.md` is
 the method for building an estate to verify against.
 
+**One of the five came back.** `test-resources` and
+`.github/workflows/drift-lz-test.yml` were restored on 2026-08-14 (#434) because
+the schema-flag round needed a fixture estate to run against. It is **manual
+dispatch only** and its estate is deployed per round and torn down after, so it
+is registered but usually absent — treat it as a fixture you must stand up, not
+as a standing landing zone. If it is still registered at transfer time, either
+stand the estate up in the new org or remove the entry; leaving it pointed at a
+subscription you no longer own is the failure `test_lz_index_integrity.py`
+guards against.
+
 ## 4. What does NOT need changing
 
 Checked on 2026-08-12, so you can skip re-deriving it:
@@ -115,8 +125,9 @@ Checked on 2026-08-12, so you can skip re-deriving it:
 3. Confirm secrets and variables survived; recreate any that did not.
 4. Run a scan against a landing zone you *do* own — it exercises OIDC, the
    external-repo clone, the LLM provider and notifications in one pass, and a
-   green run proves the whole chain. The verification fixtures were not
-   migrated (see `TEST_ESTATE.md`), so use a real LZ or stand up a fixture
+   green run proves the whole chain. Four of the five verification fixtures were
+   not migrated (see `TEST_ESTATE.md`); `drift-lz-test.yml` still exists but its
+   estate is only deployed for a round, so use a real LZ or stand the fixture up
    first.
 5. Update `.github/lz-index.yml` only if the Bicep repos moved.
 6. Delete the old federated credential.

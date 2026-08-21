@@ -253,16 +253,27 @@ restrictions, each enforced by a test rather than by convention:
   than filtered, and credential-bearing query parameters (`sig`, `code`,
   `access_token`, …) are stripped from the URL before it is used even as a
   lookup key.
-- **No real identifiers reach disk.** Subscription, tenant and principal GUIDs
-  are replaced by a one-way hash, so a committed cassette cannot be traced back
-  to the estate it came from — not even by whoever recorded it. Secret-bearing
-  property values are redacted first, through the same `tools/redact.py` that
-  scrubs the report artifact.
+- **No real GUIDs reach disk.** Subscription, tenant and principal GUIDs are
+  replaced by a one-way hash, so the identifiers in a committed cassette cannot
+  be resolved back to the real ones — not even by whoever recorded it. Public
+  Azure constants (built-in role definition ids) are deliberately exempt, because
+  aliasing them silently reclassified a subscription-Owner grant as
+  not-privileged. Secret-bearing property values are redacted first, through the
+  same `tools/redact.py` that scrubs the report artifact.
 
-Resource *names* are recorded as-is. Name correspondence is the behaviour these
-fixtures exist to test, and scrambling names would make them worthless; the
-corpus is therefore recorded from a synthetic verification estate, never from a
-client's.
+Resource *names* are recorded as-is, and so is a free-text provenance note naming
+the source. Name correspondence is the behaviour these fixtures exist to test, and
+scrambling names would make them worthless. So the GUID hashing is **not**
+anonymity: the shipped corpus identifies its own estate by name, and is meant to.
+
+The rule that keeps that safe is about *which estate you record*, not about
+scrubbing afterwards: **record only from an estate you own and can publish.** The
+corpus in this repo comes from the maintainer's own demonstration landing zone,
+whose resource names are already public in this repository. A cassette recorded
+from a client's estate would commit that client's resource names and topology, and
+nothing in the sanitiser would stop it — `Sanitiser(name_map=...)` exists for that
+case and is off by default, because using it trades away most of the fixture's
+value.
 
 ## Write Operations
 

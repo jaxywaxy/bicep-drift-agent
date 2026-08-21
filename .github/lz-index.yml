@@ -18,7 +18,14 @@
 
 landing_zones:
   # ===================== PRODUCTION LANDING ZONES =====================
-  # Real estates. Everything here is customer infrastructure.
+  # Standing estates: deployed continuously, as opposed to the fixtures below
+  # which are stood up for a round and torn down after. Both are manual dispatch
+  # today; the difference is whether the estate is there between scans.
+  # In THIS repository they are the maintainer's own demonstration estates -
+  # which is why a cassette recorded from one is safe to commit (see
+  # docs/SECURITY.md, "Recorded Payloads"). In a fork this section is where
+  # real customer infrastructure goes, so treat anything recorded from it as
+  # client data unless you know otherwise.
 
   landingzone:
     repo: jaxywaxy/azure-landingzone-bicep
