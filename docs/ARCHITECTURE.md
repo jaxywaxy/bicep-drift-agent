@@ -539,6 +539,74 @@ The architecture is designed to scale across:
 
 Landing zones can be added through configuration rather than platform code changes, allowing new workloads to onboard with minimal effort.
 
+### Assumed estate size
+
+**Assume an enterprise estate exceeds one Resource Graph page. Treat 1,000 rows
+as a floor, not an estimate.** Recorded 2026-08-22.
+
+No estate has been counted, so this is a *judgement, not a measurement*. It is
+written down so the size the code is built for is explicit and falsifiable
+rather than living in whoever last thought about it.
+
+The judgement rests on the gap between what has been scanned and what the tool
+targets. The largest estate ever scanned here is the **75-resource** fixture;
+the prod landing zone is **23**. A CAF/ALZ enterprise estate is two to three
+orders of magnitude above that, and the row count is driven by fabric deployed
+by pattern rather than by how many applications exist:
+
+- Private-endpoint DNS integration deploys ~70–100 `privatelink.*` zones, each
+  with virtual-network links — zones and links are separate rows, so several
+  hundred before a single workload.
+- Subnets, NSGs, route tables and peerings across hub and spokes.
+- Diagnostic settings, private endpoints and NICs typically appear per workload
+  resource, so workloads multiply rows rather than adding them.
+
+**For a glob scan the bound is not about the landing zone at all.** The KQL is
+bare `Resources` for the whole subscription and the resource-group filter is
+applied in Python afterwards, so a 200-resource landing zone inside a
+5,000-resource subscription is over the bound regardless of its own size.
+
+The consequence is not a slow scan or an error. A resource absent from live
+state is `missing_in_azure`, so an unpaginated read produces a **confident
+report that large parts of the estate have been deleted** — the class of failure
+`_mark_unverified_missing` exists to prevent at the collector layer. Unsorted
+paging has the same consequence in smaller doses: without a sort on a unique
+column Resource Graph may repeat a row across pages (survivable —
+`_dedupe_resources_by_id` exists) or omit one entirely (not survivable).
+
+**No verification estate can detect any of this.** Below the bound a paged read
+and an unpaged one return identical results, and every fixture estate sits below
+it by construction. The behaviour is pinned by faked multi-page responses in
+`tests/test_resource_graph_paging.py` instead.
+
+The exact page bound (believed 1,000 rows) came from the SDK contract, not from
+an observed truncation, and is **still to be confirmed against the live API**.
+The design does not depend on the number: the query pages until the service
+stops offering a continuation token, and warns when it reports a truncation it
+will not let us page past.
+
+To replace the judgement with a measurement, count any real subscription:
+
+```bash
+az graph query -q "Resources | summarize count()" --subscriptions <sub-id>
+# compare with the "Found N total resource(s)" line from a scan of the same scope
+```
+
+**A small verification estate cannot detect any of this.** Under the boundary,
+a paginated read and an unpaginated one return identical results, so no fixture
+estate that fits in a test round will ever fail on it.
+
+To replace the assumption with a measurement, compare a resource census against
+what a scan actually reads:
+
+```bash
+az graph query -q "Resources | count" --subscriptions "$AZURE_SUBSCRIPTION_ID"
+# then compare with the "Found N total resource(s)" line from a scan
+```
+
+A gap between those two numbers is truncation. If they agree, record the real
+figure here and delete the assumption.
+
 ---
 
 ## Implementation Invariants
@@ -550,6 +618,7 @@ one produces a failure that a passing test suite will not catch.
 |-----------|---------------|
 | **A new `drift_type` must be registered in `tools/count_drifts.COUNTED_TYPES`** (or explicitly reconciled, as `matched_unresolvable` is) | Otherwise it is detected, written to the JSON, and silently absent from every count and summary |
 | **Stage ordering is load-bearing.** Smart matching runs *before* ignore filtering; attribution runs *before* the Claude call; the grep-able CI summary is emitted *after* the policy split | Reordering any of these changes the result rather than just the sequence — reconciled resources get swallowed by ignore rules, the analysis prompt loses who/how, or the summary disagrees with the report |
+| **Every Resource Graph query pages to exhaustion and sorts on a unique column** — `_run_paginated_query`, never a bare `client.resources(request)` | Resource Graph bounds a response and returns a `skip_token` for the rest, so a single call reads only the first page. Rows never read do not enter live state, and a declared resource with no live counterpart is `missing_in_azure` — an unpaginated read of an enterprise estate reports most of it as deleted, with no error and a green suite. The sort is part of the same invariant: unsorted paging may omit a row across pages, which has the identical consequence in smaller doses. `policy.py` and `rbac.py` already paged; the main resource sweep — the query that reads the *whole estate* — did not, and no verification estate can show it because below the bound a paged and an unpaged read are identical |
 | **Report filenames go through `tools/rg_selector.rg_label`** — never concatenate `resource_group` | A subscription scan's selector may be `"*"` or a glob, neither of which is a valid filename |
 | **Secrets never reach disk.** `tools/redact.py` scrubs secret-bearing values from the raw ARM/live dump written to the JSON | Property comparison already ignores write-only secrets, but the raw dump would otherwise carry them into an artifact |
 | **Every text read and write names `encoding="utf-8"`** — enforced by `tests/test_encoding_hygiene.py`, which parses the AST rather than grepping | Without it Python uses the *locale's* encoding. A developer machine is UTF-8 and passes; a CI container with `LC_ALL=C` is US-ASCII, and a report whose narrative contains an em-dash raises `UnicodeDecodeError` — the verifier crashes instead of verifying. Reports carry LLM-written prose, so non-ASCII is routine, not exotic |

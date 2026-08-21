@@ -39,14 +39,16 @@ def query_resource_groups(run_query, sub_id: str, gaps=None) -> list[dict]:
     """Fetch the subscription's resource groups as comparable resources.
 
     `run_query` is injected (rather than building a client here) so this stays
-    testable without a live Resource Graph and so the caller's retry-wrapped
-    query path is reused.
+    testable without a live Resource Graph and so the caller's retry-wrapped,
+    PAGED query path is reused. It takes KQL and returns every matching row -
+    not a single response object, because one response is only the first page
+    and a subscription's resource groups can exceed it like anything else.
 
     A failure records a collection gap and returns nothing: "we could not read
     the resource groups" must never render as "the resource groups are gone".
     """
     try:
-        response = run_query(_KQL)
+        rows = run_query(_KQL)
     except Exception as e:
         logger.warning(f"Could not read resource groups: {e}")
         if gaps is not None:
@@ -66,7 +68,7 @@ def query_resource_groups(run_query, sub_id: str, gaps=None) -> list[dict]:
             "id": item.get("id"),
             "resource_group": item.get("name"),
         }
-        for item in (getattr(response, "data", None) or [])
+        for item in (rows or [])
     ]
     logger.info(f"Found {len(groups)} resource group(s) via ResourceContainers")
     return groups

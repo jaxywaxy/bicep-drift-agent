@@ -100,11 +100,11 @@ class ResourceGroupCollectorTests(unittest.TestCase):
     Without this collector every declared RG compares against nothing."""
 
     def test_containers_rows_become_comparable_resources(self):
-        response = mock.Mock(data=[
+        rows = [
             {"name": "rg-networking", "location": "australiaeast",
              "tags": {"env": "prod"}, "id": "/subscriptions/s/resourceGroups/rg-networking"},
-        ])
-        out = query_resource_groups(lambda kql: response, "sub")
+        ]
+        out = query_resource_groups(lambda kql: rows, "sub")
         self.assertEqual(len(out), 1)
         self.assertEqual(out[0]["type"], RESOURCE_GROUP_TYPE)
         self.assertEqual(out[0]["name"], "rg-networking")
@@ -115,7 +115,7 @@ class ResourceGroupCollectorTests(unittest.TestCase):
 
         def capture(kql):
             seen["kql"] = kql
-            return mock.Mock(data=[])
+            return []
 
         query_resource_groups(capture, "sub")
         self.assertIn("ResourceContainers", seen["kql"])
