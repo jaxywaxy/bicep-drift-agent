@@ -48,6 +48,70 @@ def _run_resource_graph_query(client, request):
     or the ResourceManagementClient fallback."""
     return client.resources(request)
 
+
+def _ordered_for_paging(kql: str) -> str:
+    """Append a deterministic sort unless the query already carries one.
+
+    Resource Graph's paging is only consistent when the query sorts on a unique
+    column. Without it the service may repeat a row on one page and omit another
+    entirely. A repeat is survivable - `_dedupe_resources_by_id` already exists -
+    but an omission is a resource missing from live state, which reads as
+    `missing_in_azure`. Both queries paged here project `id`.
+    """
+    return kql if "order by" in kql.lower() else f"{kql} | order by id asc"
+
+
+def _run_paginated_query(client, sub_id: str, kql: str) -> list[dict]:
+    """Every row the query matches, following Resource Graph's `skip_token`.
+
+    Resource Graph bounds a response and hands back a continuation token for the
+    remainder, so a single call returns only the FIRST page. Paging is therefore
+    correctness, not throughput: rows never read do not enter live state, and a
+    declared resource with no live counterpart is `missing_in_azure`. An
+    unpaginated read of an over-bound estate produces a confident report that
+    most of it has been deleted - no error, green run.
+
+    It is invisible below the bound, which is where every verification estate
+    sits by construction (docs/ARCHITECTURE.md, "Assumed estate size"), so no
+    fixture round can catch it.
+    """
+    rows: list[dict] = []
+    query = _ordered_for_paging(kql)
+    skip_token = None
+    pages = 0
+
+    while True:
+        request = QueryRequest(
+            subscriptions=[sub_id],
+            query=query,
+            options={"skip_token": skip_token} if skip_token else None,
+        )
+        response = _run_resource_graph_query(client, request)
+        rows.extend(response.data or [])
+        pages += 1
+        skip_token = getattr(response, "skip_token", None)
+        if not skip_token:
+            break
+
+    # Truncation the service will not let us page past: the rows are simply
+    # gone, so the report is WRONG rather than merely short. Say so loudly -
+    # this is the one signal that distinguishes "the estate is small" from
+    # "we only read part of it".
+    truncated = getattr(response, "result_truncated", None)
+    if str(getattr(truncated, "value", truncated) or "").lower() == "true":
+        logger.warning(
+            "Resource Graph reported the result TRUNCATED after %d page(s) with "
+            "no continuation token: %d row(s) read, an unknown number dropped. "
+            "Declared resources beyond that point will read as missing_in_azure "
+            "- treat this report as INCOMPLETE, not as drift.",
+            pages, len(rows),
+        )
+    if pages > 1:
+        logger.info(
+            "Resource Graph returned %d row(s) across %d pages", len(rows), pages
+        )
+    return rows
+
 try:
     from azure.mgmt.resourcegraph import ResourceGraphClient
     from azure.mgmt.resourcegraph.models import QueryRequest
@@ -119,8 +183,7 @@ def get_live_state(
     start_time = time.time()
 
     try:
-        request = QueryRequest(subscriptions=[sub_id], query=kql_query)
-        response = _run_resource_graph_query(client, request)
+        rows = _run_paginated_query(client, sub_id, kql_query)
     except Exception as e:
         logger.error(f"Resource Graph query failed: {e}, falling back to ResourceManagementClient")
         return _get_live_state_fallback(resource_group, sub_id, scope, gaps=gaps)
@@ -129,8 +192,8 @@ def get_live_state(
     logger.info(f"Resource Graph query completed in {elapsed:.2f}s")
 
     resources = []
-    if response.data:
-        for item in response.data:
+    if rows:
+        for item in rows:
             resources.append({
                 "type": item.get("type"),
                 "name": item.get("name"),
@@ -150,8 +213,7 @@ def get_live_state(
     _augment_untracked_resources(resources, resource_group, sub_id, scope, credential=credential, gaps=gaps)
     if scope == "subscription":
         resources.extend(query_resource_groups(
-            lambda kql: _run_resource_graph_query(
-                client, QueryRequest(subscriptions=[sub_id], query=kql)),
+            lambda kql: _run_paginated_query(client, sub_id, kql),
             sub_id, gaps=gaps))
         resources = _filter_by_rg_selector(resources, resource_group)
     logger.info(f"Found {len(resources)} total resource(s) (Resource Graph + locks + cosmos children)")
