@@ -1,62 +1,58 @@
 {
   "version": 1,
   "metadata": {
-    "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13",
+    "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23",
     "subscription_alias": "f40e79f7-bad2-4604-83c9-4de96a50c531"
   },
   "aliases": [
-    "05d9e316-56bf-407f-8f5a-0fe6f02ab404",
-    "0b0dbdb5-6c9a-497e-8efb-5dba8f2ba9f9",
-    "1c82669e-b9ce-48fa-8345-5b901183638b",
+    "0930b787-1795-49d2-8772-5b84377321a8",
+    "0d2c6f49-64ab-4a7b-832d-5dc2744887fa",
+    "17b75bfc-fce1-487e-859b-e0bf982228f1",
+    "18cecd57-e594-4df3-83e5-f82dff4f7cda",
+    "1b373d7b-8d7e-45e8-88ec-4dd78b8b9a48",
+    "1cf93210-2c61-4fb7-8883-17ed571bdb5f",
+    "24181891-2853-40de-8439-627cf34a343d",
+    "263e91b7-42b6-4d6c-88f8-29fec9681c20",
     "2a52ddea-f151-4135-84cc-441053e997c3",
-    "33e3f051-b8d0-4570-8a67-3294ed59f843",
-    "38e1ba02-c6bf-4599-8648-20875fce0f35",
-    "406562c8-ccc0-4489-8780-cff296237c04",
+    "34f934d9-1f36-44a9-89dd-09999d43f09a",
+    "3a0d48e3-0686-4a3b-893f-dc9db98e0f65",
+    "3f1063a1-5e56-4424-821d-e1cc9f66d184",
     "41a28b23-e7b6-4fa7-8e1f-71f89be5e7b2",
-    "4b4f05ff-fd84-4180-8002-f60fab29cfab",
-    "4f6c3700-2f81-4f91-812b-14083d07fee9",
-    "4f891acb-43c8-4a75-8aeb-01ad330a9f2a",
-    "51b3ce16-82c2-4853-8fa2-732c5e293827",
+    "58aaa6c7-19c5-4641-89a0-abc385ef1717",
+    "5c6b8745-97a3-4ceb-8b79-cb2d839a400f",
+    "5e1b3396-e7de-4ae9-8595-b4ceafc750a9",
+    "5e4c9963-26b0-41e9-8e7c-6e0e6a0e97ec",
     "61fb262c-59ad-410c-81e1-bf0fa9c462ab",
-    "6213d072-a2ee-4474-8cd1-dfefab6b2219",
     "6279a9ef-2043-4545-89eb-1e3bd432a466",
-    "6f9657b2-834c-47d7-8a79-52fc2081dd84",
+    "6b14c6d1-a14b-43bb-8568-8274677d959d",
     "704506e6-2c56-4e06-8bef-47ca0acd2243",
+    "70f09fd7-7e4a-4c66-841f-c65f452a04b7",
+    "7122ab9f-d797-431c-8d2a-d6b0ca82177c",
     "71645b2a-d150-4c90-84a6-6a12c60fa784",
+    "737a6f9e-a071-4204-8ff7-912639b1c1c4",
     "748c3a11-94b1-4dbe-8a0e-17dd5ad055d9",
-    "757e0c3d-1564-48d2-88dc-23cb813a6cd8",
-    "79da664f-0eef-4990-8771-c99013a8f370",
-    "7e28d69c-3857-4dd3-8273-b714e6749a3d",
     "80c35eb8-849e-4142-8366-67a09dd71c2a",
-    "82711602-42cd-4120-8b14-2563eae4071a",
-    "85682211-fec9-43bc-8a53-75fb772eb037",
     "87a0752a-01b0-46a2-88e2-eb43aab69e37",
     "889117bf-79db-47e1-8dbc-d0a30a8b2fe8",
-    "8dd46d18-2be6-45e6-894d-b03a41319747",
+    "8a1a94e1-3979-40b2-8cca-da4147a00ce7",
     "8ef6a35f-8aaa-4e63-89cb-aacb6b4bceb4",
-    "95757b73-b5f0-4108-869a-be0fdccac49a",
-    "9ca090e2-28e1-4874-844e-f25b761d2e54",
+    "943a299b-beeb-44bb-8350-64b0618e69a2",
+    "9583d09c-c1f4-4feb-8de9-82024488ca31",
+    "99932af0-363c-47ac-88ac-e293521b21c6",
     "9ccd5e04-dab8-4cef-8a30-197e600d922b",
-    "9ef05976-f3ab-4d40-8f4d-0a56c349bba9",
-    "9fdd54fc-bd09-4832-880c-e7ed630779b9",
-    "a2b672c2-38f5-4da3-8d4e-6092361b4d6c",
-    "b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8",
-    "bec5b731-cae8-4c9f-8331-241e2c6836f1",
+    "a96ae6a1-172d-428c-8434-aa4a59b2a219",
+    "ae18375a-09ee-4cab-8d3b-e29ba8d16c45",
+    "b686ed65-4c56-47c0-8429-bea4e5c62736",
+    "bc451e5d-345f-4e3a-8d42-714741980a37",
     "c4a19b03-4ffe-46c4-8b6f-19a98115422b",
-    "c84d58a6-8881-453a-80d2-6e0ae99d6bb9",
-    "ce5042e8-2803-4e02-83bc-e5d683080b63",
-    "d4c793c8-0ef7-4abb-8856-fe44c1dace62",
-    "d59da4b4-8251-4002-88ba-1469cb1f5751",
+    "cdd37bda-640a-4b15-8af0-dde52cbd7d5a",
+    "cfcb3748-d6b8-495e-8417-fe19dbd285b6",
+    "d60ca72e-dc75-45eb-8ba9-bc44e202c3de",
     "d989f542-1c18-4247-8535-f699026aa24b",
-    "dc5d6c33-511c-4e64-82e6-79f3a889a171",
-    "e12bf61d-e8fd-4996-8c0a-582f9bfe1700",
-    "eb4ccf2f-815c-47d3-86b6-d854b470fec9",
+    "e0ce657b-0372-4a9a-8acf-f00acc848a07",
     "ee207214-02cc-446b-834e-ad6fead61e4e",
     "f40e79f7-bad2-4604-83c9-4de96a50c531",
-    "f55ac4cc-4205-450f-82b7-0d55735b100a",
-    "f6510d27-9965-4f86-8412-3f579cf19849",
-    "fa3f01ca-16d8-468e-85b2-ab09556e222c",
-    "fe3edd50-0fca-44ea-8905-9f3329f7b518"
+    "f7776f59-17c0-44d0-88b1-3681e58fd19c"
   ],
   "interactions": {
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/providers/Microsoft.Authorization/locks?api-version=2016-09-01": {
@@ -66,7 +62,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/providers/Microsoft.Authorization/policyAssignments?api-version=2022-06-01": {
       "method": "GET",
@@ -227,7 +223,7 @@
           }
         ]
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.DocumentDB/databaseAccounts/jacquiprod-cosmos-gntx5t/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -236,7 +232,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.DocumentDB/databaseAccounts/jacquiprod-cosmos-gntx5t/sqlDatabases/appdb/containers/items/throughputSettings/default?api-version=2023-11-15": {
       "method": "GET",
@@ -244,9 +240,9 @@
       "status": 400,
       "body": {
         "code": "BadRequest",
-        "message": "Message: {\"code\":\"BadRequest\",\"message\":\"Reading or replacing offers is not supported for serverless accounts.\\r\\nActivityId: f55ac4cc-4205-450f-82b7-0d55735b100a, Microsoft.Azure.Documents.Common/2.14.0\"}, Request URI: /offers, RequestStats: , SDK: Microsoft.Azure.Documents.Common/2.14.0"
+        "message": "Message: {\"code\":\"BadRequest\",\"message\":\"Reading or replacing offers is not supported for serverless accounts.\\r\\nActivityId: 6b14c6d1-a14b-43bb-8568-8274677d959d, Microsoft.Azure.Documents.Common/2.14.0\"}, Request URI: /offers, RequestStats: , SDK: Microsoft.Azure.Documents.Common/2.14.0"
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.DocumentDB/databaseAccounts/jacquiprod-cosmos-gntx5t/sqlDatabases/appdb/containers?api-version=2023-11-15": {
       "method": "GET",
@@ -293,10 +289,10 @@
                 "geospatialConfig": {
                   "type": "Geography"
                 },
-                "_rid": "LfIDAOwWaMg=",
-                "_ts": 1786572725,
-                "_self": "dbs/LfIDAA==/colls/LfIDAOwWaMg=/",
-                "_etag": "\"95757b73-b5f0-4108-869a-be0fdccac49a\"",
+                "_rid": "puArAJghlJU=",
+                "_ts": 1787444624,
+                "_self": "dbs/puArAA==/colls/puArAJghlJU=/",
+                "_etag": "\"bc451e5d-345f-4e3a-8d42-714741980a37\"",
                 "_docs": "docs/",
                 "_sprocs": "sprocs/",
                 "_triggers": "triggers/",
@@ -308,7 +304,7 @@
           }
         ]
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.DocumentDB/databaseAccounts/jacquiprod-cosmos-gntx5t/sqlDatabases?api-version=2023-11-15": {
       "method": "GET",
@@ -323,18 +319,18 @@
             "properties": {
               "resource": {
                 "id": "appdb",
-                "_rid": "LfIDAA==",
-                "_self": "dbs/LfIDAA==/",
-                "_etag": "\"33e3f051-b8d0-4570-8a67-3294ed59f843\"",
+                "_rid": "puArAA==",
+                "_self": "dbs/puArAA==/",
+                "_etag": "\"263e91b7-42b6-4d6c-88f8-29fec9681c20\"",
                 "_colls": "colls/",
                 "_users": "users/",
-                "_ts": 1786572707
+                "_ts": 1787444603
               }
             }
           }
         ]
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.KeyVault/vaults/jacquiprod-kv-gntx5t/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -343,7 +339,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/privateEndpoints/jacquiprod-pe-cosmos/privateDnsZoneGroups?api-version=2023-09-01": {
       "method": "GET",
@@ -352,7 +348,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/privateEndpoints/jacquiprod-pe-kv/privateDnsZoneGroups?api-version=2023-09-01": {
       "method": "GET",
@@ -361,7 +357,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Storage/storageAccounts/jacquiprodstggntx5t/blobServices/default/containers?api-version=2023-01-01": {
       "method": "GET",
@@ -370,7 +366,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Storage/storageAccounts/jacquiprodstggntx5t/blobServices?api-version=2023-01-01": {
       "method": "GET",
@@ -401,7 +397,7 @@
           }
         ]
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Storage/storageAccounts/jacquiprodstggntx5t/fileServices/default/shares?api-version=2023-01-01": {
       "method": "GET",
@@ -410,7 +406,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Storage/storageAccounts/jacquiprodstggntx5t/fileServices?api-version=2023-01-01": {
       "method": "GET",
@@ -441,7 +437,7 @@
           }
         ]
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Storage/storageAccounts/jacquiprodstggntx5t/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -450,7 +446,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging/providers/Microsoft.OperationalInsights/workspaces/jacquiprod-law/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -459,7 +455,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging/providers/Microsoft.Storage/storageAccounts/jacquiprodstlizjl4k/blobServices/default/containers?api-version=2023-01-01": {
       "method": "GET",
@@ -468,7 +464,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging/providers/Microsoft.Storage/storageAccounts/jacquiprodstlizjl4k/blobServices?api-version=2023-01-01": {
       "method": "GET",
@@ -499,7 +495,7 @@
           }
         ]
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging/providers/Microsoft.Storage/storageAccounts/jacquiprodstlizjl4k/fileServices/default/shares?api-version=2023-01-01": {
       "method": "GET",
@@ -508,7 +504,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging/providers/Microsoft.Storage/storageAccounts/jacquiprodstlizjl4k/fileServices?api-version=2023-01-01": {
       "method": "GET",
@@ -539,7 +535,7 @@
           }
         ]
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging/providers/Microsoft.Storage/storageAccounts/jacquiprodstlizjl4k/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -548,7 +544,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -557,7 +553,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -566,7 +562,7 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "GET https://management.azure.com/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/providers/Microsoft.Insights/diagnosticSettings?api-version=2021-05-01-preview": {
       "method": "GET",
@@ -575,9 +571,9 @@
       "body": {
         "value": []
       },
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
-    "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"ResourceContainers | where type =~ 'microsoft.resources/subscriptions/resourcegroups' | project name, location, tags, id\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
+    "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"ResourceContainers | where type =~ 'microsoft.resources/subscriptions/resourcegroups' | project name, location, tags, id | order by id asc\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
       "method": "POST",
       "url": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
       "status": 200,
@@ -586,18 +582,24 @@
         "count": 5,
         "data": [
           {
+            "name": "NetworkWatcherRG",
+            "location": "australiaeast",
+            "tags": null,
+            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/NetworkWatcherRG"
+          },
+          {
             "name": "jacquiprod-rg-apps",
             "location": "australiaeast",
             "tags": {
               "environment": "prod",
               "owner": "jacqui",
-              "project": "landingzone",
               "service": "platform",
-              "costcenter": "engineering",
               "businessunit": "cloud",
-              "workload": "prod-workloads",
+              "costcenter": "engineering",
+              "managedby": "bicep",
               "createdby": "bicep",
-              "managedby": "bicep"
+              "workload": "prod-workloads",
+              "project": "landingzone"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps"
           },
@@ -607,13 +609,13 @@
             "tags": {
               "environment": "prod",
               "owner": "jacqui",
-              "project": "landingzone",
               "service": "platform",
-              "costcenter": "engineering",
               "businessunit": "cloud",
-              "workload": "prod-workloads",
+              "costcenter": "engineering",
+              "managedby": "bicep",
               "createdby": "bicep",
-              "managedby": "bicep"
+              "workload": "prod-workloads",
+              "project": "landingzone"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-logging"
           },
@@ -623,13 +625,13 @@
             "tags": {
               "environment": "prod",
               "owner": "jacqui",
-              "project": "landingzone",
               "service": "platform",
-              "costcenter": "engineering",
               "businessunit": "cloud",
-              "workload": "prod-workloads",
+              "costcenter": "engineering",
+              "managedby": "bicep",
               "createdby": "bicep",
-              "managedby": "bicep"
+              "workload": "prod-workloads",
+              "project": "landingzone"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking"
           },
@@ -639,30 +641,24 @@
             "tags": {
               "environment": "prod",
               "owner": "jacqui",
-              "project": "landingzone",
               "service": "platform",
-              "costcenter": "engineering",
               "businessunit": "cloud",
-              "workload": "prod-workloads",
+              "costcenter": "engineering",
+              "managedby": "bicep",
               "createdby": "bicep",
-              "managedby": "bicep"
+              "workload": "prod-workloads",
+              "project": "landingzone"
             },
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-platform"
-          },
-          {
-            "name": "NetworkWatcherRG",
-            "location": "australiaeast",
-            "tags": null,
-            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/NetworkWatcherRG"
           }
         ],
         "facets": [],
         "resultTruncated": "false"
       },
-      "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"ResourceContainers | where type =~ 'microsoft.resources/subscriptions/resourcegroups' | project name, location, tags, id\"}",
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"ResourceContainers | where type =~ 'microsoft.resources/subscriptions/resourcegroups' | project name, location, tags, id | order by id asc\"}",
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
-    "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"Resources\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
+    "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"Resources | order by id asc\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
       "method": "POST",
       "url": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
       "status": 200,
@@ -670,6 +666,27 @@
         "totalRecords": 18,
         "count": 18,
         "data": [
+          {
+            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/NetworkWatcher_australiaeast",
+            "name": "NetworkWatcher_australiaeast",
+            "type": "microsoft.network/networkwatchers",
+            "tenantId": "6279a9ef-2043-4545-89eb-1e3bd432a466",
+            "kind": "",
+            "location": "australiaeast",
+            "resourceGroup": "networkwatcherrg",
+            "subscriptionId": "f40e79f7-bad2-4604-83c9-4de96a50c531",
+            "managedBy": "",
+            "sku": null,
+            "plan": null,
+            "properties": {
+              "provisioningState": "Succeeded",
+              "runningOperationIds": []
+            },
+            "tags": null,
+            "identity": null,
+            "zones": null,
+            "extendedLocation": null
+          },
           {
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.DocumentDB/databaseAccounts/jacquiprod-cosmos-gntx5t",
             "name": "jacquiprod-cosmos-gntx5t",
@@ -699,34 +716,27 @@
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.DocumentDB/databaseAccounts/jacquiprod-cosmos-gntx5t/privateEndpointConnections/jacquiprod-pe-cosmos"
                 }
               ],
+              "backupPolicy": {
+                "type": "Periodic",
+                "periodicModeProperties": {
+                  "backupIntervalInMinutes": 240,
+                  "backupRetentionIntervalInHours": 8,
+                  "backupStorageRedundancy": "Geo"
+                }
+              },
               "virtualNetworkRules": [],
+              "documentEndpoint": "https://jacquiprod-cosmos-gntx5t.documents.azure.com:443/",
+              "ipRules": [],
               "locations": [
                 {
                   "provisioningState": "Succeeded",
                   "id": "jacquiprod-cosmos-gntx5t-australiaeast",
-                  "locationName": "Australia East",
-                  "documentEndpoint": "https://jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com:443/",
                   "failoverPriority": 0,
+                  "documentEndpoint": "https://jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com:443/",
+                  "locationName": "Australia East",
                   "isZoneRedundant": false
                 }
               ],
-              "ipRules": [],
-              "disableLocalAuth": false,
-              "backupPolicy": {
-                "type": "Periodic",
-                "periodicModeProperties": {
-                  "backupStorageRedundancy": "Geo",
-                  "backupRetentionIntervalInHours": 8,
-                  "backupIntervalInMinutes": 240
-                }
-              },
-              "capabilities": [
-                {
-                  "name": "EnableServerless"
-                }
-              ],
-              "minimalTlsVersion": "Tls12",
-              "documentEndpoint": "https://jacquiprod-cosmos-gntx5t.documents.azure.com:443/",
               "enforceHierarchicalPartitionKeyIdLastLevel": false,
               "enablePerRegionPerPartitionAutoscale": false,
               "perPartitionAutomaticFailoverEnabled": false,
@@ -735,40 +745,41 @@
                 "schemaType": "WellDefined"
               },
               "isVirtualNetworkFilterEnabled": false,
-              "cors": [],
               "enablePriorityBasedExecution": false,
               "enableMultipleWriteLocations": false,
               "networkAclBypassResourceIds": [],
               "enablePartitionKeyMonitor": false,
               "databaseAccountOfferType": "Standard",
-              "enableAnalyticalStorage": false,
               "enableAutomaticFailover": true,
+              "enableAnalyticalStorage": false,
               "configurationOverrides": {},
               "enablePartitionMerge": false,
               "defaultPriorityLevel": "High",
               "enableBurstCapacity": false,
+              "minimalTlsVersion": "Tls12",
               "consistencyPolicy": {
                 "defaultConsistencyLevel": "Session",
                 "maxIntervalInSeconds": 5,
                 "maxStalenessPrefix": 100
               },
+              "networkAclBypass": "None",
+              "disableLocalAuth": false,
               "failoverPolicies": [
                 {
                   "id": "jacquiprod-cosmos-gntx5t-australiaeast",
-                  "locationName": "Australia East",
-                  "failoverPriority": 0
+                  "failoverPriority": 0,
+                  "locationName": "Australia East"
                 }
               ],
-              "networkAclBypass": "None",
               "defaultIdentity": "FirstPartyIdentity",
               "EnabledApiTypes": "Sql",
               "writeLocations": [
                 {
                   "provisioningState": "Succeeded",
                   "id": "jacquiprod-cosmos-gntx5t-australiaeast",
-                  "locationName": "Australia East",
-                  "documentEndpoint": "https://jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com:443/",
                   "failoverPriority": 0,
+                  "documentEndpoint": "https://jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com:443/",
+                  "locationName": "Australia East",
                   "isZoneRedundant": false
                 }
               ],
@@ -777,39 +788,45 @@
                 {
                   "provisioningState": "Succeeded",
                   "id": "jacquiprod-cosmos-gntx5t-australiaeast",
-                  "locationName": "Australia East",
-                  "documentEndpoint": "https://jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com:443/",
                   "failoverPriority": 0,
+                  "documentEndpoint": "https://jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com:443/",
+                  "locationName": "Australia East",
                   "isZoneRedundant": false
                 }
               ],
               "keysMetadata": {
                 "secondaryReadonlyMasterKey": {
-                  "generationTime": "2026-08-12T22:11:24.201Z"
+                  "generationTime": "2026-08-23T00:22:46.432Z"
                 },
                 "primaryReadonlyMasterKey": {
-                  "generationTime": "2026-08-12T22:11:24.201Z"
+                  "generationTime": "2026-08-23T00:22:46.432Z"
                 },
                 "secondaryMasterKey": {
-                  "generationTime": "2026-08-12T22:11:24.201Z"
+                  "generationTime": "2026-08-23T00:22:46.432Z"
                 },
                 "primaryMasterKey": {
-                  "generationTime": "2026-08-12T22:11:24.201Z"
+                  "generationTime": "2026-08-23T00:22:46.432Z"
                 }
               },
+              "cors": [],
+              "capabilities": [
+                {
+                  "name": "EnableServerless"
+                }
+              ],
               "sqlEndpoint": "https://jacquiprod-cosmos-gntx5t.documents.azure.com:443/",
-              "instanceId": "9ca090e2-28e1-4874-844e-f25b761d2e54"
+              "instanceId": "3f1063a1-5e56-4424-821d-e1cc9f66d184"
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
               "project": "landingzone",
-              "costcenter": "engineering",
+              "owner": "jacqui",
               "service": "platform",
               "createdby": "bicep",
+              "workload": "prod-workloads",
               "managedby": "bicep",
               "businessunit": "cloud",
-              "workload": "prod-workloads"
+              "costcenter": "engineering"
             },
             "identity": {
               "type": "None"
@@ -832,6 +849,10 @@
             "properties": {
               "provisioningState": "Succeeded",
               "publicNetworkAccess": "Disabled",
+              "sku": {
+                "name": "standard",
+                "family": "A"
+              },
               "privateEndpointConnections": [
                 {
                   "properties": {
@@ -845,57 +866,40 @@
                     }
                   },
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.KeyVault/vaults/jacquiprod-kv-gntx5t/privateEndpointConnections/kv-connection"
-                },
-                {
-                  "properties": {
-                    "provisioningState": "UpdatingDns",
-                    "privateLinkServiceConnectionState": {
-                      "status": "Approved",
-                      "actionsRequired": "None"
-                    },
-                    "privateEndpoint": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/privateEndpoints/jacquiprod-pe-kv"
-                    }
-                  },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.KeyVault/vaults/jacquiprod-kv-gntx5t/privateEndpointConnections/kv-connection.2"
                 }
               ],
-              "sku": {
-                "name": "standard",
-                "family": "A"
-              },
               "tenantId": "6279a9ef-2043-4545-89eb-1e3bd432a466",
-              "enableRbacAuthorization": true,
-              "softDeleteRetentionInDays": 7,
-              "enabledForDeployment": false,
-              "enableSoftDelete": true,
               "networkAcls": {
                 "virtualNetworkRules": [],
                 "defaultAction": "Deny",
                 "ipRules": [],
                 "bypass": "AzureServices"
               },
+              "softDeleteRetentionInDays": 7,
+              "enableRbacAuthorization": true,
+              "enabledForDeployment": false,
+              "enableSoftDelete": true,
               "accessPolicies": [],
               "vaultUri": "https://jacquiprod-kv-gntx5t.vault.azure.net/"
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
               "project": "landingzone",
-              "createdby": "bicep",
-              "costcenter": "engineering",
               "service": "platform",
+              "owner": "jacqui",
+              "costcenter": "engineering",
+              "createdby": "bicep",
               "businessunit": "cloud",
-              "managedby": "bicep",
-              "workload": "prod-workloads"
+              "workload": "prod-workloads",
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
             "extendedLocation": null
           },
           {
-            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.82711602-42cd-4120-8b14-2563eae4071a",
-            "name": "jacquiprod-pe-cosmos.nic.82711602-42cd-4120-8b14-2563eae4071a",
+            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.1cf93210-2c61-4fb7-8883-17ed571bdb5f",
+            "name": "jacquiprod-pe-cosmos.nic.1cf93210-2c61-4fb7-8883-17ed571bdb5f",
             "type": "microsoft.network/networkinterfaces",
             "tenantId": "6279a9ef-2043-4545-89eb-1e3bd432a466",
             "kind": "Regular",
@@ -911,16 +915,15 @@
               "enableAcceleratedNetworking": false,
               "disableTcpStateTracking": false,
               "vnetEncryptionSupported": false,
-              "resourceGuid": "8dd46d18-2be6-45e6-894d-b03a41319747",
               "enableIPForwarding": false,
               "ipConfigurations": [
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
-                    "privateIPAllocationMethod": "Dynamic",
                     "privateIPAddressVersion": "IPv4",
+                    "privateIPAllocationMethod": "Dynamic",
                     "primary": true,
-                    "privateIPAddress": "10.1.4.4",
+                    "privateIPAddress": "10.1.4.5",
                     "subnet": {
                       "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-privateendpoints"
                     },
@@ -932,18 +935,18 @@
                       ]
                     }
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.82711602-42cd-4120-8b14-2563eae4071a/ipConfigurations/privateEndpointIpConfig.51b3ce16-82c2-4853-8fa2-732c5e293827",
-                  "name": "privateEndpointIpConfig.51b3ce16-82c2-4853-8fa2-732c5e293827",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.1cf93210-2c61-4fb7-8883-17ed571bdb5f/ipConfigurations/privateEndpointIpConfig.1b373d7b-8d7e-45e8-88ec-4dd78b8b9a48",
+                  "name": "privateEndpointIpConfig.1b373d7b-8d7e-45e8-88ec-4dd78b8b9a48",
                   "type": "Microsoft.Network/networkInterfaces/ipConfigurations",
-                  "etag": "W/\"0b0dbdb5-6c9a-497e-8efb-5dba8f2ba9f9\""
+                  "etag": "W/\"34f934d9-1f36-44a9-89dd-09999d43f09a\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
-                    "privateIPAllocationMethod": "Dynamic",
                     "privateIPAddressVersion": "IPv4",
+                    "privateIPAllocationMethod": "Dynamic",
                     "primary": false,
-                    "privateIPAddress": "10.1.4.5",
+                    "privateIPAddress": "10.1.4.6",
                     "subnet": {
                       "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-privateendpoints"
                     },
@@ -955,18 +958,19 @@
                       ]
                     }
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.82711602-42cd-4120-8b14-2563eae4071a/ipConfigurations/privateEndpointIpConfig.eb4ccf2f-815c-47d3-86b6-d854b470fec9",
-                  "name": "privateEndpointIpConfig.eb4ccf2f-815c-47d3-86b6-d854b470fec9",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.1cf93210-2c61-4fb7-8883-17ed571bdb5f/ipConfigurations/privateEndpointIpConfig.d60ca72e-dc75-45eb-8ba9-bc44e202c3de",
+                  "name": "privateEndpointIpConfig.d60ca72e-dc75-45eb-8ba9-bc44e202c3de",
                   "type": "Microsoft.Network/networkInterfaces/ipConfigurations",
-                  "etag": "W/\"0b0dbdb5-6c9a-497e-8efb-5dba8f2ba9f9\""
+                  "etag": "W/\"34f934d9-1f36-44a9-89dd-09999d43f09a\""
                 }
               ],
+              "resourceGuid": "5e4c9963-26b0-41e9-8e7c-6e0e6a0e97ec",
               "tapConfigurations": [],
               "hostedWorkloads": [],
               "allowPort25Out": false,
               "auxiliaryMode": "None",
               "dnsSettings": {
-                "internalDomainNameSuffix": "omszdcgznaweplb4icy43lst4f.px.internal.cloudapp.net",
+                "internalDomainNameSuffix": "zvj4tztmhu5uplxedzm325emrg.px.internal.cloudapp.net",
                 "appliedDnsServers": [],
                 "dnsServers": []
               },
@@ -980,21 +984,21 @@
             "tags": {
               "environment": "prod",
               "project": "landingzone",
-              "owner": "jacqui",
               "service": "platform",
+              "owner": "jacqui",
               "costcenter": "engineering",
               "businessunit": "cloud",
+              "workload": "prod-workloads",
               "createdby": "bicep",
-              "managedby": "bicep",
-              "workload": "prod-workloads"
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
             "extendedLocation": null
           },
           {
-            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-kv.nic.757e0c3d-1564-48d2-88dc-23cb813a6cd8",
-            "name": "jacquiprod-pe-kv.nic.757e0c3d-1564-48d2-88dc-23cb813a6cd8",
+            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-kv.nic.5c6b8745-97a3-4ceb-8b79-cb2d839a400f",
+            "name": "jacquiprod-pe-kv.nic.5c6b8745-97a3-4ceb-8b79-cb2d839a400f",
             "type": "microsoft.network/networkinterfaces",
             "tenantId": "6279a9ef-2043-4545-89eb-1e3bd432a466",
             "kind": "Regular",
@@ -1009,9 +1013,8 @@
               "defaultOutboundConnectivityEnabled": false,
               "enableAcceleratedNetworking": false,
               "disableTcpStateTracking": false,
-              "resourceGuid": "4f6c3700-2f81-4f91-812b-14083d07fee9",
               "vnetEncryptionSupported": false,
-              "enableIPForwarding": false,
+              "resourceGuid": "cdd37bda-640a-4b15-8af0-dde52cbd7d5a",
               "ipConfigurations": [
                 {
                   "properties": {
@@ -1022,7 +1025,7 @@
                     "subnet": {
                       "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-privateendpoints"
                     },
-                    "privateIPAddress": "10.1.4.6",
+                    "privateIPAddress": "10.1.4.4",
                     "privateLinkConnectionProperties": {
                       "requiredMemberName": "default",
                       "groupId": "vault",
@@ -1031,38 +1034,39 @@
                       ]
                     }
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-kv.nic.757e0c3d-1564-48d2-88dc-23cb813a6cd8/ipConfigurations/privateEndpointIpConfig.fe3edd50-0fca-44ea-8905-9f3329f7b518",
-                  "name": "privateEndpointIpConfig.fe3edd50-0fca-44ea-8905-9f3329f7b518",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-kv.nic.5c6b8745-97a3-4ceb-8b79-cb2d839a400f/ipConfigurations/privateEndpointIpConfig.5e1b3396-e7de-4ae9-8595-b4ceafc750a9",
+                  "name": "privateEndpointIpConfig.5e1b3396-e7de-4ae9-8595-b4ceafc750a9",
                   "type": "Microsoft.Network/networkInterfaces/ipConfigurations",
-                  "etag": "W/\"9ef05976-f3ab-4d40-8f4d-0a56c349bba9\""
+                  "etag": "W/\"f7776f59-17c0-44d0-88b1-3681e58fd19c\""
                 }
               ],
+              "enableIPForwarding": false,
               "tapConfigurations": [],
               "hostedWorkloads": [],
               "allowPort25Out": false,
+              "auxiliaryMode": "None",
               "dnsSettings": {
-                "internalDomainNameSuffix": "omszdcgznaweplb4icy43lst4f.px.internal.cloudapp.net",
+                "internalDomainNameSuffix": "zvj4tztmhu5uplxedzm325emrg.px.internal.cloudapp.net",
                 "appliedDnsServers": [],
                 "dnsServers": []
               },
-              "auxiliaryMode": "None",
               "auxiliarySku": "None",
-              "macAddress": "",
-              "nicType": "Standard",
               "privateEndpoint": {
                 "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/privateEndpoints/jacquiprod-pe-kv"
-              }
+              },
+              "macAddress": "",
+              "nicType": "Standard"
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
-              "workload": "prod-workloads",
-              "costcenter": "engineering",
               "project": "landingzone",
-              "service": "platform",
+              "owner": "jacqui",
               "createdby": "bicep",
-              "managedby": "bicep",
-              "businessunit": "cloud"
+              "service": "platform",
+              "costcenter": "engineering",
+              "workload": "prod-workloads",
+              "businessunit": "cloud",
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -1084,11 +1088,11 @@
               "provisioningState": "Succeeded",
               "networkInterfaces": [
                 {
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.82711602-42cd-4120-8b14-2563eae4071a"
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-cosmos.nic.1cf93210-2c61-4fb7-8883-17ed571bdb5f"
                 }
               ],
+              "resourceGuid": "ae18375a-09ee-4cab-8d3b-e29ba8d16c45",
               "ipConfigurations": [],
-              "resourceGuid": "9fdd54fc-bd09-4832-880c-e7ed630779b9",
               "subnet": {
                 "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-privateendpoints"
               },
@@ -1110,34 +1114,34 @@
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/privateEndpoints/jacquiprod-pe-cosmos/privateLinkServiceConnections/cosmos-connection",
                   "name": "cosmos-connection",
                   "type": "Microsoft.Network/privateEndpoints/privateLinkServiceConnections",
-                  "etag": "W/\"7e28d69c-3857-4dd3-8273-b714e6749a3d\""
+                  "etag": "W/\"7122ab9f-d797-431c-8d2a-d6b0ca82177c\""
                 }
               ],
               "customNetworkInterfaceName": "",
               "customDnsConfigs": [
                 {
-                  "ipAddresses": [
-                    "10.1.4.4"
-                  ],
-                  "fqdn": "jacquiprod-cosmos-gntx5t.documents.azure.com"
-                },
-                {
+                  "fqdn": "jacquiprod-cosmos-gntx5t.documents.azure.com",
                   "ipAddresses": [
                     "10.1.4.5"
-                  ],
-                  "fqdn": "jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com"
+                  ]
+                },
+                {
+                  "fqdn": "jacquiprod-cosmos-gntx5t-australiaeast.documents.azure.com",
+                  "ipAddresses": [
+                    "10.1.4.6"
+                  ]
                 }
               ],
               "ipVersionType": "IPv4"
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
-              "createdby": "bicep",
               "project": "landingzone",
+              "owner": "jacqui",
+              "service": "platform",
+              "createdby": "bicep",
               "businessunit": "cloud",
               "costcenter": "engineering",
-              "service": "platform",
               "managedby": "bicep",
               "workload": "prod-workloads"
             },
@@ -1161,11 +1165,11 @@
               "provisioningState": "Succeeded",
               "networkInterfaces": [
                 {
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-kv.nic.757e0c3d-1564-48d2-88dc-23cb813a6cd8"
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/networkInterfaces/jacquiprod-pe-kv.nic.5c6b8745-97a3-4ceb-8b79-cb2d839a400f"
                 }
               ],
+              "resourceGuid": "9583d09c-c1f4-4feb-8de9-82024488ca31",
               "ipConfigurations": [],
-              "resourceGuid": "f6510d27-9965-4f86-8412-3f579cf19849",
               "subnet": {
                 "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-privateendpoints"
               },
@@ -1187,16 +1191,16 @@
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-apps/providers/Microsoft.Network/privateEndpoints/jacquiprod-pe-kv/privateLinkServiceConnections/kv-connection",
                   "name": "kv-connection",
                   "type": "Microsoft.Network/privateEndpoints/privateLinkServiceConnections",
-                  "etag": "W/\"bec5b731-cae8-4c9f-8331-241e2c6836f1\""
+                  "etag": "W/\"24181891-2853-40de-8439-627cf34a343d\""
                 }
               ],
               "customNetworkInterfaceName": "",
               "customDnsConfigs": [
                 {
-                  "fqdn": "jacquiprod-kv-gntx5t.vault.azure.net",
                   "ipAddresses": [
-                    "10.1.4.6"
-                  ]
+                    "10.1.4.4"
+                  ],
+                  "fqdn": "jacquiprod-kv-gntx5t.vault.azure.net"
                 }
               ],
               "ipVersionType": "IPv4"
@@ -1208,8 +1212,8 @@
               "service": "platform",
               "createdby": "bicep",
               "costcenter": "engineering",
-              "managedby": "bicep",
               "businessunit": "cloud",
+              "managedby": "bicep",
               "workload": "prod-workloads"
             },
             "identity": null,
@@ -1238,18 +1242,17 @@
                 "services": {
                   "blob": {
                     "enabled": true,
-                    "lastEnabledTime": "2026-08-12T22:10:16.455Z",
+                    "lastEnabledTime": "2026-08-23T00:21:29.932Z",
                     "keyType": "Account"
                   },
                   "file": {
                     "enabled": true,
-                    "lastEnabledTime": "2026-08-12T22:10:16.455Z",
+                    "lastEnabledTime": "2026-08-23T00:21:29.932Z",
                     "keyType": "Account"
                   }
                 }
               },
               "privateEndpointConnections": [],
-              "supportsHttpsTrafficOnly": true,
               "networkAcls": {
                 "virtualNetworkRules": [],
                 "defaultAction": "Allow",
@@ -1257,37 +1260,38 @@
                 "bypass": "AzureServices",
                 "ipv6Rules": []
               },
-              "minimumTlsVersion": "TLS1_2",
-              "allowCrossTenantReplication": false,
-              "allowBlobPublicAccess": false,
               "allowCrossTenantDelegationSas": false,
+              "allowCrossTenantReplication": false,
+              "supportsHttpsTrafficOnly": true,
+              "creationTime": "2026-08-23T00:21:29.732Z",
+              "allowBlobPublicAccess": false,
+              "minimumTlsVersion": "TLS1_2",
               "primaryEndpoints": {
                 "blob": "https://jacquiprodstggntx5t.blob.core.windows.net/",
                 "file": "https://jacquiprodstggntx5t.file.core.windows.net/",
-                "table": "https://jacquiprodstggntx5t.table.core.windows.net/",
                 "queue": "https://jacquiprodstggntx5t.queue.core.windows.net/",
+                "table": "https://jacquiprodstggntx5t.table.core.windows.net/",
                 "dfs": "https://jacquiprodstggntx5t.dfs.core.windows.net/",
                 "web": "https://jacquiprodstggntx5t.z8.web.core.windows.net/"
               },
-              "statusOfPrimary": "available",
               "primaryLocation": "australiaeast",
               "keyCreationTime": {
-                "key1": "2026-08-12T22:10:16.444Z",
-                "key2": "2026-08-12T22:10:16.444Z"
+                "key2": "2026-08-23T00:21:29.918Z",
+                "key1": "2026-08-23T00:21:29.918Z"
               },
-              "creationTime": "2026-08-12T22:10:16.249Z",
+              "statusOfPrimary": "available",
               "accessTier": "Hot"
             },
             "tags": {
               "environment": "prod",
               "owner": "jacqui",
-              "costcenter": "engineering",
               "project": "landingzone",
+              "costcenter": "engineering",
               "service": "platform",
               "businessunit": "cloud",
               "createdby": "bicep",
-              "managedby": "bicep",
-              "workload": "prod-workloads"
+              "workload": "prod-workloads",
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -1311,33 +1315,33 @@
                 "name": "PerGB2018",
                 "lastSkuUpdate": "2026-08-03T21:24:16.476Z"
               },
-              "createdDate": "2026-08-03T21:24:16.476Z",
-              "publicNetworkAccessForQuery": "Enabled",
-              "publicNetworkAccessForIngestion": "Enabled",
-              "workspaceCapping": {
-                "quotaNextResetTime": "2026-08-13T03:00:00Z",
-                "dailyQuotaGb": -1.0,
-                "dataIngestionStatus": "RespectQuota"
-              },
               "features": {
                 "enableLogAccessUsingOnlyResourcePermissions": true,
                 "searchVersion": 1,
                 "legacy": 0
               },
+              "modifiedDate": "2026-08-23T00:21:43.022Z",
+              "createdDate": "2026-08-03T21:24:16.476Z",
+              "publicNetworkAccessForQuery": "Enabled",
+              "publicNetworkAccessForIngestion": "Enabled",
+              "workspaceCapping": {
+                "dataIngestionStatus": "RespectQuota",
+                "quotaNextResetTime": "2026-08-23T03:00:00Z",
+                "dailyQuotaGb": -1.0
+              },
               "retentionInDays": 30,
-              "customerId": "2a52ddea-f151-4135-84cc-441053e997c3",
-              "modifiedDate": "2026-08-12T22:22:05.078Z"
+              "customerId": "2a52ddea-f151-4135-84cc-441053e997c3"
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
               "project": "landingzone",
+              "service": "platform",
+              "owner": "jacqui",
               "createdby": "bicep",
               "costcenter": "engineering",
-              "service": "platform",
+              "businessunit": "cloud",
               "workload": "prod-workloads",
-              "managedby": "bicep",
-              "businessunit": "cloud"
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -1365,17 +1369,18 @@
                 "services": {
                   "file": {
                     "enabled": true,
-                    "lastEnabledTime": "2026-08-12T22:10:03.873Z",
+                    "lastEnabledTime": "2026-08-23T00:21:29.979Z",
                     "keyType": "Account"
                   },
                   "blob": {
                     "enabled": true,
-                    "lastEnabledTime": "2026-08-12T22:10:03.873Z",
+                    "lastEnabledTime": "2026-08-23T00:21:29.979Z",
                     "keyType": "Account"
                   }
                 }
               },
               "privateEndpointConnections": [],
+              "supportsHttpsTrafficOnly": true,
               "networkAcls": {
                 "virtualNetworkRules": [],
                 "defaultAction": "Allow",
@@ -1383,38 +1388,37 @@
                 "bypass": "AzureServices",
                 "ipv6Rules": []
               },
-              "minimumTlsVersion": "TLS1_2",
+              "allowBlobPublicAccess": false,
               "allowCrossTenantDelegationSas": false,
               "allowCrossTenantReplication": false,
-              "supportsHttpsTrafficOnly": true,
-              "allowBlobPublicAccess": false,
+              "minimumTlsVersion": "TLS1_2",
               "primaryEndpoints": {
                 "file": "https://jacquiprodstlizjl4k.file.core.windows.net/",
                 "blob": "https://jacquiprodstlizjl4k.blob.core.windows.net/",
                 "table": "https://jacquiprodstlizjl4k.table.core.windows.net/",
                 "queue": "https://jacquiprodstlizjl4k.queue.core.windows.net/",
-                "web": "https://jacquiprodstlizjl4k.z8.web.core.windows.net/",
-                "dfs": "https://jacquiprodstlizjl4k.dfs.core.windows.net/"
+                "dfs": "https://jacquiprodstlizjl4k.dfs.core.windows.net/",
+                "web": "https://jacquiprodstlizjl4k.z8.web.core.windows.net/"
+              },
+              "creationTime": "2026-08-23T00:21:29.773Z",
+              "keyCreationTime": {
+                "key2": "2026-08-23T00:21:29.967Z",
+                "key1": "2026-08-23T00:21:29.967Z"
               },
               "primaryLocation": "australiaeast",
               "statusOfPrimary": "available",
-              "keyCreationTime": {
-                "key2": "2026-08-12T22:10:03.862Z",
-                "key1": "2026-08-12T22:10:03.862Z"
-              },
-              "creationTime": "2026-08-12T22:10:03.698Z",
               "accessTier": "Hot"
             },
             "tags": {
               "environment": "prod",
               "project": "landingzone",
               "owner": "jacqui",
-              "costcenter": "engineering",
-              "service": "platform",
-              "businessunit": "cloud",
-              "workload": "prod-workloads",
               "createdby": "bicep",
-              "managedby": "bicep"
+              "service": "platform",
+              "costcenter": "engineering",
+              "businessunit": "cloud",
+              "managedby": "bicep",
+              "workload": "prod-workloads"
             },
             "identity": null,
             "zones": null,
@@ -1437,8 +1441,9 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
+              "resourceGuid": "8a1a94e1-3979-40b2-8cca-da4147a00ce7",
               "idleTimeoutInMinutes": 4,
-              "resourceGuid": "05d9e316-56bf-407f-8f5a-0fe6f02ab404",
+              "scope": "Public",
               "subnets": [
                 {
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-web"
@@ -1451,19 +1456,18 @@
                 {
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/publicIPAddresses/jacquiprod-pip-nat"
                 }
-              ],
-              "scope": "Public"
+              ]
             },
             "tags": {
               "environment": "prod",
+              "project": "landingzone",
               "owner": "jacqui",
               "costcenter": "engineering",
-              "project": "landingzone",
               "service": "platform",
-              "businessunit": "cloud",
               "createdby": "bicep",
-              "managedby": "bicep",
-              "workload": "prod-workloads"
+              "businessunit": "cloud",
+              "workload": "prod-workloads",
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -1483,139 +1487,139 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
-              "resourceGuid": "c84d58a6-8881-453a-80d2-6e0ae99d6bb9",
+              "resourceGuid": "17b75bfc-fce1-487e-859b-e0bf982228f1",
               "defaultSecurityRules": [
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
+                    "description": "Allow inbound traffic from all VMs in VNET",
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "VirtualNetwork",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "VirtualNetwork",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 65000,
-                    "description": "Allow inbound traffic from all VMs in VNET",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowVnetInBound",
                   "name": "AllowVnetInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"d4c793c8-0ef7-4abb-8856-fe44c1dace62\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowVnetInBound",
+                  "etag": "W/\"a96ae6a1-172d-428c-8434-aa4a59b2a219\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
+                    "description": "Allow inbound traffic from azure load balancer",
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "AzureLoadBalancer",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 65001,
-                    "description": "Allow inbound traffic from azure load balancer",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowAzureLoadBalancerInBound",
                   "name": "AllowAzureLoadBalancerInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"d4c793c8-0ef7-4abb-8856-fe44c1dace62\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowAzureLoadBalancerInBound",
+                  "etag": "W/\"a96ae6a1-172d-428c-8434-aa4a59b2a219\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
+                    "description": "Deny all inbound traffic",
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 65500,
-                    "description": "Deny all inbound traffic",
                     "access": "Deny"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/DenyAllInBound",
                   "name": "DenyAllInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"d4c793c8-0ef7-4abb-8856-fe44c1dace62\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/DenyAllInBound",
+                  "etag": "W/\"a96ae6a1-172d-428c-8434-aa4a59b2a219\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
+                    "description": "Allow outbound traffic from all VMs to all VMs in VNET",
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "VirtualNetwork",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "VirtualNetwork",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65000,
-                    "description": "Allow outbound traffic from all VMs to all VMs in VNET",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowVnetOutBound",
                   "name": "AllowVnetOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"d4c793c8-0ef7-4abb-8856-fe44c1dace62\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowVnetOutBound",
+                  "etag": "W/\"a96ae6a1-172d-428c-8434-aa4a59b2a219\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
+                    "description": "Allow outbound traffic from all VMs to Internet",
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "Internet",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65001,
-                    "description": "Allow outbound traffic from all VMs to Internet",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowInternetOutBound",
                   "name": "AllowInternetOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"d4c793c8-0ef7-4abb-8856-fe44c1dace62\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/AllowInternetOutBound",
+                  "etag": "W/\"a96ae6a1-172d-428c-8434-aa4a59b2a219\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
+                    "description": "Deny all outbound traffic",
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65500,
-                    "description": "Deny all outbound traffic",
                     "access": "Deny"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/DenyAllOutBound",
                   "name": "DenyAllOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"d4c793c8-0ef7-4abb-8856-fe44c1dace62\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/defaultSecurityRules/DenyAllOutBound",
+                  "etag": "W/\"a96ae6a1-172d-428c-8434-aa4a59b2a219\""
                 }
               ],
               "securityRules": [
@@ -1623,22 +1627,22 @@
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "10.1.2.0/24",
+                    "destinationPortRange": "8080",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "8080",
                     "sourceAddressPrefix": "10.1.1.0/24",
                     "protocol": "Tcp",
                     "direction": "Inbound",
                     "priority": 100,
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/securityRules/Allow-Web-To-App",
                   "name": "Allow-Web-To-App",
                   "type": "Microsoft.Network/networkSecurityGroups/securityRules",
-                  "etag": "W/\"d4c793c8-0ef7-4abb-8856-fe44c1dace62\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app/securityRules/Allow-Web-To-App",
+                  "etag": "W/\"a96ae6a1-172d-428c-8434-aa4a59b2a219\""
                 }
               ],
               "subnets": [
@@ -1651,12 +1655,12 @@
               "environment": "prod",
               "project": "landingzone",
               "owner": "jacqui",
-              "service": "platform",
-              "businessunit": "cloud",
               "costcenter": "engineering",
+              "service": "platform",
+              "createdby": "bicep",
+              "businessunit": "cloud",
               "workload": "prod-workloads",
-              "managedby": "bicep",
-              "createdby": "bicep"
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -1676,139 +1680,139 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
-              "resourceGuid": "fa3f01ca-16d8-468e-85b2-ab09556e222c",
+              "resourceGuid": "58aaa6c7-19c5-4641-89a0-abc385ef1717",
               "defaultSecurityRules": [
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "VirtualNetwork",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "VirtualNetwork",
-                    "protocol": "*",
-                    "direction": "Inbound",
-                    "priority": 65000,
                     "description": "Allow inbound traffic from all VMs in VNET",
+                    "protocol": "*",
+                    "direction": "Inbound",
+                    "priority": 65000,
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowVnetInBound",
                   "name": "AllowVnetInBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowVnetInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "AzureLoadBalancer",
+                    "description": "Allow inbound traffic from azure load balancer",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 65001,
-                    "description": "Allow inbound traffic from azure load balancer",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowAzureLoadBalancerInBound",
                   "name": "AllowAzureLoadBalancerInBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowAzureLoadBalancerInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
+                    "description": "Deny all inbound traffic",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 65500,
-                    "description": "Deny all inbound traffic",
                     "access": "Deny"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/DenyAllInBound",
                   "name": "DenyAllInBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/DenyAllInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "VirtualNetwork",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "VirtualNetwork",
+                    "description": "Allow outbound traffic from all VMs to all VMs in VNET",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65000,
-                    "description": "Allow outbound traffic from all VMs to all VMs in VNET",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowVnetOutBound",
                   "name": "AllowVnetOutBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowVnetOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "Internet",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
+                    "description": "Allow outbound traffic from all VMs to Internet",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65001,
-                    "description": "Allow outbound traffic from all VMs to Internet",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowInternetOutBound",
                   "name": "AllowInternetOutBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/AllowInternetOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
+                    "description": "Deny all outbound traffic",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65500,
-                    "description": "Deny all outbound traffic",
                     "access": "Deny"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/DenyAllOutBound",
                   "name": "DenyAllOutBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/defaultSecurityRules/DenyAllOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 }
               ],
               "securityRules": [
@@ -1816,43 +1820,43 @@
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "10.1.3.0/24",
+                    "destinationPortRange": "1433",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "1433",
                     "sourceAddressPrefix": "10.1.2.0/24",
                     "protocol": "Tcp",
                     "direction": "Inbound",
                     "priority": 100,
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/securityRules/Allow-App-To-Sql",
                   "name": "Allow-App-To-Sql",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/securityRules/Allow-App-To-Sql",
                   "type": "Microsoft.Network/networkSecurityGroups/securityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 4096,
                     "access": "Deny"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/securityRules/Deny-All-Inbound",
                   "name": "Deny-All-Inbound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data/securityRules/Deny-All-Inbound",
                   "type": "Microsoft.Network/networkSecurityGroups/securityRules",
-                  "etag": "W/\"6213d072-a2ee-4474-8cd1-dfefab6b2219\""
+                  "etag": "W/\"cfcb3748-d6b8-495e-8417-fe19dbd285b6\""
                 }
               ],
               "subnets": [
@@ -1863,14 +1867,14 @@
             },
             "tags": {
               "environment": "prod",
+              "costcenter": "engineering",
+              "businessunit": "cloud",
               "project": "landingzone",
               "owner": "jacqui",
-              "service": "platform",
-              "businessunit": "cloud",
-              "costcenter": "engineering",
-              "workload": "prod-workloads",
               "managedby": "bicep",
-              "createdby": "bicep"
+              "service": "platform",
+              "createdby": "bicep",
+              "workload": "prod-workloads"
             },
             "identity": null,
             "zones": null,
@@ -1890,139 +1894,139 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
-              "resourceGuid": "dc5d6c33-511c-4e64-82e6-79f3a889a171",
+              "resourceGuid": "943a299b-beeb-44bb-8350-64b0618e69a2",
               "defaultSecurityRules": [
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "VirtualNetwork",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "VirtualNetwork",
-                    "protocol": "*",
-                    "direction": "Inbound",
-                    "priority": 65000,
                     "description": "Allow inbound traffic from all VMs in VNET",
+                    "protocol": "*",
+                    "direction": "Inbound",
+                    "priority": 65000,
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowVnetInBound",
                   "name": "AllowVnetInBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowVnetInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "AzureLoadBalancer",
+                    "description": "Allow inbound traffic from azure load balancer",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 65001,
-                    "description": "Allow inbound traffic from azure load balancer",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowAzureLoadBalancerInBound",
                   "name": "AllowAzureLoadBalancerInBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowAzureLoadBalancerInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
+                    "description": "Deny all inbound traffic",
                     "protocol": "*",
                     "direction": "Inbound",
                     "priority": 65500,
-                    "description": "Deny all inbound traffic",
                     "access": "Deny"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/DenyAllInBound",
                   "name": "DenyAllInBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/DenyAllInBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "VirtualNetwork",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "VirtualNetwork",
+                    "description": "Allow outbound traffic from all VMs to all VMs in VNET",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65000,
-                    "description": "Allow outbound traffic from all VMs to all VMs in VNET",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowVnetOutBound",
                   "name": "AllowVnetOutBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowVnetOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "Internet",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
+                    "description": "Allow outbound traffic from all VMs to Internet",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65001,
-                    "description": "Allow outbound traffic from all VMs to Internet",
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowInternetOutBound",
                   "name": "AllowInternetOutBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/AllowInternetOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "*",
+                    "destinationPortRange": "*",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "*",
                     "sourceAddressPrefix": "*",
+                    "description": "Deny all outbound traffic",
                     "protocol": "*",
                     "direction": "Outbound",
                     "priority": 65500,
-                    "description": "Deny all outbound traffic",
                     "access": "Deny"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/DenyAllOutBound",
                   "name": "DenyAllOutBound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/defaultSecurityRules/DenyAllOutBound",
                   "type": "Microsoft.Network/networkSecurityGroups/defaultSecurityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 }
               ],
               "securityRules": [
@@ -2030,43 +2034,43 @@
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "10.1.1.0/24",
+                    "destinationPortRange": "443",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "443",
                     "sourceAddressPrefix": "Internet",
                     "protocol": "Tcp",
                     "direction": "Inbound",
                     "priority": 100,
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/securityRules/Allow-HTTPS-Inbound",
                   "name": "Allow-HTTPS-Inbound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/securityRules/Allow-HTTPS-Inbound",
                   "type": "Microsoft.Network/networkSecurityGroups/securityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 },
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "destinationAddressPrefixes": [],
-                    "destinationPortRanges": [],
                     "sourceAddressPrefixes": [],
+                    "destinationPortRanges": [],
                     "destinationAddressPrefix": "10.1.1.0/24",
+                    "destinationPortRange": "80",
                     "sourcePortRanges": [],
                     "sourcePortRange": "*",
-                    "destinationPortRange": "80",
                     "sourceAddressPrefix": "Internet",
                     "protocol": "Tcp",
                     "direction": "Inbound",
                     "priority": 110,
                     "access": "Allow"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/securityRules/Allow-HTTP-Inbound",
                   "name": "Allow-HTTP-Inbound",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web/securityRules/Allow-HTTP-Inbound",
                   "type": "Microsoft.Network/networkSecurityGroups/securityRules",
-                  "etag": "W/\"b7d5bc56-cf7f-4083-8b8c-a2bf8dd174d8\""
+                  "etag": "W/\"0930b787-1795-49d2-8772-5b84377321a8\""
                 }
               ],
               "subnets": [
@@ -2077,14 +2081,14 @@
             },
             "tags": {
               "environment": "prod",
+              "costcenter": "engineering",
+              "businessunit": "cloud",
               "project": "landingzone",
               "owner": "jacqui",
-              "service": "platform",
-              "businessunit": "cloud",
-              "costcenter": "engineering",
-              "workload": "prod-workloads",
               "managedby": "bicep",
-              "createdby": "bicep"
+              "service": "platform",
+              "createdby": "bicep",
+              "workload": "prod-workloads"
             },
             "identity": null,
             "zones": null,
@@ -2107,9 +2111,9 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
-              "resourceGuid": "79da664f-0eef-4990-8771-c99013a8f370",
-              "ipAddress": "4.196.171.126",
+              "resourceGuid": "18cecd57-e594-4df3-83e5-f82dff4f7cda",
               "idleTimeoutInMinutes": 4,
+              "ipAddress": "20.92.124.115",
               "publicIPAllocationMethod": "Static",
               "publicIPAddressVersion": "IPv4",
               "ddosSettings": {
@@ -2122,14 +2126,14 @@
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
               "project": "landingzone",
-              "costcenter": "engineering",
-              "createdby": "bicep",
               "service": "platform",
+              "owner": "jacqui",
+              "createdby": "bicep",
+              "costcenter": "engineering",
+              "workload": "prod-workloads",
               "businessunit": "cloud",
-              "managedby": "bicep",
-              "workload": "prod-workloads"
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -2149,7 +2153,7 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
-              "resourceGuid": "ce5042e8-2803-4e02-83bc-e5d683080b63",
+              "resourceGuid": "b686ed65-4c56-47c0-8429-bea4e5c62736",
               "subnets": [
                 {
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-web"
@@ -2161,32 +2165,32 @@
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-data"
                 }
               ],
+              "disableBgpRoutePropagation": false,
               "routes": [
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
                     "addressPrefix": "10.0.0.0/16",
-                    "nextHopType": "VnetLocal",
-                    "hasBgpOverride": false
+                    "hasBgpOverride": false,
+                    "nextHopType": "VnetLocal"
                   },
                   "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/routeTables/jacquiprod-rt-apps/routes/to-hub",
                   "name": "to-hub",
                   "type": "Microsoft.Network/routeTables/routes",
-                  "etag": "W/\"406562c8-ccc0-4489-8780-cff296237c04\""
+                  "etag": "W/\"737a6f9e-a071-4204-8ff7-912639b1c1c4\""
                 }
-              ],
-              "disableBgpRoutePropagation": false
+              ]
             },
             "tags": {
               "environment": "prod",
               "project": "landingzone",
-              "owner": "jacqui",
               "service": "platform",
-              "businessunit": "cloud",
+              "owner": "jacqui",
               "costcenter": "engineering",
+              "businessunit": "cloud",
+              "createdby": "bicep",
               "workload": "prod-workloads",
-              "managedby": "bicep",
-              "createdby": "bicep"
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -2206,118 +2210,20 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
-              "resourceGuid": "e12bf61d-e8fd-4996-8c0a-582f9bfe1700",
-              "subnets": [
-                {
-                  "properties": {
-                    "provisioningState": "Succeeded",
-                    "networkSecurityGroup": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web"
-                    },
-                    "privateLinkServiceNetworkPolicies": "Enabled",
-                    "privateEndpointNetworkPolicies": "Disabled",
-                    "addressPrefix": "10.1.1.0/24",
-                    "delegations": [],
-                    "natGateway": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/natGateways/jacquiprod-natgw-apps"
-                    },
-                    "routeTable": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/routeTables/jacquiprod-rt-apps"
-                    }
-                  },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-web",
-                  "name": "snet-web",
-                  "type": "Microsoft.Network/virtualNetworks/subnets",
-                  "etag": "W/\"6f9657b2-834c-47d7-8a79-52fc2081dd84\""
-                },
-                {
-                  "properties": {
-                    "provisioningState": "Succeeded",
-                    "networkSecurityGroup": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app"
-                    },
-                    "privateLinkServiceNetworkPolicies": "Enabled",
-                    "privateEndpointNetworkPolicies": "Disabled",
-                    "addressPrefix": "10.1.2.0/24",
-                    "delegations": [],
-                    "natGateway": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/natGateways/jacquiprod-natgw-apps"
-                    },
-                    "routeTable": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/routeTables/jacquiprod-rt-apps"
-                    }
-                  },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-app",
-                  "name": "snet-app",
-                  "type": "Microsoft.Network/virtualNetworks/subnets",
-                  "etag": "W/\"6f9657b2-834c-47d7-8a79-52fc2081dd84\""
-                },
-                {
-                  "properties": {
-                    "provisioningState": "Succeeded",
-                    "networkSecurityGroup": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data"
-                    },
-                    "privateLinkServiceNetworkPolicies": "Enabled",
-                    "privateEndpointNetworkPolicies": "Disabled",
-                    "addressPrefix": "10.1.3.0/24",
-                    "delegations": [],
-                    "routeTable": {
-                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/routeTables/jacquiprod-rt-apps"
-                    }
-                  },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-data",
-                  "name": "snet-data",
-                  "type": "Microsoft.Network/virtualNetworks/subnets",
-                  "etag": "W/\"6f9657b2-834c-47d7-8a79-52fc2081dd84\""
-                },
-                {
-                  "properties": {
-                    "provisioningState": "Succeeded",
-                    "ipConfigurations": [
-                      {
-                        "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/JACQUIPROD-RG-APPS/providers/Microsoft.Network/networkInterfaces/JACQUIPROD-PE-COSMOS.NIC.82711602-42cd-4120-8b14-2563eae4071a/ipConfigurations/PRIVATEENDPOINTIPCONFIG.eb4ccf2f-815c-47d3-86b6-d854b470fec9"
-                      },
-                      {
-                        "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/JACQUIPROD-RG-APPS/providers/Microsoft.Network/networkInterfaces/JACQUIPROD-PE-COSMOS.NIC.82711602-42cd-4120-8b14-2563eae4071a/ipConfigurations/PRIVATEENDPOINTIPCONFIG.51b3ce16-82c2-4853-8fa2-732c5e293827"
-                      },
-                      {
-                        "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/JACQUIPROD-RG-APPS/providers/Microsoft.Network/networkInterfaces/JACQUIPROD-PE-KV.NIC.757e0c3d-1564-48d2-88dc-23cb813a6cd8/ipConfigurations/PRIVATEENDPOINTIPCONFIG.fe3edd50-0fca-44ea-8905-9f3329f7b518"
-                      }
-                    ],
-                    "privateLinkServiceNetworkPolicies": "Enabled",
-                    "privateEndpointNetworkPolicies": "Disabled",
-                    "addressPrefix": "10.1.4.0/24",
-                    "delegations": [],
-                    "privateEndpoints": [
-                      {
-                        "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/JACQUIPROD-RG-APPS/providers/Microsoft.Network/privateEndpoints/JACQUIPROD-PE-COSMOS"
-                      },
-                      {
-                        "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/JACQUIPROD-RG-APPS/providers/Microsoft.Network/privateEndpoints/JACQUIPROD-PE-KV"
-                      }
-                    ],
-                    "purpose": "PrivateEndpoints"
-                  },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-privateendpoints",
-                  "name": "snet-privateendpoints",
-                  "type": "Microsoft.Network/virtualNetworks/subnets",
-                  "etag": "W/\"6f9657b2-834c-47d7-8a79-52fc2081dd84\""
-                }
-              ],
+              "resourceGuid": "0d2c6f49-64ab-4a7b-832d-5dc2744887fa",
               "privateEndpointVNetPolicies": "Disabled",
               "virtualNetworkPeerings": [
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
-                    "resourceGuid": "1c82669e-b9ce-48fa-8345-5b901183638b",
+                    "resourceGuid": "70f09fd7-7e4a-4c66-841f-c65f452a04b7",
                     "remoteVirtualNetworkAddressSpace": {
                       "addressPrefixes": [
                         "10.0.0.0/16"
                       ]
                     },
-                    "allowVirtualNetworkAccess": true,
                     "doNotVerifyRemoteGateways": false,
+                    "allowVirtualNetworkAccess": true,
                     "allowForwardedTraffic": true,
                     "remoteVirtualNetwork": {
                       "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-hub"
@@ -2328,16 +2234,104 @@
                         "10.0.0.0/16"
                       ]
                     },
-                    "useRemoteGateways": false,
                     "peerCompleteVnets": true,
+                    "useRemoteGateways": false,
                     "routeServiceVips": {},
                     "peeringSyncLevel": "FullyInSync",
                     "peeringState": "Connected"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/virtualNetworkPeerings/apps-to-hub",
                   "name": "apps-to-hub",
                   "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
-                  "etag": "W/\"6f9657b2-834c-47d7-8a79-52fc2081dd84\""
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/virtualNetworkPeerings/apps-to-hub",
+                  "etag": "W/\"3a0d48e3-0686-4a3b-893f-dc9db98e0f65\""
+                }
+              ],
+              "subnets": [
+                {
+                  "properties": {
+                    "provisioningState": "Succeeded",
+                    "networkSecurityGroup": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-web"
+                    },
+                    "addressPrefix": "10.1.1.0/24",
+                    "privateLinkServiceNetworkPolicies": "Enabled",
+                    "privateEndpointNetworkPolicies": "Disabled",
+                    "delegations": [],
+                    "routeTable": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/routeTables/jacquiprod-rt-apps"
+                    },
+                    "natGateway": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/natGateways/jacquiprod-natgw-apps"
+                    }
+                  },
+                  "name": "snet-web",
+                  "type": "Microsoft.Network/virtualNetworks/subnets",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-web",
+                  "etag": "W/\"3a0d48e3-0686-4a3b-893f-dc9db98e0f65\""
+                },
+                {
+                  "properties": {
+                    "provisioningState": "Succeeded",
+                    "networkSecurityGroup": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-app"
+                    },
+                    "addressPrefix": "10.1.2.0/24",
+                    "privateLinkServiceNetworkPolicies": "Enabled",
+                    "privateEndpointNetworkPolicies": "Disabled",
+                    "delegations": [],
+                    "routeTable": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/routeTables/jacquiprod-rt-apps"
+                    },
+                    "natGateway": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/natGateways/jacquiprod-natgw-apps"
+                    }
+                  },
+                  "name": "snet-app",
+                  "type": "Microsoft.Network/virtualNetworks/subnets",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-app",
+                  "etag": "W/\"3a0d48e3-0686-4a3b-893f-dc9db98e0f65\""
+                },
+                {
+                  "properties": {
+                    "provisioningState": "Succeeded",
+                    "networkSecurityGroup": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/networkSecurityGroups/jacquiprod-nsg-data"
+                    },
+                    "addressPrefix": "10.1.3.0/24",
+                    "privateLinkServiceNetworkPolicies": "Enabled",
+                    "privateEndpointNetworkPolicies": "Disabled",
+                    "delegations": [],
+                    "routeTable": {
+                      "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/routeTables/jacquiprod-rt-apps"
+                    }
+                  },
+                  "name": "snet-data",
+                  "type": "Microsoft.Network/virtualNetworks/subnets",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-data",
+                  "etag": "W/\"3a0d48e3-0686-4a3b-893f-dc9db98e0f65\""
+                },
+                {
+                  "properties": {
+                    "provisioningState": "Succeeded",
+                    "ipConfigurations": [
+                      {
+                        "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/JACQUIPROD-RG-APPS/providers/Microsoft.Network/networkInterfaces/JACQUIPROD-PE-KV.NIC.5c6b8745-97a3-4ceb-8b79-cb2d839a400f/ipConfigurations/PRIVATEENDPOINTIPCONFIG.5e1b3396-e7de-4ae9-8595-b4ceafc750a9"
+                      }
+                    ],
+                    "addressPrefix": "10.1.4.0/24",
+                    "privateLinkServiceNetworkPolicies": "Enabled",
+                    "privateEndpointNetworkPolicies": "Disabled",
+                    "delegations": [],
+                    "privateEndpoints": [
+                      {
+                        "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/JACQUIPROD-RG-APPS/providers/Microsoft.Network/privateEndpoints/JACQUIPROD-PE-KV"
+                      }
+                    ]
+                  },
+                  "name": "snet-privateendpoints",
+                  "type": "Microsoft.Network/virtualNetworks/subnets",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps/subnets/snet-privateendpoints",
+                  "etag": "W/\"3a0d48e3-0686-4a3b-893f-dc9db98e0f65\""
                 }
               ],
               "enableDdosProtection": false,
@@ -2349,14 +2343,14 @@
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
-              "service": "platform",
               "project": "landingzone",
+              "owner": "jacqui",
               "costcenter": "engineering",
-              "managedby": "bicep",
+              "service": "platform",
               "createdby": "bicep",
               "businessunit": "cloud",
-              "workload": "prod-workloads"
+              "workload": "prod-workloads",
+              "managedby": "bicep"
             },
             "identity": null,
             "zones": null,
@@ -2376,48 +2370,20 @@
             "plan": null,
             "properties": {
               "provisioningState": "Succeeded",
-              "resourceGuid": "85682211-fec9-43bc-8a53-75fb772eb037",
-              "subnets": [
-                {
-                  "properties": {
-                    "provisioningState": "Succeeded",
-                    "privateLinkServiceNetworkPolicies": "Enabled",
-                    "privateEndpointNetworkPolicies": "Disabled",
-                    "addressPrefix": "10.0.1.0/24",
-                    "delegations": []
-                  },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-hub/subnets/AzureFirewallSubnet",
-                  "name": "AzureFirewallSubnet",
-                  "type": "Microsoft.Network/virtualNetworks/subnets",
-                  "etag": "W/\"4f891acb-43c8-4a75-8aeb-01ad330a9f2a\""
-                },
-                {
-                  "properties": {
-                    "provisioningState": "Succeeded",
-                    "privateLinkServiceNetworkPolicies": "Enabled",
-                    "privateEndpointNetworkPolicies": "Disabled",
-                    "addressPrefix": "10.0.10.0/24",
-                    "delegations": []
-                  },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-hub/subnets/snet-shared-services",
-                  "name": "snet-shared-services",
-                  "type": "Microsoft.Network/virtualNetworks/subnets",
-                  "etag": "W/\"4f891acb-43c8-4a75-8aeb-01ad330a9f2a\""
-                }
-              ],
+              "resourceGuid": "99932af0-363c-47ac-88ac-e293521b21c6",
               "privateEndpointVNetPolicies": "Disabled",
               "virtualNetworkPeerings": [
                 {
                   "properties": {
                     "provisioningState": "Succeeded",
-                    "resourceGuid": "1c82669e-b9ce-48fa-8345-5b901183638b",
+                    "resourceGuid": "70f09fd7-7e4a-4c66-841f-c65f452a04b7",
                     "remoteVirtualNetworkAddressSpace": {
                       "addressPrefixes": [
                         "10.1.0.0/16"
                       ]
                     },
-                    "allowVirtualNetworkAccess": true,
                     "doNotVerifyRemoteGateways": false,
+                    "allowVirtualNetworkAccess": true,
                     "allowForwardedTraffic": true,
                     "remoteVirtualNetwork": {
                       "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-apps"
@@ -2434,13 +2400,41 @@
                     "peeringSyncLevel": "FullyInSync",
                     "peeringState": "Connected"
                   },
-                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-hub/virtualNetworkPeerings/hub-to-apps",
                   "name": "hub-to-apps",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-hub/virtualNetworkPeerings/hub-to-apps",
                   "type": "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
-                  "etag": "W/\"4f891acb-43c8-4a75-8aeb-01ad330a9f2a\""
+                  "etag": "W/\"e0ce657b-0372-4a9a-8acf-f00acc848a07\""
                 }
               ],
               "enableDdosProtection": false,
+              "subnets": [
+                {
+                  "properties": {
+                    "provisioningState": "Succeeded",
+                    "privateLinkServiceNetworkPolicies": "Enabled",
+                    "privateEndpointNetworkPolicies": "Disabled",
+                    "addressPrefix": "10.0.1.0/24",
+                    "delegations": []
+                  },
+                  "name": "AzureFirewallSubnet",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-hub/subnets/AzureFirewallSubnet",
+                  "type": "Microsoft.Network/virtualNetworks/subnets",
+                  "etag": "W/\"e0ce657b-0372-4a9a-8acf-f00acc848a07\""
+                },
+                {
+                  "properties": {
+                    "provisioningState": "Succeeded",
+                    "privateLinkServiceNetworkPolicies": "Enabled",
+                    "privateEndpointNetworkPolicies": "Disabled",
+                    "addressPrefix": "10.0.10.0/24",
+                    "delegations": []
+                  },
+                  "name": "snet-shared-services",
+                  "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/jacquiprod-rg-networking/providers/Microsoft.Network/virtualNetworks/jacquiprod-vnet-hub/subnets/snet-shared-services",
+                  "type": "Microsoft.Network/virtualNetworks/subnets",
+                  "etag": "W/\"e0ce657b-0372-4a9a-8acf-f00acc848a07\""
+                }
+              ],
               "addressSpace": {
                 "addressPrefixes": [
                   "10.0.0.0/16"
@@ -2449,36 +2443,15 @@
             },
             "tags": {
               "environment": "prod",
-              "owner": "jacqui",
-              "service": "platform",
-              "project": "landingzone",
               "costcenter": "engineering",
-              "managedby": "bicep",
-              "createdby": "bicep",
               "businessunit": "cloud",
+              "project": "landingzone",
+              "owner": "jacqui",
+              "managedby": "bicep",
+              "service": "platform",
+              "createdby": "bicep",
               "workload": "prod-workloads"
             },
-            "identity": null,
-            "zones": null,
-            "extendedLocation": null
-          },
-          {
-            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/NetworkWatcherRG/providers/Microsoft.Network/networkWatchers/NetworkWatcher_australiaeast",
-            "name": "NetworkWatcher_australiaeast",
-            "type": "microsoft.network/networkwatchers",
-            "tenantId": "6279a9ef-2043-4545-89eb-1e3bd432a466",
-            "kind": "",
-            "location": "australiaeast",
-            "resourceGroup": "networkwatcherrg",
-            "subscriptionId": "f40e79f7-bad2-4604-83c9-4de96a50c531",
-            "managedBy": "",
-            "sku": null,
-            "plan": null,
-            "properties": {
-              "provisioningState": "Succeeded",
-              "runningOperationIds": []
-            },
-            "tags": null,
             "identity": null,
             "zones": null,
             "extendedLocation": null
@@ -2487,16 +2460,16 @@
         "facets": [],
         "resultTruncated": "false"
       },
-      "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"Resources\"}",
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"Resources | order by id asc\"}",
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"authorizationresources | where type =~ 'microsoft.authorization/roleassignments'\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
       "method": "POST",
       "url": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
       "status": 200,
       "body": {
-        "totalRecords": 5,
-        "count": 5,
+        "totalRecords": 3,
+        "count": 3,
         "data": [
           {
             "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/providers/Microsoft.Authorization/RoleAssignments/8ef6a35f-8aaa-4e63-89cb-aacb6b4bceb4",
@@ -2578,67 +2551,13 @@
             "identity": null,
             "zones": null,
             "extendedLocation": null
-          },
-          {
-            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/rg-drift-agent/providers/Microsoft.CognitiveServices/accounts/drift-agent-openai/providers/Microsoft.Authorization/RoleAssignments/4b4f05ff-fd84-4180-8002-f60fab29cfab",
-            "name": "4b4f05ff-fd84-4180-8002-f60fab29cfab",
-            "type": "microsoft.authorization/roleassignments",
-            "tenantId": "6279a9ef-2043-4545-89eb-1e3bd432a466",
-            "kind": "",
-            "location": "",
-            "resourceGroup": "rg-drift-agent",
-            "subscriptionId": "f40e79f7-bad2-4604-83c9-4de96a50c531",
-            "managedBy": "",
-            "sku": null,
-            "plan": null,
-            "properties": {
-              "roleDefinitionId": "/providers/Microsoft.Authorization/RoleDefinitions/a2b672c2-38f5-4da3-8d4e-6092361b4d6c",
-              "principalType": "ServicePrincipal",
-              "principalId": "748c3a11-94b1-4dbe-8a0e-17dd5ad055d9",
-              "updatedOn": "2026-08-05T21:13:46.462Z",
-              "createdOn": "2026-08-05T21:13:46.462Z",
-              "updatedBy": "889117bf-79db-47e1-8dbc-d0a30a8b2fe8",
-              "createdBy": "889117bf-79db-47e1-8dbc-d0a30a8b2fe8",
-              "scope": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/rg-drift-agent/providers/Microsoft.CognitiveServices/accounts/drift-agent-openai"
-            },
-            "tags": null,
-            "identity": null,
-            "zones": null,
-            "extendedLocation": null
-          },
-          {
-            "id": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/rg-drift-agent/providers/Microsoft.CognitiveServices/accounts/drift-agent-openai/providers/Microsoft.Authorization/RoleAssignments/d59da4b4-8251-4002-88ba-1469cb1f5751",
-            "name": "d59da4b4-8251-4002-88ba-1469cb1f5751",
-            "type": "microsoft.authorization/roleassignments",
-            "tenantId": "6279a9ef-2043-4545-89eb-1e3bd432a466",
-            "kind": "",
-            "location": "",
-            "resourceGroup": "rg-drift-agent",
-            "subscriptionId": "f40e79f7-bad2-4604-83c9-4de96a50c531",
-            "managedBy": "",
-            "sku": null,
-            "plan": null,
-            "properties": {
-              "roleDefinitionId": "/providers/Microsoft.Authorization/RoleDefinitions/a2b672c2-38f5-4da3-8d4e-6092361b4d6c",
-              "principalType": "User",
-              "principalId": "889117bf-79db-47e1-8dbc-d0a30a8b2fe8",
-              "updatedOn": "2026-08-05T21:32:30.861Z",
-              "createdOn": "2026-08-05T21:32:30.861Z",
-              "updatedBy": "889117bf-79db-47e1-8dbc-d0a30a8b2fe8",
-              "createdBy": "889117bf-79db-47e1-8dbc-d0a30a8b2fe8",
-              "scope": "/subscriptions/f40e79f7-bad2-4604-83c9-4de96a50c531/resourceGroups/rg-drift-agent/providers/Microsoft.CognitiveServices/accounts/drift-agent-openai"
-            },
-            "tags": null,
-            "identity": null,
-            "zones": null,
-            "extendedLocation": null
           }
         ],
         "facets": [],
         "resultTruncated": "false"
       },
       "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"authorizationresources | where type =~ 'microsoft.authorization/roleassignments'\"}",
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | project id, roleName = properties.roleName\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
       "method": "POST",
@@ -2652,7 +2571,7 @@
         "resultTruncated": "false"
       },
       "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"authorizationresources | where type =~ 'microsoft.authorization/roledefinitions' | project id, roleName = properties.roleName\"}",
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"policyresources | where type =~ 'microsoft.authorization/policyassignments'\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
       "method": "POST",
@@ -2666,7 +2585,7 @@
         "resultTruncated": "false"
       },
       "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"policyresources | where type =~ 'microsoft.authorization/policyassignments'\"}",
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     },
     "POST https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01 {\"query\":\"policyresources | where type =~ 'microsoft.authorization/policyexemptions'\",\"subscriptions\":[\"f40e79f7-bad2-4604-83c9-4de96a50c531\"]}": {
       "method": "POST",
@@ -2680,7 +2599,7 @@
         "resultTruncated": "false"
       },
       "request_body": "{\"subscriptions\": [\"f40e79f7-bad2-4604-83c9-4de96a50c531\"], \"query\": \"policyresources | where type =~ 'microsoft.authorization/policyexemptions'\"}",
-      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-13"
+      "note": "azure-landingzone-bicep envs/prod, subscription scope, recorded 2026-08-23"
     }
   }
 }
