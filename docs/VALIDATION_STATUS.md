@@ -55,9 +55,12 @@ them.
 > audited.
 >
 > The exception is the `test-resources` fixture, re-registered on 2026-08-14
-> (#434) for the schema-flag round below, and the prod landing zone, which is a
-> standing estate. Both are scannable; the fixture's estate is deployed per round
-> and torn down after.
+> (#434) for the schema-flag round below, and the prod landing zone. Both are
+> **rebuildable, not available** - neither estate stands between rounds. The prod
+> estate was found torn down on 2026-08-23 and had to be redeployed from
+> `envs/prod` before it could be scanned or its cassette re-recorded. Read
+> "scannable" throughout this page as *you can stand it up and scan it*, never as
+> *it is there now*.
 >
 > Read the evidence column as *what was done and when*, not as somewhere you can
 > go and look. `TEST_ESTATE.md` is the method for rebuilding an estate capable of
