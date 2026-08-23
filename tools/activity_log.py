@@ -298,6 +298,31 @@ def _segments_match(declared_name: str, deployed_name: str) -> bool:
     )
 
 
+def _literal_segments_agree(declared_name: str, deployed_name: str) -> bool:
+    """Every declared segment that is not itself an expression must still match.
+
+    A nested name resolves one segment at a time. In
+    `vnet-hub/coalesce(parameters('subnets'), createArray())[copyIndex()].name`
+    the PARENT is known exactly and only the child is unresolvable, but testing
+    for '(' across the whole name threw that anchor away - and the affix rule
+    then accepted `vnet-drift-test/default` on the shared `vnet-` lead, which is
+    the convention lead could_be_same_resource's own docstring says
+    discriminates nothing.
+
+    Found 2026-08-23 on the first scan of an AVM-composed template, where every
+    optional child is named by expression and its parent never is. Aligned from
+    the RIGHT, like _segments_match, so an extension event naming only the leaf
+    still lines up.
+    """
+    declared = declared_name.split("/")
+    deployed = deployed_name.split("/")
+    depth = min(len(declared), len(deployed))
+    return all(
+        "(" in d or re.fullmatch(_segment_pattern(d), live, flags=re.IGNORECASE)
+        for d, live in zip(declared[-depth:], deployed[-depth:])
+    )
+
+
 def could_be_same_resource(declared_name: str, deployed_name: str) -> bool:
     """Could these two names denote the same resource?
 
@@ -324,9 +349,13 @@ def could_be_same_resource(declared_name: str, deployed_name: str) -> bool:
     # A fully resolved name is a COMPLETE name, so anything it doesn't match is
     # a different resource however much of a convention they share. A name still
     # carrying raw expression text has no shape to anchor on, so it keeps the
-    # shared-affix heuristic rather than losing attribution outright.
+    # shared-affix heuristic rather than losing attribution outright - but only
+    # for the segments actually carrying it.
     if "(" in declared_name:
-        return _shared_affix_len(declared_name, deployed_name) >= _MIN_SHARED_AFFIX
+        return (
+            _literal_segments_agree(declared_name, deployed_name)
+            and _shared_affix_len(declared_name, deployed_name) >= _MIN_SHARED_AFFIX
+        )
     return False
 
 
@@ -388,7 +417,6 @@ def match_activity_for_resource(
             (e, deployed_name_from_event_id(resource_type or "", e.get("resource_id") or ""))
             for e in rg_events
         ]
-        by_type = [e for e, deployed in named_events if deployed]
         # The declared name is the tail of the id we constructed; keep only the
         # events whose own name could belong to it. Returning nothing is the
         # right failure mode - an unattributed drift reads "no event accounts
@@ -396,7 +424,20 @@ def match_activity_for_resource(
         # actor AND renames the resource to the sibling.
         declared_name = deployed_name_from_event_id(resource_type or "", resource_id)
         if not declared_name:
-            return by_type
+            # We could not work out WHICH resource of this type we are asking
+            # about, so no event can be shown to be about it. This used to
+            # return every event of the type, which is the exact harm the rule
+            # above forbids - and it fires precisely where the name is least
+            # knowable. An unresolvable Bicep name expression yields a single
+            # name segment for a nested type, so no valid id can be built and
+            # nothing parses back out; AVM hits this constantly, because
+            # `coalesce(parameters('subnets'), createArray())[copyIndex()].name`
+            # is how every optional child in the registry modules is named.
+            # Downstream that mis-attribution is not cosmetic: attribution.py
+            # rewrites drift["name"] from the matched event, so a stale sibling
+            # renames the finding to a resource that exists in neither the
+            # template nor Azure.
+            return []
         return [
             e for e, deployed in named_events
             if deployed and could_be_same_resource(declared_name, deployed)

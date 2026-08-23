@@ -143,20 +143,27 @@ class NestedMatchingStaysHonestTests(unittest.TestCase):
 
     def test_a_child_of_the_type_is_not_its_own_deletion_event(self):
         """The substring test also matched anything nested UNDER the type - a
-        lock's id carries the storage type it hangs off.
+        lock's id carries the storage type it hangs off. The type test is the
+        only thing standing between a lock's event and a storage account's
+        attribution, since both events survive the name filter.
 
-        Reached via an id that could not be built at all, because that is the
-        path where the name filter cannot run: with no declared name to compare
-        against, whatever the type test collects is returned as-is. So the type
-        test is the only thing standing between a lock's event and a storage
-        account's attribution.
+        Driven through a deleted PLACEHOLDER-named account, which is the
+        scenario the type fallback exists for and the path production takes.
+        This used to be driven through an id that could not be built at all,
+        on the reasoning that an unknown declared name is where the name filter
+        cannot run - but that branch returned every event of the type
+        unfiltered, and a scan of an AVM-composed template renamed findings to
+        whatever it collected. An unidentifiable resource now matches nothing
+        (see tests/test_avm_unresolvable_name_attribution.py), so the vehicle
+        moved; what it proves has not.
         """
         storage = arm_id(RG, "Microsoft.Storage/storageAccounts/st-real")
         lock = storage + "/providers/Microsoft.Authorization/locks/keep"
         matched = match_activity_for_resource(
             [delete_event(lock, "Microsoft.Authorization/locks/delete"),
              delete_event(storage, "Microsoft.Storage/storageAccounts/delete")],
-            "", "Microsoft.Storage/storageAccounts")
+            arm_id(RG, "Microsoft.Storage/storageAccounts/st-[86c9cbf6]"),
+            "Microsoft.Storage/storageAccounts")
         self.assertEqual([e["resource_id"] for e in matched], [storage])
 
 
