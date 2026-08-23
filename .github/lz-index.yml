@@ -18,9 +18,13 @@
 
 landing_zones:
   # ===================== PRODUCTION LANDING ZONES =====================
-  # Standing estates: deployed continuously, as opposed to the fixtures below
-  # which are stood up for a round and torn down after. Both are manual dispatch
-  # today; the difference is whether the estate is there between scans.
+  # The real landing-zone templates - what this agent exists to scan. They are
+  # NOT standing estates: verified 2026-08-23, the prod estate was found torn
+  # down and had to be redeployed from envs/prod before it could be scanned or
+  # recorded at all. Like the fixtures below, they are stood up for a round and
+  # torn down after; what separates the two sections is what the estate
+  # REPRESENTS, not how long it lives. So a failing scan here, as there, more
+  # often means the estate is absent than that drift was found.
   # In THIS repository they are the maintainer's own demonstration estates -
   # which is why a cassette recorded from one is safe to commit (see
   # docs/SECURITY.md, "Recorded Payloads"). In a fork this section is where
