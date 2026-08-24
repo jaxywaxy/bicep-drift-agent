@@ -1,4 +1,4 @@
-anthropic==0.121.0
+anthropic==0.122.0
 # CA bundle for the ARM REST path (tools/http_util). Already present
 # transitively via azure-core -> requests, but declared because http_util
 # imports it directly and a scan's correctness depends on it: without a usable
@@ -9,7 +9,7 @@ azure-identity==1.25.3
 azure-mgmt-resource==26.0.0
 azure-mgmt-resourcegraph==8.0.1
 azure-mgmt-monitor==7.0.0
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 pyyaml==6.0.3
 # Renders the consolidated remediation analysis (tables/lists/code) into the
 # HTML report. Pure-python, no transitive deps.
