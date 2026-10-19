@@ -61,7 +61,7 @@ jobs:
       # evals touch no Azure resources - they only need a data-plane token.
       - name: Azure Login (OIDC)
         if: matrix.provider == 'azure_openai'
-        uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
@@ -94,7 +94,7 @@ jobs:
       # need to read, and it is the input to comparing the two providers.
       - name: Upload result
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: evals-${{ matrix.provider }}
           path: evals-${{ matrix.provider }}.txt
